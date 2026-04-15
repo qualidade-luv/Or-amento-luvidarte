@@ -9,6 +9,260 @@ import base64
 from datetime import datetime
 import time
 import urllib.parse
+import hashlib
+import secrets
+import socket
+import urllib3
+from typing import Optional, Dict, Any
+
+# ============================================
+# CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
+# ============================================
+
+# Desabilitar warnings de SSL (se necessário)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Configurar timeout global
+socket.setdefaulttimeout(30)
+
+# Configurações de sessão - tempo limite (em segundos)
+SESSION_TIMEOUT = 1800  # 30 minutos
+
+# ============================================
+# FUNÇÕES DE SEGURANÇA
+# ============================================
+
+def gerar_id_sessao() -> str:
+    """Gera um ID de sessão único e seguro"""
+    return secrets.token_hex(16)
+
+def mascarar_dados_sensiveis(texto: str, tipo: str = 'email') -> str:
+    """Mascara dados sensíveis para logs"""
+    if not texto:
+        return ''
+    if tipo == 'email':
+        partes = texto.split('@')
+        if len(partes) == 2:
+            return f"{partes[0][:3]}***@{partes[1]}"
+    elif tipo == 'telefone':
+        if len(texto) >= 10:
+            return f"{texto[:2]}*****{texto[-3:]}"
+    elif tipo == 'cnpj':
+        if len(texto) >= 14:
+            return f"{texto[:3]}***{texto[-3:]}"
+    return '***'
+
+def limpar_dados_sensiveis():
+    """Limpa dados sensíveis do session_state após timeout"""
+    if 'ultimo_acesso' in st.session_state:
+        tempo_decorrido = (datetime.now() - st.session_state.ultimo_acesso).total_seconds()
+        if tempo_decorrido > SESSION_TIMEOUT:
+            # Limpar dados do cliente
+            st.session_state.dados_cliente = {}
+            st.session_state.form_data = {
+                'razao_social': '',
+                'cnpj': '',
+                'inscricao_estadual': '',
+                'email': '',
+                'telefone': '',
+                'endereco': '',
+                'numero': '',
+                'bairro': '',
+                'cep': ''
+            }
+            st.session_state.carrinho = []
+            st.warning("🔒 Sessão expirada por segurança. Seus dados foram removidos.")
+            return True
+    st.session_state.ultimo_acesso = datetime.now()
+    return False
+
+# ============================================
+# POLÍTICA DE PRIVACIDADE E TERMOS DE USO
+# ============================================
+
+def mostrar_politica_privacidade():
+    """Exibe a política de privacidade"""
+    with st.expander("📋 Política de Privacidade - LGPD (Lei 13.709/2018)"):
+        st.markdown("""
+        ### POLÍTICA DE PRIVACIDADE LUVidarte
+        
+        **1. DADOS COLETADOS**
+        - Nome/Razão Social
+        - CNPJ/CPF
+        - Inscrição Estadual
+        - E-mail
+        - Telefone/WhatsApp
+        - Endereço completo (Logradouro, Número, Bairro, CEP)
+        - UF (Estado)
+        - Itens do orçamento selecionados
+        
+        **2. FINALIDADE DA COLETA (Art. 7º da LGPD)**
+        Os dados são coletados exclusivamente para:
+        - Elaboração de orçamentos personalizados
+        - Contato comercial para finalização do pedido
+        - Emissão de notas fiscais (quando aplicável)
+        - Cálculo de tributos (ICMS, IPI, ST) conforme legislação
+        
+        **3. BASES LEGAIS (Art. 7º e 11º)**
+        - Execução de contrato ou procedimentos preliminares (Art. 7º, V)
+        - Legítimo interesse do controlador (Art. 7º, IX)
+        - Cumprimento de obrigação legal (Art. 7º, II)
+        
+        **4. ARMAZENAMENTO E RETENÇÃO**
+        - Seus dados NÃO são armazenados em banco de dados persistente
+        - Permanecem apenas durante a sessão do navegador
+        - São automaticamente excluídos após 30 minutos de inatividade
+        - Os orçamentos gerados em PDF/HTML são de responsabilidade do usuário
+        
+        **5. COMPARTILHAMENTO (Art. 6º, VI)**
+        - Seus dados são compartilhados APENAS com a equipe LUVidarte via WhatsApp
+        - Não compartilhamos com terceiros, plataformas de marketing ou publicidade
+        - Não transferimos dados internacionalmente
+        
+        **6. SEGURANÇA (Art. 46º)**
+        - Utilizamos criptografia e medidas técnicas para proteger seus dados
+        - Acesso restrito a funcionários autorizados
+        - Monitoramento de incidentes de segurança
+        
+        **7. SEUS DIREITOS (Art. 18º da LGPD)**
+        Você tem direito a solicitar:
+        - Confirmação da existência de tratamento de seus dados
+        - Acesso aos seus dados pessoais
+        - Correção de dados incompletos ou inexatos
+        - Anonimização, bloqueio ou eliminação de dados desnecessários
+        - Portabilidade dos dados a outro fornecedor
+        - Eliminação dos dados tratados com consentimento
+        - Informação sobre compartilhamento de dados
+        - Revogação do consentimento
+        
+        **8. ENCARREGADO (DPO - Data Protection Officer)**
+        Para questões sobre privacidade, solicitações de dados ou cancelamento:
+        - 📧 E-mail: privacidade@luvidarte.com.br
+        - 📞 Telefone: (11) 4676-9000
+        - 📍 Endereço: Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP
+        
+        **9. REGISTRO DE ATIVIDADES (Art. 37º)**
+        Mantemos registro das operações de tratamento de dados pessoais que realizamos.
+        
+        **10. CANAIS DE COMUNICAÇÃO**
+        - Para exercer seus direitos LGPD: dpo@luvidarte.com.br
+        - Para reclamações à ANPD: https://www.gov.br/anpd/pt-br
+        
+        **11. ATUALIZAÇÕES DESTA POLÍTICA**
+        Esta política pode ser atualizada periodicamente. A versão mais recente está sempre disponível em nosso site.
+        
+        **Data da última atualização:** 15/04/2026
+        **Versão:** 1.0
+        
+        ---
+        ✅ **Ao clicar em "Aceito e Concordo", você declara que:**
+        - Leu e compreendeu esta política de privacidade
+        - Concorda com a coleta e tratamento de seus dados conforme descrito
+        - Confirma que as informações fornecidas são verdadeiras
+        - Autoriza o contato comercial via WhatsApp, e-mail ou telefone
+        """)
+        
+        if st.button("✅ Aceito e Concordo com a Política de Privacidade", key="aceitar_privacidade", use_container_width=True):
+            st.session_state.privacidade_aceita = True
+            st.session_state.consentimento_data = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            st.rerun()
+
+def mostrar_termos_uso():
+    """Exibe os termos de uso"""
+    with st.expander("📜 Termos de Uso - Orçamento Virtual"):
+        st.markdown("""
+        ### TERMOS DE USO - ORÇAMENTO VIRTUAL LUVidarte
+        
+        **1. NATUREZA DO ORÇAMENTO**
+        - Este é um ORÇAMENTO VIRTUAL, NÃO uma compra finalizada (Art. 39 do CDC)
+        - Os valores são ESTIMATIVAS sujeitas à confirmação
+        - Produtos sujeitos à disponibilidade em estoque
+        
+        **2. VALIDADE DO ORÇAMENTO**
+        - O orçamento tem validade de 7 (sete) dias corridos
+        - Após este período, os valores devem ser revalidados pela equipe
+        - Condições comerciais podem ser alteradas sem aviso prévio
+        
+        **3. RESPONSABILIDADES DO CLIENTE (Art. 14 do CDC)**
+        - Fornecer dados corretos, verdadeiros e atualizados
+        - Não compartilhar o orçamento com terceiros sem autorização
+        - Manter o sigilo das informações comerciais
+        - Responsabilizar-se por informações falsas ou imprecisas
+        
+        **4. RESPONSABILIDADES DA LUVidarte (Art. 14 do CDC)**
+        - Confidencialidade dos dados do cliente (LGPD)
+        - Transparência nos valores e tributos aplicados
+        - Atendimento conforme Lei Geral de Proteção de Dados
+        - Entrega de produtos conforme especificações
+        
+        **5. FORMAÇÃO DE PREÇOS**
+        - Os preços incluem tributos conforme legislação (ICMS, IPI, ST)
+        - Descontos por volume conforme política comercial
+        - Sujeito à análise de crédito quando aplicável
+        - Valores em Reais (R$ - BRL)
+        
+        **6. CANCELAMENTO E DEVOLUÇÃO**
+        - Conforme Código de Defesa do Consumidor (Lei 8.078/90)
+        - Arrependimento: 7 dias úteis para compras fora da loja (Art. 49)
+        - Produtos com defeito: garantia de 90 dias (Art. 26)
+        
+        **7. PROPRIEDADE INTELECTUAL**
+        - As imagens, textos e marcas são propriedade da LUVidarte
+        - É proibida a reprodução não autorizada do catálogo
+        
+        **8. DISPOSIÇÕES GERAIS**
+        - A LUVidarte se reserva o direito de recusar pedidos
+        - Em caso de erro de precificação, o cliente será contatado
+        
+        **9. FORO (Art. 101 do CDC)**
+        - Fica eleito o foro da comarca de Ferraz de Vasconcelos - SP
+        - Para consumidores, pode optar pelo foro de seu domicílio
+        
+        **10. LEGISLAÇÃO APLICÁVEL**
+        - Lei Geral de Proteção de Dados (13.709/2018)
+        - Código de Defesa do Consumidor (8.078/90)
+        - Código Civil (10.406/2002)
+        - Legislação tributária aplicável
+        
+        ---
+        📞 **Dúvidas:** (11) 4676-9000 | sac@luvidarte.com.br
+        """)
+
+# ============================================
+# CONSENTIMENTO LGPD
+# ============================================
+
+def obter_consentimento_lgpd() -> bool:
+    """Verifica se o usuário já consentiu com a LGPD"""
+    if 'privacidade_aceita' not in st.session_state:
+        st.session_state.privacidade_aceita = False
+    
+    if not st.session_state.privacidade_aceita:
+        st.warning("🔒 **Aviso LGPD:** Coletamos seus dados pessoais para elaboração do orçamento conforme Lei 13.709/2018.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("❌ Recusar e Sair", use_container_width=True):
+                st.error("❌ Você recusou os termos de privacidade. Para utilizar o sistema, é necessário aceitar a política de privacidade e os termos de uso.")
+                st.markdown("""
+                ---
+                ### 🔒 Seus direitos LGPD:
+                - Você pode solicitar a exclusão dos seus dados a qualquer momento
+                - Não armazenamos seus dados em banco de dados
+                - Seus dados são usados apenas para este orçamento
+                
+                Para mais informações: **privacidade@luvidarte.com.br**
+                """)
+                st.stop()
+        
+        with col2:
+            st.info("✅ Para continuar, clique em 'Política de Privacidade' abaixo e aceite os termos.")
+        
+        mostrar_politica_privacidade()
+        mostrar_termos_uso()
+        
+        return False
+    return True
 
 # ============================================
 # FUNÇÃO PARA FORMATAR MOEDA (PADRÃO BRASILEIRO)
@@ -36,18 +290,10 @@ def calcular_desconto_volume(valor_base):
 # ============================================
 def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
     """Aplica o desconto por volume no item e recalcula IPI e ST proporcionalmente"""
-    # Valor base do item (preço final com desconto da condição de pagamento)
     valor_base_item = item['preco_final']
-    
-    # Aplicar desconto por volume no valor base
     valor_com_desconto_volume = valor_base_item * (1 - desconto_volume_percentual)
-    
-    # Recalcular IPI e ST proporcionalmente ao novo valor base
-    # Manter a mesma alíquota efetiva
     novo_valor_ipi = valor_com_desconto_volume * item['ipi_percentual']
     novo_valor_st = valor_com_desconto_volume * item['st_aliquota']
-    
-    # Novo total do item
     novo_total_geral = valor_com_desconto_volume + novo_valor_ipi + novo_valor_st
     
     return {
@@ -65,21 +311,23 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                          total_final, total_ipi, total_st):
     """Gera um HTML com o orçamento detalhado"""
     
-    # Calcular novo valor base
     novo_valor_base = valor_base_total - valor_desconto_volume
     
-    # Calcular fator de proporcionalidade para IPI e ST
     if valor_base_total > 0:
         fator_ipi_st = novo_valor_base / valor_base_total
     else:
         fator_ipi_st = 0
+    
+    # Adicionar aviso de confidencialidade
+    data_geracao = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    id_documento = hashlib.sha256(f"{dados_cliente.get('cnpj', '')}{data_geracao}".encode()).hexdigest()[:8]
     
     html_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>Orçamento LUVidarte</title>
+        <title>Orçamento LUVidarte - Confidencial</title>
         <style>
             body {{ font-family: Arial, sans-serif; margin: 40px; }}
             .header {{ text-align: center; margin-bottom: 30px; }}
@@ -91,9 +339,20 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             th {{ background-color: #2E7D32; color: white; }}
             .total {{ font-weight: bold; font-size: 18px; color: #D32F2F; text-align: right; }}
             .footer {{ margin-top: 30px; font-size: 12px; text-align: center; color: #666; }}
+            .lgpd-notice {{ background-color: #FFF9E6; border-left: 4px solid #C9A03D; 
+                           padding: 10px; margin: 20px 0; font-size: 11px; }}
+            .confidencial {{ background-color: #FFEBEE; border-left: 4px solid #D32F2F;
+                           padding: 10px; margin: 20px 0; font-size: 11px; }}
         </style>
     </head>
     <body>
+        <div class="confidencial">
+            🔒 <strong>DOCUMENTO CONFIDENCIAL</strong> - ID: {id_documento}<br>
+            Gerado em: {data_geracao}<br>
+            Este orçamento contém informações comerciais privilegiadas. 
+            O compartilhamento não autorizado é proibido nos termos da LGPD.
+        </div>
+        
         <div class="header">
             <h1>LUVidarte - Orçamento Virtual</h1>
         </div>
@@ -113,9 +372,11 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
         
         <div class="section">
             <h2 class="section-title">INFORMAÇÕES DO ORÇAMENTO</h2>
-            <p><strong>Data:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+            <p><strong>Data de Geração:</strong> {data_geracao}</p>
+            <p><strong>ID do Documento:</strong> {id_documento}</p>
             <p><strong>Tipo de Cliente:</strong> {tipo_cliente}</p>
             <p><strong>Condição de Pagamento:</strong> {forma_pagamento}</p>
+            <p><strong>Validade do Orçamento:</strong> 7 dias corridos</p>
         </div>
         
         <div class="section">
@@ -136,34 +397,25 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                 <tbody>
     """
     
-    # Calcular totais para verificar consistência
     total_ipi_exibido = 0
     total_st_exibido = 0
     total_geral_exibido = 0
     
     for item in itens_carrinho:
-        # Valor base do item (já com desconto da condição de pagamento)
         valor_base_item = item['preco_final']
-        
-        # Aplicar desconto por volume no valor base do item
         valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
         
-        # CORREÇÃO: Recalcular IPI e ST de cada item proporcionalmente
-        # Manter a mesma alíquota efetiva do item original
         aliquota_ipi_item = item['valor_ipi'] / valor_base_item if valor_base_item > 0 else 0
         aliquota_st_item = item['valor_st'] / valor_base_item if valor_base_item > 0 else 0
         
-        # Aplicar as alíquotas sobre o novo valor base
         novo_ipi_unitario = valor_com_desconto_item * aliquota_ipi_item
         novo_st_unitario = valor_com_desconto_item * aliquota_st_item
         
-        # Totais do item
         subtotal_item = valor_com_desconto_item * item['quantidade']
         ipi_total_item = novo_ipi_unitario * item['quantidade']
         st_total_item = novo_st_unitario * item['quantidade']
         total_item = (valor_com_desconto_item + novo_ipi_unitario + novo_st_unitario) * item['quantidade']
         
-        # Acumular para verificação
         total_ipi_exibido += ipi_total_item
         total_st_exibido += st_total_item
         total_geral_exibido += total_item
@@ -196,11 +448,33 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p class="total"><strong>TOTAL GERAL DO ORÇAMENTO:</strong> {formatar_moeda(total_geral_exibido)}</p>
         </div>
         
+        <div class="lgpd-notice">
+            🔒 <strong>LGPD - LEI GERAL DE PROTEÇÃO DE DADOS (Lei 13.709/2018)</strong><br><br>
+            • Seus dados são tratados com confidencialidade e utilizados APENAS para este orçamento<br>
+            • Base legal: Execução de contrato e legítimo interesse (Art. 7º, V e IX)<br>
+            • Você pode solicitar a exclusão dos seus dados a qualquer momento<br>
+            • Este documento é de uso exclusivo da LUVidarte e do cliente<br>
+            • Os dados não são armazenados em banco de dados persistente<br><br>
+            <strong>Seus direitos LGPD (Art. 18):</strong><br>
+            • Acesso, correção e eliminação de dados<br>
+            • Revogação do consentimento<br>
+            • Portabilidade de dados<br><br>
+            <strong>Encarregado (DPO):</strong> privacidade@luvidarte.com.br | (11) 4676-9000<br>
+            <strong>ANPD:</strong> https://www.gov.br/anpd/pt-br
+        </div>
+        
         <div class="footer">
-            <p>LUVidarte - Peças exclusivas em vidro e decoração</p>
-            <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP</p>
-            <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | sac@luvidarte.com.br</p>
-            <p>Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.</p>
+            <p><strong>LUVidarte - Peças exclusivas em vidro e decoração</strong></p>
+            <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP | CEP: 08533-060</p>
+            <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | E-mail: sac@luvidarte.com.br</p>
+            <p>CNPJ: [Seu CNPJ] | Inscrição Estadual: [Sua IE]</p>
+            <p>---</p>
+            <p>⚠️ <strong>AVISO IMPORTANTE:</strong> Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.</p>
+            <p>Os valores são estimativas e sujeitos à confirmação de estoque e disponibilidade.</p>
+            <p>A venda será formalizada APENAS após contato e confirmação da nossa equipe via WhatsApp.</p>
+            <p><strong>Validade do orçamento: 7 (sete) dias corridos.</strong></p>
+            <p>---</p>
+            <p>© 2026 LUVidarte - Todos os direitos reservados | Versão 1.0</p>
         </div>
     </body>
     </html>
@@ -217,18 +491,15 @@ def validar_cnpj(cnpj):
     if len(cnpj) != 14:
         return False
     
-    # Verificar se todos os dígitos são iguais
     if len(set(cnpj)) == 1:
         return False
     
-    # Calcular primeiro dígito verificador
     peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
     digito1 = 11 - (soma1 % 11)
     if digito1 >= 10:
         digito1 = 0
     
-    # Calcular segundo dígito verificador
     peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
     digito2 = 11 - (soma2 % 11)
@@ -254,12 +525,20 @@ def validar_telefone(telefone):
     return len(telefone) >= 10 and len(telefone) <= 11
 
 # ============================================
+# FUNÇÃO PARA VALIDAR CEP
+# ============================================
+def validar_cep(cep):
+    """Valida se o CEP tem formato correto"""
+    cep = re.sub(r'[^0-9]', '', str(cep))
+    return len(cep) == 8
+
+# ============================================
 # FUNÇÃO PARA FORMATAR MENSAGEM WHATSAPP
 # ============================================
 def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento, total_final,
                                 desconto_volume_percentual, valor_desconto_volume, valor_base_total,
                                 total_ipi, total_st):
-    """Formata a mensagem para WhatsApp com resumo do orçamento"""
+    """Formata a mensagem para WhatsApp com resumo do orçamento e aviso LGPD"""
     
     msg = "🛍️ NOVO ORÇAMENTO LUVidarte 🛍️\n\n"
     msg += "━" * 30 + "\n\n"
@@ -290,10 +569,8 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     else:
         msg += "\n"
     
-    # Lista resumida dos itens
     msg += "ITENS SOLICITADOS\n"
     for item in st.session_state.carrinho:
-        # Mostrar preço com desconto por volume se aplicável
         valor_base_item = item['preco_final']
         valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
         msg += f"• {item['quantidade']}x {item['descricao'][:50]}\n"
@@ -305,6 +582,8 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     msg += "1️⃣ Aguarde o contato da nossa equipe\n"
     msg += "2️⃣ Confirmaremos disponibilidade dos produtos\n"
     msg += "3️⃣ Enviaremos as condições de pagamento e frete\n\n"
+    msg += "🔒 LGPD: Seus dados são tratados com confidencialidade conforme Lei 13.709/2018\n"
+    msg += "📧 DPO: privacidade@luvidarte.com.br\n\n"
     msg += "✨ Agradecemos a preferência! ✨"
     
     return msg
@@ -312,6 +591,14 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
 # ============================================
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================
+
+# Verificar consentimento LGPD antes de continuar
+if not obter_consentimento_lgpd():
+    st.stop()
+
+# Verificar timeout da sessão
+limpar_dados_sensiveis()
+
 def carregar_logo_favicon():
     url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
     try:
@@ -371,6 +658,10 @@ if 'mostrar_botoes_envio' not in st.session_state:
     st.session_state.mostrar_botoes_envio = False
 if 'html_bytes' not in st.session_state:
     st.session_state.html_bytes = None
+if 'ultimo_acesso' not in st.session_state:
+    st.session_state.ultimo_acesso = datetime.now()
+if 'consentimento_data' not in st.session_state:
+    st.session_state.consentimento_data = None
 
 # ============================================
 # FUNÇÕES PARA CONTROLAR CARRINHO
@@ -626,7 +917,7 @@ def formatar_ml(valor):
         return None
 
 # ============================================
-# CARREGAMENTO DE DADOS
+# CARREGAMENTO DE DADOS COM TRATAMENTO DE ERRO
 # ============================================
 @st.cache_data(ttl=600)
 def carregar_planilha(id_planilha, nome_aba="base"):
@@ -980,6 +1271,7 @@ st.markdown("""
     ⚠️ <strong>AVISO LEGAL:</strong> Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.
     Os valores são estimativas e sujeitos à confirmação de estoque e disponibilidade.
     A venda será formalizada APENAS após contato e confirmação da nossa equipe via WhatsApp.
+    Conforme LGPD (Lei 13.709/2018), seus dados são tratados com confidencialidade.
 </div>
 """, unsafe_allow_html=True)
 
@@ -988,7 +1280,8 @@ st.markdown("""
     📍 Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP &nbsp;|&nbsp;
     📞 (11) 4676-9000 &nbsp;|&nbsp;
     💬 (11) 93011-9335 &nbsp;|&nbsp;
-    ✉️ sac@luvidarte.com.br
+    ✉️ sac@luvidarte.com.br &nbsp;|&nbsp;
+    🔒 DPO: privacidade@luvidarte.com.br
 </div>
 """, unsafe_allow_html=True)
 
@@ -1012,6 +1305,19 @@ with st.spinner("🔄 Carregando produtos..."):
     dados_isento = carregar_descontos_isento(ID_PLANILHA, NOME_ABA_ISENTO)
 
 if dados.empty:
+    st.error("""
+    ❌ **Não foi possível carregar os produtos!**
+    
+    Verifique sua conexão com a internet e tente novamente.
+    
+    Se o problema persistir, entre em contato com nossa equipe:
+    📞 (11) 4676-9000 | 💬 (11) 93011-9335
+    """)
+    
+    if st.button("🔄 Tentar recarregar"):
+        st.cache_data.clear()
+        st.rerun()
+    
     st.stop()
 
 # ============================================
@@ -1090,29 +1396,22 @@ if st.session_state.get('carrinho_aberto', False):
 
     for idx, item in enumerate(st.session_state.carrinho):
         # Recalcular IPI e ST proporcionalmente ao novo valor base
-        # Primeiro, calcular a alíquota efetiva do IPI e ST sobre o valor base original
         ipi_aliquota_efetiva = item['valor_ipi'] / item['preco_final'] if item['preco_final'] > 0 else 0
         st_aliquota_efetiva = item['valor_st'] / item['preco_final'] if item['preco_final'] > 0 else 0
         
-        # Aplicar desconto por volume no valor base do item
         valor_base_item_original = item['preco_final']
         valor_base_item_com_desconto = valor_base_item_original * (1 - desconto_volume_percentual)
         
-        # Recalcular IPI e ST sobre o novo valor base
         novo_ipi_item = valor_base_item_com_desconto * ipi_aliquota_efetiva
         novo_st_item = valor_base_item_com_desconto * st_aliquota_efetiva
-        
-        # Novo total do item
         novo_total_item = (valor_base_item_com_desconto + novo_ipi_item + novo_st_item) * item['quantidade']
         
-        # Acumular totais
         total_ipi_recalculado += novo_ipi_item * item['quantidade']
         total_st_recalculado += novo_st_item * item['quantidade']
         total_geral_recalculado += novo_total_item
         total_desconto_geral += item['valor_desconto'] * item['quantidade']
         total_bruto_geral += item['preco_bruto'] * item['quantidade']
         
-        # Exibir o item no carrinho
         c1, c2, c3, c4 = st.columns([1, 3, 2, 1])
         with c1:
             img_url = item.get('imagem_url', '')
@@ -1135,7 +1434,6 @@ if st.session_state.get('carrinho_aberto', False):
                 st.markdown(f"🎯 *Desconto:* {item['desconto_percentual']*100:.2f}% ({formatar_moeda(item['valor_desconto'])})")
                 st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(item['preco_com_desconto'])}")
             
-            # Mostrar valor unitário com desconto por volume aplicado
             valor_unitario_exibido = valor_base_item_com_desconto
             st.markdown(f"💰 *Valor unitário:* {formatar_moeda(valor_unitario_exibido)}")
             if desconto_volume_percentual > 0:
@@ -1157,16 +1455,13 @@ if st.session_state.get('carrinho_aberto', False):
                     st.rerun()
             
             with col_qtd2:
-                # Subtotal com desconto por volume aplicado
                 subtotal_item = valor_base_item_com_desconto * item['quantidade']
                 st.markdown(f"💎 *Subtotal:* {formatar_moeda(subtotal_item)}")
             
-            # IPI recalculado
             if item.get('ipi_percentual', 0) > 0:
                 ipi_total_item = novo_ipi_item * item['quantidade']
                 st.markdown(f"🔷 IPI: {item['ipi_percentual']*100:.2f}% = {formatar_moeda(ipi_total_item)}")
             
-            # ST recalculado
             if item.get('st_total', 0) > 0:
                 st_total_item = novo_st_item * item['quantidade']
                 st.markdown(f"🟣 ST: {formatar_moeda(st_total_item)}")
@@ -1242,7 +1537,6 @@ if st.session_state.get('carrinho_aberto', False):
         </div>
         """, unsafe_allow_html=True)
     
-    # Mostrar valores com desconto volume
     st.markdown(f"""
     <div class='resumo-card'>
         <div class='resumo-title'>🎯 VALORES COM DESCONTO VOLUME</div>
@@ -1267,7 +1561,6 @@ if st.session_state.get('carrinho_aberto', False):
 
     st.markdown("---")
     
-    # Botões de ação
     cb1, cb2, cb3 = st.columns(3)
     with cb1:
         if st.button("← Continuar comprando", use_container_width=True):
@@ -1280,7 +1573,6 @@ if st.session_state.get('carrinho_aberto', False):
         if st.button("📋 Solicitar Orçamento", use_container_width=True):
             mostrar_formulario()
     
-    # Formulário de dados do cliente (mantenha o código existente)
     if st.session_state.mostrar_formulario_cliente and not st.session_state.mostrar_botoes_envio:
         st.markdown("---")
         st.markdown('<div class="formulario-cliente">', unsafe_allow_html=True)
@@ -1305,7 +1597,6 @@ if st.session_state.get('carrinho_aberto', False):
             enviar = st.form_submit_button("📤 Enviar Orçamento", use_container_width=True)
             
             if enviar:
-                # Salvar dados no session_state
                 st.session_state.form_data = {
                     'razao_social': razao_social,
                     'cnpj': cnpj,
@@ -1318,7 +1609,6 @@ if st.session_state.get('carrinho_aberto', False):
                     'cep': cep
                 }
                 
-                # Validar campos obrigatórios
                 erros = []
                 if not razao_social:
                     erros.append("Razão Social")
@@ -1342,11 +1632,12 @@ if st.session_state.get('carrinho_aberto', False):
                     erros.append("Bairro")
                 if not cep:
                     erros.append("CEP")
+                elif not validar_cep(cep):
+                    erros.append("CEP inválido")
                 
                 if erros:
                     st.error(f"❌ Por favor, preencha os campos obrigatórios: {', '.join(erros)}")
                 else:
-                    # Salvar dados do cliente
                     dados_cliente = {
                         'razao_social': razao_social,
                         'cnpj': cnpj,
@@ -1360,7 +1651,6 @@ if st.session_state.get('carrinho_aberto', False):
                     }
                     st.session_state.dados_cliente = dados_cliente
                     
-                    # Gerar HTML
                     tipo_cliente_str = "ISENTO" if cliente_isento else "NORMAL"
                     html_bytes = gerar_html_orcamento(dados_cliente, st.session_state.carrinho, 
                                                       uf_selecionada, tipo_cliente_str, forma_pagamento,
@@ -1376,9 +1666,7 @@ if st.session_state.get('carrinho_aberto', False):
         
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # Botões de envio fora do formulário
     if st.session_state.mostrar_botoes_envio and st.session_state.html_bytes:
-        # Gerar mensagem para WhatsApp
         tipo_cliente_str = "ISENTO" if cliente_isento else "NORMAL"
         
         msg_whatsapp = formatar_mensagem_whatsapp(st.session_state.dados_cliente, uf_selecionada, 
@@ -1386,16 +1674,13 @@ if st.session_state.get('carrinho_aberto', False):
                                                    desconto_volume_percentual, valor_desconto_volume,
                                                    valor_base_total, total_ipi_recalculado, total_st_recalculado)
         msg_codificada = urllib.parse.quote(msg_whatsapp)
-        
-        # Criar link do WhatsApp
         link_whatsapp = f"https://wa.me/5511930119335?text={msg_codificada}"
         
         st.markdown("---")
-        st.success("✅ Dados validados com sucesso! Orçamento gerado.")
+        st.success("✅ Dados validados com sucesso! Orçamento gerado conforme LGPD.")
         
         col_html, col_wpp, col_voltar = st.columns([1, 1, 1])
         with col_html:
-            # Botão para download do HTML
             st.download_button(
                 label="📄 Baixar Orçamento (HTML)",
                 data=st.session_state.html_bytes,
@@ -1405,7 +1690,6 @@ if st.session_state.get('carrinho_aberto', False):
             )
         
         with col_wpp:
-            # Botão para enviar via WhatsApp
             st.markdown(f"""
             <a href="{link_whatsapp}" target="_blank" 
                style="background-color: #25D366; color: white; padding: 10px 20px; 
@@ -1422,7 +1706,7 @@ if st.session_state.get('carrinho_aberto', False):
                 st.session_state.mostrar_formulario_cliente = False
                 st.rerun()
         
-        st.caption("📎 *O orçamento completo está disponível para download e será enviado por nossa equipe após o contato.")
+        st.caption("📎 *O orçamento completo está disponível para download. Conforme LGPD, seus dados não são armazenados em nosso sistema.*")
 
     st.stop()
 
@@ -1516,7 +1800,6 @@ st.markdown("---")
 if dados_filtrados.empty:
     st.warning("😕 Nenhum produto encontrado.")
 else:
-    # Calcular desconto por volume atual do carrinho para exibir nos produtos
     desconto_volume_atual = 0
     valor_base_carrinho = 0
     if st.session_state.carrinho:
@@ -1559,7 +1842,6 @@ else:
         valor_st = 0.0 if cliente_isento else preco_final * aliquota_st
         valor_total = preco_final + valor_ipi + valor_st
         
-        # Aplicar desconto por volume do carrinho ao preço do produto (apenas no valor base)
         preco_com_desconto_volume = preco_final * (1 - desconto_volume_atual)
 
         produto_carrinho = {
@@ -1589,7 +1871,6 @@ else:
                 unsafe_allow_html=True
             )
 
-            # Imagem
             img_url = str(produto.get('imagem_url', '')).strip()
             if img_url and pd.notna(produto.get('imagem_url')):
                 try:
@@ -1599,21 +1880,18 @@ else:
             else:
                 st.image("https://via.placeholder.com/300x200?text=Sem+Imagem", use_container_width=True)
 
-            # ML
             ml_fmt = formatar_ml(produto.get('ml'))
             st.markdown(
                 f'<div class="product-detail">📏 <strong>{ml_fmt if ml_fmt else "--"}</strong></div>',
                 unsafe_allow_html=True
             )
 
-            # Medidas
             med = produto.get('Medidas', '')
             if pd.notna(med) and str(med).strip():
                 st.markdown(f'<div class="product-detail">📐 {med}</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="product-detail">📐 <strong>--</strong></div>', unsafe_allow_html=True)
 
-            # Preços - Mostrar valor com desconto por volume se aplicável (apenas no valor base)
             if desconto_volume_atual > 0:
                 st.markdown(f"💰 *Preço Bruto:* {formatar_moeda(preco_bruto)}")
                 if desconto_percentual > 0:
@@ -1659,7 +1937,6 @@ else:
 
             st.markdown("---")
 
-            # Seletor de quantidade
             qtd_key = f"qtd_{indice}"
             if qtd_key not in st.session_state.quantidades:
                 st.session_state.quantidades[qtd_key] = 1
@@ -1695,7 +1972,6 @@ else:
 
             st.markdown("---")
 
-    # Paginação
     if total_paginas > 1:
         st.markdown("---")
         _, cpag, _ = st.columns([1, 2, 1])
@@ -1749,13 +2025,14 @@ st.markdown("""
 
 st.markdown("""
 <div class='contact-footer'>
-    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br
+    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br | 🔒 DPO: privacidade@luvidarte.com.br
 </div>""", unsafe_allow_html=True)
 
 st.markdown("""
 <div class='footer-bottom'>
     © 2026 Luvidarte - Catálogo Virtual |
-    <em>Os valores são estimativos e sujeitos à confirmação</em>
+    <em>Os valores são estimativos e sujeitos à confirmação</em><br>
+    <small>Conforme LGPD (Lei 13.709/2018), seus dados são tratados com confidencialidade e não são armazenados.</small>
 </div>
 """, unsafe_allow_html=True)
 
