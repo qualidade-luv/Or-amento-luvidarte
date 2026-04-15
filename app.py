@@ -10,22 +10,6 @@ from datetime import datetime
 import time
 import urllib.parse
 
-# Tentar importar reportlab, se não estiver instalado, mostrar mensagem
-try:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import mm, cm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    import os
-    import tempfile
-    REPORTLAB_AVAILABLE = True
-except ImportError:
-    REPORTLAB_AVAILABLE = False
-    st.warning("⚠️ Biblioteca reportlab não instalada. Para gerar PDF, execute: pip install reportlab")
-
 # ============================================
 # FUNÇÃO PARA FORMATAR MOEDA (PADRÃO BRASILEIRO)
 # ============================================
@@ -51,17 +35,16 @@ def calcular_desconto_volume(valor_base):
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
 def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
-    """Aplica o desconto por volume no item e recalcula IPI e ST"""
-    # Valor base do item (preço final sem IPI/ST)
+    """Aplica o desconto por volume no item e recalcula IPI e ST proporcionalmente"""
+    # Valor base do item (preço final com desconto da condição de pagamento)
     valor_base_item = item['preco_final']
     
-    # Aplicar desconto por volume
+    # Aplicar desconto por volume no valor base
     valor_com_desconto_volume = valor_base_item * (1 - desconto_volume_percentual)
     
-    # Recalcular IPI sobre o novo valor
+    # Recalcular IPI e ST proporcionalmente ao novo valor base
+    # Manter a mesma alíquota efetiva
     novo_valor_ipi = valor_com_desconto_volume * item['ipi_percentual']
-    
-    # Recalcular ST sobre o novo valor
     novo_valor_st = valor_com_desconto_volume * item['st_aliquota']
     
     # Novo total do item
@@ -75,157 +58,121 @@ def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
     }
 
 # ============================================
-# FUNÇÃO PARA GERAR PDF DO ORÇAMENTO (apenas se reportlab disponível)
+# FUNÇÃO PARA GERAR HTML DO ORÇAMENTO
 # ============================================
-def gerar_pdf_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_pagamento, 
-                        desconto_volume_percentual, valor_base_total, valor_desconto_volume,
-                        total_final, total_ipi, total_st):
-    """Gera um PDF com o orçamento detalhado"""
+def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_pagamento, 
+                         desconto_volume_percentual, valor_base_total, valor_desconto_volume,
+                         total_final, total_ipi, total_st):
+    """Gera um HTML com o orçamento detalhado"""
     
-    if not REPORTLAB_AVAILABLE:
-        return None
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Orçamento LUVidarte</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .header {{ text-align: center; margin-bottom: 30px; }}
+            .header h1 {{ color: #2E7D32; }}
+            .section {{ margin-bottom: 20px; }}
+            .section-title {{ color: #2E7D32; border-bottom: 2px solid #C9A03D; padding-bottom: 5px; }}
+            table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #2E7D32; color: white; }}
+            .total {{ font-weight: bold; font-size: 18px; color: #D32F2F; text-align: right; }}
+            .footer {{ margin-top: 30px; font-size: 12px; text-align: center; color: #666; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>LUVidarte - Orçamento Virtual</h1>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">DADOS DO CLIENTE</h2>
+            <p><strong>Razão Social:</strong> {dados_cliente.get('razao_social', '')}</p>
+            <p><strong>CNPJ/CPF:</strong> {dados_cliente.get('cnpj', '')}</p>
+            <p><strong>Inscrição Estadual:</strong> {dados_cliente.get('inscricao_estadual', '')}</p>
+            <p><strong>E-mail:</strong> {dados_cliente.get('email', '')}</p>
+            <p><strong>Telefone:</strong> {dados_cliente.get('telefone', '')}</p>
+            <p><strong>Endereço:</strong> {dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')}</p>
+            <p><strong>Bairro:</strong> {dados_cliente.get('bairro', '')}</p>
+            <p><strong>CEP:</strong> {dados_cliente.get('cep', '')}</p>
+            <p><strong>UF:</strong> {uf}</p>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">INFORMAÇÕES DO ORÇAMENTO</h2>
+            <p><strong>Data:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+            <p><strong>Tipo de Cliente:</strong> {tipo_cliente}</p>
+            <p><strong>Condição de Pagamento:</strong> {forma_pagamento}</p>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">ITENS DO ORÇAMENTO</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Descrição</th>
+                        <th>Qtd</th>
+                        <th>Valor Unit.</th>
+                        <th>Subtotal</th>
+                        <th>IPI</th>
+                        <th>ST</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+    """
     
-    try:
-        # Criar um arquivo temporário
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-            pdf_path = tmp_file.name
+    for item in itens_carrinho:
+        # Calcular valor com desconto por volume para cada item (apenas no valor base)
+        valor_base_item = item['preco_final']
+        valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
+        # IPI e ST permanecem os mesmos
+        novo_total = valor_com_desconto_item + item['valor_ipi'] + item['valor_st']
         
-        # Criar o documento PDF
-        doc = SimpleDocTemplate(pdf_path, pagesize=A4, 
-                                topMargin=2*cm, bottomMargin=2*cm,
-                                leftMargin=2*cm, rightMargin=2*cm)
-        
-        styles = getSampleStyleSheet()
-        story = []
-        
-        # Título
-        titulo_style = ParagraphStyle(
-            'Titulo',
-            parent=styles['Heading1'],
-            fontSize=18,
-            textColor=colors.HexColor('#2E7D32'),
-            alignment=1,
-            spaceAfter=20
-        )
-        story.append(Paragraph("LUVidarte - Orçamento Virtual", titulo_style))
-        
-        # Dados do Cliente
-        story.append(Paragraph("DADOS DO CLIENTE", styles['Heading2']))
-        story.append(Spacer(1, 5))
-        
-        dados_cliente_texto = f"""
-        <b>Razão Social:</b> {dados_cliente.get('razao_social', '')}<br/>
-        <b>CNPJ/CPF:</b> {dados_cliente.get('cnpj', '')}<br/>
-        <b>Inscrição Estadual:</b> {dados_cliente.get('inscricao_estadual', '')}<br/>
-        <b>E-mail:</b> {dados_cliente.get('email', '')}<br/>
-        <b>Telefone/Contato:</b> {dados_cliente.get('telefone', '')}<br/>
-        <b>Endereço:</b> {dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')}<br/>
-        <b>Bairro:</b> {dados_cliente.get('bairro', '')}<br/>
-        <b>CEP:</b> {dados_cliente.get('cep', '')}<br/>
-        <b>UF:</b> {uf}
+        html_content += f"""
+                    <tr>
+                        <td>{item['referencia']}</td>
+                        <td>{item['descricao'][:50]}</td>
+                        <td style="text-align:center">{item['quantidade']}</td>
+                        <td style="text-align:right">{formatar_moeda(valor_com_desconto_item)}</td>
+                        <td style="text-align:right">{formatar_moeda(valor_com_desconto_item * item['quantidade'])}</td>
+                        <td style="text-align:right">{formatar_moeda(item['valor_ipi'] * item['quantidade']) if item['valor_ipi'] > 0 else '-'}</td>
+                        <td style="text-align:right">{formatar_moeda(item['valor_st'] * item['quantidade']) if item['valor_st'] > 0 else '-'}</td>
+                        <td style="text-align:right">{formatar_moeda(novo_total * item['quantidade'])}</td>
+                    </tr>
         """
-        story.append(Paragraph(dados_cliente_texto, styles['Normal']))
-        story.append(Spacer(1, 15))
-        
-        # Informações do Orçamento
-        story.append(Paragraph("INFORMAÇÕES DO ORÇAMENTO", styles['Heading2']))
-        story.append(Spacer(1, 5))
-        
-        data_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
-        info_texto = f"""
-        <b>Data:</b> {data_atual}<br/>
-        <b>Tipo de Cliente:</b> {tipo_cliente}<br/>
-        <b>Condição de Pagamento:</b> {forma_pagamento}
-        """
-        story.append(Paragraph(info_texto, styles['Normal']))
-        story.append(Spacer(1, 15))
-        
-        # Tabela de Produtos
-        story.append(Paragraph("ITENS DO ORÇAMENTO", styles['Heading2']))
-        story.append(Spacer(1, 5))
-        
-        # Cabeçalho da tabela
-        table_data = [
-            ['Código', 'Descrição', 'Qtd', 'Valor Unit.', 'Subtotal', 'IPI', 'ST', 'Total']
-        ]
-        
-        for item in itens_carrinho:
-            # Calcular valor com desconto por volume para cada item
-            valor_base_item = item['preco_final']
-            valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
-            novo_ipi = valor_com_desconto_item * item['ipi_percentual']
-            novo_st = valor_com_desconto_item * item['st_aliquota']
-            novo_total = valor_com_desconto_item + novo_ipi + novo_st
-            
-            row = [
-                item['referencia'],
-                item['descricao'][:40] + '...' if len(item['descricao']) > 40 else item['descricao'],
-                str(item['quantidade']),
-                formatar_moeda(valor_com_desconto_item),
-                formatar_moeda(valor_com_desconto_item * item['quantidade']),
-                formatar_moeda(novo_ipi * item['quantidade']) if novo_ipi > 0 else '-',
-                formatar_moeda(novo_st * item['quantidade']) if novo_st > 0 else '-',
-                formatar_moeda(novo_total * item['quantidade'])
-            ]
-            table_data.append(row)
-        
-        # Adicionar linha de desconto volume
-        if desconto_volume_percentual > 0:
-            table_data.append(['', '', '', '', '', '', 'Desconto Volume', formatar_moeda(valor_desconto_volume)])
-        
-        table_data.append(['', '', '', '', '', '', 'TOTAL GERAL', formatar_moeda(total_final)])
-        
-        # Criar a tabela
-        table = Table(table_data, repeatRows=1)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E7D32')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('ALIGN', (2, 1), (2, -1), 'CENTER'),
-            ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
-        ]))
-        
-        story.append(table)
-        story.append(Spacer(1, 20))
-        
-        # Observações
-        story.append(Paragraph("OBSERVAÇÕES IMPORTANTES", styles['Heading2']))
-        story.append(Spacer(1, 5))
-        obs_texto = """
-        • Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.<br/>
-        • Valores sujeitos à confirmação de estoque e disponibilidade.<br/>
-        • Prazos e condições serão informados por nossa equipe.<br/>
-        • A venda será formalizada APENAS após contato e confirmação da equipe Luvidarte.
-        """
-        story.append(Paragraph(obs_texto, styles['Normal']))
-        story.append(Spacer(1, 10))
-        
-        # Rodapé
-        story.append(Paragraph("LUVidarte - Peças exclusivas em vidro e decoração", styles['Normal']))
-        story.append(Paragraph("Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP", styles['Normal']))
-        story.append(Paragraph("Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | sac@luvidarte.com.br", styles['Normal']))
-        
-        # Gerar PDF
-        doc.build(story)
-        
-        # Ler o arquivo PDF
-        with open(pdf_path, 'rb') as f:
-            pdf_bytes = f.read()
-        
-        # Limpar arquivo temporário
-        os.unlink(pdf_path)
-        
-        return pdf_bytes
     
-    except Exception as e:
-        st.error(f"Erro ao gerar PDF: {str(e)}")
-        return None
+    html_content += f"""
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">RESUMO FINAL</h2>
+            <p><strong>Valor Base Original:</strong> {formatar_moeda(valor_base_total)}</p>
+            <p><strong>Desconto por Volume ({int(desconto_volume_percentual*100)}%):</strong> -{formatar_moeda(valor_desconto_volume)}</p>
+            <p><strong>Novo Valor Base:</strong> {formatar_moeda(valor_base_total - valor_desconto_volume)}</p>
+            <p><strong>IPI Total:</strong> {formatar_moeda(total_ipi)}</p>
+            <p><strong>ST Total:</strong> {formatar_moeda(total_st)}</p>
+            <p class="total"><strong>TOTAL GERAL DO ORÇAMENTO:</strong> {formatar_moeda(total_final)}</p>
+        </div>
+        
+        <div class="footer">
+            <p>LUVidarte - Peças exclusivas em vidro e decoração</p>
+            <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP</p>
+            <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | sac@luvidarte.com.br</p>
+            <p>Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html_content.encode('utf-8')
 
 # ============================================
 # FUNÇÃO PARA VALIDAR CNPJ
@@ -273,9 +220,11 @@ def validar_telefone(telefone):
     return len(telefone) >= 10 and len(telefone) <= 11
 
 # ============================================
-# FUNÇÃO PARA FORMATAR MENSAGEM WHATSAPP COM PDF
+# FUNÇÃO PARA FORMATAR MENSAGEM WHATSAPP
 # ============================================
-def formatar_mensagem_whatsapp_pdf(dados_cliente, uf, tipo_cliente, forma_pagamento, total_final):
+def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento, total_final,
+                                desconto_volume_percentual, valor_desconto_volume, valor_base_total,
+                                total_ipi, total_st):
     """Formata a mensagem para WhatsApp com resumo do orçamento"""
     
     msg = "🛍️ NOVO ORÇAMENTO LUVidarte 🛍️\n\n"
@@ -294,17 +243,30 @@ def formatar_mensagem_whatsapp_pdf(dados_cliente, uf, tipo_cliente, forma_pagame
     msg += "RESUMO DO ORÇAMENTO\n"
     msg += f"📅 Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n"
     msg += f"👤 Tipo Cliente: {tipo_cliente}\n"
-    msg += f"💳 Pagamento: {forma_pagamento}\n\n"
+    msg += f"💳 Pagamento: {forma_pagamento}\n"
+    
+    if desconto_volume_percentual > 0:
+        novo_valor_base = valor_base_total - valor_desconto_volume
+        msg += f"🎉 DESCONTO POR VOLUME: {int(desconto_volume_percentual*100)}%\n"
+        msg += f"💰 Valor Base Original: {formatar_moeda(valor_base_total)}\n"
+        msg += f"💰 Desconto: {formatar_moeda(valor_desconto_volume)}\n"
+        msg += f"💰 Novo Valor Base: {formatar_moeda(novo_valor_base)}\n"
+        msg += f"🔷 IPI Total: {formatar_moeda(total_ipi)}\n"
+        msg += f"🟣 ST Total: {formatar_moeda(total_st)}\n\n"
+    else:
+        msg += "\n"
     
     # Lista resumida dos itens
     msg += "ITENS SOLICITADOS\n"
     for item in st.session_state.carrinho:
+        # Mostrar preço com desconto por volume se aplicável
+        valor_base_item = item['preco_final']
+        valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
         msg += f"• {item['quantidade']}x {item['descricao'][:50]}\n"
-        msg += f"  REF: {item['referencia']}\n"
+        msg += f"  REF: {item['referencia']} - Valor unit: {formatar_moeda(valor_com_desconto)}\n"
     
     msg += "\n━" * 30 + "\n\n"
     msg += f"💰 TOTAL DO ORÇAMENTO: {formatar_moeda(total_final)}\n\n"
-    msg += "📎 ORÇAMENTO COMPLETO EM ANEXO (PDF)\n\n"
     msg += "📋 Próximos passos:\n"
     msg += "1️⃣ Aguarde o contato da nossa equipe\n"
     msg += "2️⃣ Confirmaremos disponibilidade dos produtos\n"
@@ -314,7 +276,7 @@ def formatar_mensagem_whatsapp_pdf(dados_cliente, uf, tipo_cliente, forma_pagame
     return msg
 
 # ============================================
-# CONFIGURAÇÃO DA PÁGINA (com favicon)
+# CONFIGURAÇÃO DA PÁGINA
 # ============================================
 def carregar_logo_favicon():
     url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
@@ -373,8 +335,8 @@ if 'form_data' not in st.session_state:
     }
 if 'mostrar_botoes_envio' not in st.session_state:
     st.session_state.mostrar_botoes_envio = False
-if 'pdf_bytes' not in st.session_state:
-    st.session_state.pdf_bytes = None
+if 'html_bytes' not in st.session_state:
+    st.session_state.html_bytes = None
 
 # ============================================
 # FUNÇÕES PARA CONTROLAR CARRINHO
@@ -394,7 +356,7 @@ def mostrar_formulario():
 def cancelar_formulario():
     st.session_state.mostrar_formulario_cliente = False
     st.session_state.mostrar_botoes_envio = False
-    st.session_state.pdf_bytes = None
+    st.session_state.html_bytes = None
     st.rerun()
 
 # ============================================
@@ -559,19 +521,38 @@ def limpar_carrinho():
     st.session_state.carrinho = []
     st.session_state.mostrar_formulario_cliente = False
     st.session_state.mostrar_botoes_envio = False
-    st.session_state.pdf_bytes = None
+    st.session_state.html_bytes = None
 
 def calcular_resumo_carrinho():
     if not st.session_state.carrinho:
         return {'total_itens': 0, 'total_geral': 0.0, 'total_ipi': 0.0,
                 'total_st': 0.0, 'total_desconto': 0.0, 'total_bruto': 0.0}
+    
+    # Calcular valor base total para desconto volume
+    valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
+    desconto_vol = calcular_desconto_volume(valor_base_total)
+    
+    total_com_desconto = 0
+    total_ipi = 0
+    total_st = 0
+    
+    for item in st.session_state.carrinho:
+        item_com_desconto = recalcular_item_com_desconto_volume(item, desconto_vol)
+        total_com_desconto += item_com_desconto['total_geral'] * item['quantidade']
+        total_ipi += item['valor_ipi'] * item['quantidade']  # IPI original
+        total_st += item['valor_st'] * item['quantidade']    # ST original
+    
     return {
         'total_itens': sum(i['quantidade'] for i in st.session_state.carrinho),
-        'total_geral': sum(i['total_geral'] for i in st.session_state.carrinho),
-        'total_ipi': sum(i['ipi_total'] for i in st.session_state.carrinho),
-        'total_st': sum(i['st_total'] for i in st.session_state.carrinho),
+        'total_geral': total_com_desconto,
+        'total_ipi': total_ipi,
+        'total_st': total_st,
         'total_desconto': sum(i['valor_desconto'] * i['quantidade'] for i in st.session_state.carrinho),
         'total_bruto': sum(i['preco_bruto'] * i['quantidade'] for i in st.session_state.carrinho),
+        'desconto_volume_percentual': desconto_vol,
+        'valor_base_total': valor_base_total,
+        'valor_desconto_volume': valor_base_total * desconto_vol,
+        'novo_valor_base': valor_base_total * (1 - desconto_vol)
     }
 
 # ============================================
@@ -796,7 +777,6 @@ st.markdown("""
     border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #E8E8E8;
 }
 
-/* LINK DO CARRINHO NO TOPO */
 .cart-link-top {
     text-align: right;
 }
@@ -832,7 +812,6 @@ st.markdown("""
     padding: 0 4px;
 }
 
-/* WHATSAPP FLUTUANTE */
 .whatsapp-float-fixed { position: fixed; bottom: 20px; right: 20px; z-index: 99990; }
 .whatsapp-float {
     background-color: #25D366; color: white; border-radius: 50px;
@@ -842,7 +821,6 @@ st.markdown("""
 }
 .whatsapp-float:hover { transform: scale(1.05); background-color: #075E54; }
 
-/* FORMULÁRIO CLIENTE */
 .formulario-cliente {
     background-color: #FFF;
     border-radius: 16px;
@@ -866,7 +844,6 @@ st.markdown("""
     margin-left: 5px;
 }
 
-/* PRODUTOS */
 .product-card {
     background-color: #FFF; border-radius: 12px; padding: 16px; margin: 10px 0;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08); transition: all 0.2s ease; position: relative;
@@ -891,7 +868,6 @@ st.markdown("""
 .product-category { color: #666; font-size: 12px; margin-bottom: 12px; }
 .product-detail { font-size: 13px; margin: 5px 0; min-height: 24px; }
 
-/* RESUMO CARRINHO */
 .resumo-card {
     background-color: #FFF; border-radius: 12px; padding: 16px; margin: 10px 0;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #E0E0E0;
@@ -916,7 +892,6 @@ st.markdown("""
     font-size: 12px; color: #2E7D32; text-align: center;
 }
 
-/* RODAPE */
 .social-links-container { text-align: center; margin: 15px 0; }
 .social-title { color: #C9A03D; font-weight: bold; font-size: 14px; }
 .social-links { display: flex; justify-content: center; gap: 25px; margin: 10px 0; flex-wrap: wrap; }
@@ -1050,7 +1025,7 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO
+# TELA DO CARRINHO (CORRIGIDA)
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
 
@@ -1064,9 +1039,46 @@ if st.session_state.get('carrinho_aberto', False):
         st.info("Seu orçamento está vazio. Adicione produtos para continuar.")
         st.stop()
 
-    total_geral = total_ipi_geral = total_st_geral = total_desconto_geral = total_bruto_geral = 0.0
+    # Calcular valor base total (soma dos preços finais sem IPI/ST)
+    valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
+    
+    # Calcular desconto por volume sobre o valor base
+    desconto_volume_percentual = calcular_desconto_volume(valor_base_total)
+    valor_desconto_volume = valor_base_total * desconto_volume_percentual
+    novo_valor_base = valor_base_total - valor_desconto_volume
+
+    # Variáveis para totais
+    total_ipi_recalculado = 0
+    total_st_recalculado = 0
+    total_geral_recalculado = 0
+    total_desconto_geral = 0
+    total_bruto_geral = 0
 
     for idx, item in enumerate(st.session_state.carrinho):
+        # Recalcular IPI e ST proporcionalmente ao novo valor base
+        # Primeiro, calcular a alíquota efetiva do IPI e ST sobre o valor base original
+        ipi_aliquota_efetiva = item['valor_ipi'] / item['preco_final'] if item['preco_final'] > 0 else 0
+        st_aliquota_efetiva = item['valor_st'] / item['preco_final'] if item['preco_final'] > 0 else 0
+        
+        # Aplicar desconto por volume no valor base do item
+        valor_base_item_original = item['preco_final']
+        valor_base_item_com_desconto = valor_base_item_original * (1 - desconto_volume_percentual)
+        
+        # Recalcular IPI e ST sobre o novo valor base
+        novo_ipi_item = valor_base_item_com_desconto * ipi_aliquota_efetiva
+        novo_st_item = valor_base_item_com_desconto * st_aliquota_efetiva
+        
+        # Novo total do item
+        novo_total_item = (valor_base_item_com_desconto + novo_ipi_item + novo_st_item) * item['quantidade']
+        
+        # Acumular totais
+        total_ipi_recalculado += novo_ipi_item * item['quantidade']
+        total_st_recalculado += novo_st_item * item['quantidade']
+        total_geral_recalculado += novo_total_item
+        total_desconto_geral += item['valor_desconto'] * item['quantidade']
+        total_bruto_geral += item['preco_bruto'] * item['quantidade']
+        
+        # Exibir o item no carrinho
         c1, c2, c3, c4 = st.columns([1, 3, 2, 1])
         with c1:
             img_url = item.get('imagem_url', '')
@@ -1088,7 +1100,12 @@ if st.session_state.get('carrinho_aberto', False):
             if item['desconto_percentual'] > 0:
                 st.markdown(f"🎯 *Desconto:* {item['desconto_percentual']*100:.2f}% ({formatar_moeda(item['valor_desconto'])})")
                 st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(item['preco_com_desconto'])}")
-            st.markdown(f"💰 *Valor unitário:* {formatar_moeda(item['preco_unitario'])}")
+            
+            # Mostrar valor unitário com desconto por volume aplicado
+            valor_unitario_exibido = valor_base_item_com_desconto
+            st.markdown(f"💰 *Valor unitário:* {formatar_moeda(valor_unitario_exibido)}")
+            if desconto_volume_percentual > 0:
+                st.caption(f"🎉 *Inclui {int(desconto_volume_percentual*100)}% desconto por volume*")
             
             col_qtd1, col_qtd2 = st.columns([1, 2])
             with col_qtd1:
@@ -1106,53 +1123,35 @@ if st.session_state.get('carrinho_aberto', False):
                     st.rerun()
             
             with col_qtd2:
-                st.markdown(f"💎 *Subtotal:* {formatar_moeda(item['preco_total'])}")
+                # Subtotal com desconto por volume aplicado
+                subtotal_item = valor_base_item_com_desconto * item['quantidade']
+                st.markdown(f"💎 *Subtotal:* {formatar_moeda(subtotal_item)}")
             
+            # IPI recalculado
             if item.get('ipi_percentual', 0) > 0:
-                st.markdown(f"🔷 IPI: {item['ipi_percentual']*100:.2f}% = {formatar_moeda(item['ipi_total'])}")
+                ipi_total_item = novo_ipi_item * item['quantidade']
+                st.markdown(f"🔷 IPI: {item['ipi_percentual']*100:.2f}% = {formatar_moeda(ipi_total_item)}")
+            
+            # ST recalculado
             if item.get('st_total', 0) > 0:
-                st.markdown(f"🟣 ST: {formatar_moeda(item['st_total'])}")
+                st_total_item = novo_st_item * item['quantidade']
+                st.markdown(f"🟣 ST: {formatar_moeda(st_total_item)}")
         with c4:
             st.markdown("*Total Item*")
-            st.markdown(f"### {formatar_moeda(item['total_geral'])}")
+            st.markdown(f"### {formatar_moeda(novo_total_item)}")
             if st.button("🗑️ Remover", key=f"remove_{idx}"):
                 remover_do_carrinho(idx)
                 st.rerun()
         st.markdown("---")
-        total_geral        += item['total_geral']
-        total_ipi_geral    += item['ipi_total']
-        total_st_geral     += item['st_total']
-        total_desconto_geral += item['valor_desconto'] * item['quantidade']
-        total_bruto_geral  += item['preco_bruto'] * item['quantidade']
 
-    # Calcular valor base total (soma dos preços finais sem IPI/ST)
-    valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-    
-    # Calcular desconto por volume sobre o valor base
-    desconto_volume_percentual = calcular_desconto_volume(valor_base_total)
-    valor_desconto_volume = valor_base_total * desconto_volume_percentual
-    
-    # Calcular novo valor base com desconto
-    novo_valor_base = valor_base_total - valor_desconto_volume
-    
-    # Recalcular IPI e ST sobre o novo valor base (proporcionalmente)
-    if valor_base_total > 0:
-        fator = novo_valor_base / valor_base_total
-        novo_total_ipi = total_ipi_geral * fator
-        novo_total_st = total_st_geral * fator
-    else:
-        novo_total_ipi = 0
-        novo_total_st = 0
-    
-    # Novo total final
-    total_final_com_vol = novo_valor_base + novo_total_ipi + novo_total_st
+    total_final_com_vol = novo_valor_base + total_ipi_recalculado + total_st_recalculado
 
     if desconto_volume_percentual > 0:
         st.markdown(f"""
         <div class='desconto-vol-banner'>
             🎉 Parabéns! Você ganhou <strong>{int(desconto_volume_percentual*100)}% de desconto</strong> por volume!<br>
             Economia de <strong>{formatar_moeda(valor_desconto_volume)}</strong> aplicada sobre o valor base.<br>
-            <small>IPI e ST recalculados sobre o novo valor base.</small>
+            <small>IPI e ST recalculados proporcionalmente sobre o novo valor base.</small>
         </div>""", unsafe_allow_html=True)
     elif 2500 - valor_base_total > 0:
         st.markdown(f"""
@@ -1189,18 +1188,22 @@ if st.session_state.get('carrinho_aberto', False):
     with col2:
         st.markdown(f"""
         <div class='resumo-card'>
-            <div class='resumo-title'>🏷️ Tributos e Total Final</div>
+            <div class='resumo-title'>🏷️ Tributos (Recalculados)</div>
             <div class='resumo-line'>
-                <span>🔷 IPI Total:</span>
-                <span><strong>{formatar_moeda(total_ipi_geral)}</strong></span>
+                <span>🔷 IPI Total Original:</span>
+                <span><strong>{formatar_moeda(sum(item['valor_ipi'] * item['quantidade'] for item in st.session_state.carrinho))}</strong></span>
             </div>
             <div class='resumo-line'>
-                <span>🟣 ST Total:</span>
-                <span><strong>{formatar_moeda(total_st_geral)}</strong></span>
+                <span>🔷 IPI Total (com desconto vol):</span>
+                <span><strong style='color:#2E7D32;'>{formatar_moeda(total_ipi_recalculado)}</strong></span>
             </div>
             <div class='resumo-line'>
-                <span>📦 Subtotal (c/ IPI + ST):</span>
-                <span><strong>{formatar_moeda(total_geral)}</strong></span>
+                <span>🟣 ST Total Original:</span>
+                <span><strong>{formatar_moeda(sum(item['valor_st'] * item['quantidade'] for item in st.session_state.carrinho))}</strong></span>
+            </div>
+            <div class='resumo-line'>
+                <span>🟣 ST Total (com desconto vol):</span>
+                <span><strong style='color:#2E7D32;'>{formatar_moeda(total_st_recalculado)}</strong></span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1214,12 +1217,12 @@ if st.session_state.get('carrinho_aberto', False):
             <span><strong>{formatar_moeda(novo_valor_base)}</strong></span>
         </div>
         <div class='resumo-line' style='color:#2E7D32;'>
-            <span>🔷 Novo IPI Total:</span>
-            <span><strong>{formatar_moeda(novo_total_ipi)}</strong></span>
+            <span>🔷 IPI Total (recalculado):</span>
+            <span><strong>{formatar_moeda(total_ipi_recalculado)}</strong></span>
         </div>
         <div class='resumo-line' style='color:#2E7D32;'>
-            <span>🟣 Novo ST Total:</span>
-            <span><strong>{formatar_moeda(novo_total_st)}</strong></span>
+            <span>🟣 ST Total (recalculado):</span>
+            <span><strong>{formatar_moeda(total_st_recalculado)}</strong></span>
         </div>
         <div class='resumo-line total'>
             <span>✅ TOTAL FINAL DO ORÇAMENTO:</span>
@@ -1243,7 +1246,7 @@ if st.session_state.get('carrinho_aberto', False):
         if st.button("📋 Solicitar Orçamento", use_container_width=True):
             mostrar_formulario()
     
-    # Formulário de dados do cliente
+    # Formulário de dados do cliente (mantenha o código existente)
     if st.session_state.mostrar_formulario_cliente and not st.session_state.mostrar_botoes_envio:
         st.markdown("---")
         st.markdown('<div class="formulario-cliente">', unsafe_allow_html=True)
@@ -1323,29 +1326,31 @@ if st.session_state.get('carrinho_aberto', False):
                     }
                     st.session_state.dados_cliente = dados_cliente
                     
-                    # Gerar PDF
+                    # Gerar HTML
                     tipo_cliente_str = "ISENTO" if cliente_isento else "NORMAL"
-                    pdf_bytes = gerar_pdf_orcamento(dados_cliente, st.session_state.carrinho, 
-                                                    uf_selecionada, tipo_cliente_str, forma_pagamento,
-                                                    desconto_volume_percentual, valor_base_total, valor_desconto_volume,
-                                                    total_final_com_vol, novo_total_ipi, novo_total_st)
+                    html_bytes = gerar_html_orcamento(dados_cliente, st.session_state.carrinho, 
+                                                      uf_selecionada, tipo_cliente_str, forma_pagamento,
+                                                      desconto_volume_percentual, valor_base_total, valor_desconto_volume,
+                                                      total_final_com_vol, total_ipi_recalculado, total_st_recalculado)
                     
-                    if pdf_bytes:
-                        st.session_state.pdf_bytes = pdf_bytes
+                    if html_bytes:
+                        st.session_state.html_bytes = html_bytes
                         st.session_state.mostrar_botoes_envio = True
                         st.rerun()
                     else:
-                        st.error("❌ Erro ao gerar o PDF. Tente novamente.")
+                        st.error("❌ Erro ao gerar o orçamento. Tente novamente.")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Botões de envio fora do formulário
-    if st.session_state.mostrar_botoes_envio and st.session_state.pdf_bytes:
+    if st.session_state.mostrar_botoes_envio and st.session_state.html_bytes:
         # Gerar mensagem para WhatsApp
         tipo_cliente_str = "ISENTO" if cliente_isento else "NORMAL"
         
-        msg_whatsapp = formatar_mensagem_whatsapp_pdf(st.session_state.dados_cliente, uf_selecionada, 
-                                                      tipo_cliente_str, forma_pagamento, total_final_com_vol)
+        msg_whatsapp = formatar_mensagem_whatsapp(st.session_state.dados_cliente, uf_selecionada, 
+                                                   tipo_cliente_str, forma_pagamento, total_final_com_vol,
+                                                   desconto_volume_percentual, valor_desconto_volume,
+                                                   valor_base_total, total_ipi_recalculado, total_st_recalculado)
         msg_codificada = urllib.parse.quote(msg_whatsapp)
         
         # Criar link do WhatsApp
@@ -1354,14 +1359,14 @@ if st.session_state.get('carrinho_aberto', False):
         st.markdown("---")
         st.success("✅ Dados validados com sucesso! Orçamento gerado.")
         
-        col_pdf, col_wpp, col_voltar = st.columns([1, 1, 1])
-        with col_pdf:
-            # Botão para download do PDF
+        col_html, col_wpp, col_voltar = st.columns([1, 1, 1])
+        with col_html:
+            # Botão para download do HTML
             st.download_button(
-                label="📄 Baixar PDF do Orçamento",
-                data=st.session_state.pdf_bytes,
-                file_name=f"orcamento_luvidarte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                mime="application/pdf",
+                label="📄 Baixar Orçamento (HTML)",
+                data=st.session_state.html_bytes,
+                file_name=f"orcamento_luvidarte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                mime="text/html",
                 use_container_width=True
             )
         
@@ -1383,7 +1388,7 @@ if st.session_state.get('carrinho_aberto', False):
                 st.session_state.mostrar_formulario_cliente = False
                 st.rerun()
         
-        st.caption("📎 *O orçamento em PDF será enviado anexado separadamente por nossa equipe após o contato.")
+        st.caption("📎 *O orçamento completo está disponível para download e será enviado por nossa equipe após o contato.")
 
     st.stop()
 
@@ -1423,23 +1428,7 @@ with col_titulo:
 
 with col_link:
     if resumo_header['total_itens'] > 0:
-        # Calcular valor base para desconto por volume
-        valor_base_header = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-        dvol_pct_header = calcular_desconto_volume(valor_base_header)
-        total_geral_header = resumo_header['total_geral']
-        valor_desconto_header = valor_base_header * dvol_pct_header
-        
-        # Recalcular IPI e ST proporcionais
-        if valor_base_header > 0:
-            fator_header = (valor_base_header - valor_desconto_header) / valor_base_header
-            novo_ipi_header = resumo_header['total_ipi'] * fator_header
-            novo_st_header = resumo_header['total_st'] * fator_header
-        else:
-            novo_ipi_header = 0
-            novo_st_header = 0
-        
-        total_exibir_header = (valor_base_header - valor_desconto_header) + novo_ipi_header + novo_st_header
-        total_fmt_header = formatar_moeda(total_exibir_header)
+        total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         
         if st.button(
             f"🛒 Acessar meu carrinho ({resumo_header['total_itens']}) {total_fmt_header}",
@@ -1465,6 +1454,7 @@ if st.session_state.pagina_atual > total_paginas:
 indice_inicio = (st.session_state.pagina_atual - 1) * ITENS_POR_PAGINA
 indice_fim    = min(indice_inicio + ITENS_POR_PAGINA, total_encontrados)
 dados_pagina  = dados_filtrados.iloc[indice_inicio:indice_fim]
+
 # ============================================
 # INFO RÁPIDA
 # ============================================
@@ -1492,6 +1482,13 @@ st.markdown("---")
 if dados_filtrados.empty:
     st.warning("😕 Nenhum produto encontrado.")
 else:
+    # Calcular desconto por volume atual do carrinho para exibir nos produtos
+    desconto_volume_atual = 0
+    valor_base_carrinho = 0
+    if st.session_state.carrinho:
+        valor_base_carrinho = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
+        desconto_volume_atual = calcular_desconto_volume(valor_base_carrinho)
+    
     colunas = st.columns(3)
 
     for posicao, (indice, produto) in enumerate(dados_pagina.iterrows()):
@@ -1527,6 +1524,9 @@ else:
         aliquota_st = buscar_aliquota_st(ncm_produto, uf_selecionada, dados_st)
         valor_st = 0.0 if cliente_isento else preco_final * aliquota_st
         valor_total = preco_final + valor_ipi + valor_st
+        
+        # Aplicar desconto por volume do carrinho ao preço do produto (apenas no valor base)
+        preco_com_desconto_volume = preco_final * (1 - desconto_volume_atual)
 
         produto_carrinho = {
             'Referência': produto['Referência'],
@@ -1579,63 +1579,48 @@ else:
             else:
                 st.markdown('<div class="product-detail">📐 <strong>--</strong></div>', unsafe_allow_html=True)
 
-            # Preços
-            if is_promo and preco_promo is not None and preco_promo > 0:
-                st.markdown(f"🏷️ *Preço Promocional:* {formatar_moeda(preco_bruto)}")
-                if cliente_isento:
-                    st.caption("✨ +10% (Cliente Isento)")
-                    st.markdown(f"💰 *Preço com acréscimo:* {formatar_moeda(preco_final)}")
-                
-                if forma_pagamento == "VISTA":
-                    desconto_vista = 0.04
-                    valor_com_desconto_vista = preco_final * (1 - desconto_vista)
-                    st.markdown(f"🎯 *Desconto à vista:* 4%")
-                    st.markdown(f"💰 *Valor com desconto:* {formatar_moeda(valor_com_desconto_vista)}")
-                    preco_final_atual = valor_com_desconto_vista
-                    valor_ipi_atual = preco_final_atual * ipi_percentual
-                    valor_total_atual = preco_final_atual + valor_ipi_atual + valor_st
-                else:
-                    preco_final_atual = preco_final
-                    valor_ipi_atual = valor_ipi
-                    valor_total_atual = valor_total
-                    if forma_pagamento != "PREÇO BASE":
-                        st.markdown(f"🎯 *Desconto:* Não aplicável em promoção")
-                
-                if ipi_percentual > 0:
-                    st.markdown(f"🔷 *IPI:* {ipi_percentual*100:.2f}% = {formatar_moeda(valor_ipi_atual)}")
-                else:
-                    st.markdown("🔷 *IPI:* Não aplicável")
-                
-                if cliente_isento:
-                    st.markdown(f"🟣 *ST ({uf_selecionada}):* Cliente Isento — ST não aplicada")
-                    st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(preco_final_atual + valor_ipi_atual)}")
-                elif aliquota_st > 0:
-                    st.markdown(f"🟣 *Alíq. ST ({uf_selecionada}):* {aliquota_st*100:.2f}%")
-                    st.markdown(f"📊 *Valor ST:* {formatar_moeda(valor_st)}")
-                    st.markdown(f"✅ *TOTAL COM IPI + ST:* {formatar_moeda(valor_total_atual)}")
-                else:
-                    st.markdown(f"🟣 *ST ({uf_selecionada}):* Não aplicável")
-                    st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(preco_final_atual + valor_ipi_atual)}")
+            # Preços - Mostrar valor com desconto por volume se aplicável (apenas no valor base)
+            if desconto_volume_atual > 0:
+                st.markdown(f"💰 *Preço Bruto:* {formatar_moeda(preco_bruto)}")
+                if desconto_percentual > 0:
+                    st.markdown(f"🎯 *Desconto:* {desconto_percentual*100:.2f}% ({formatar_moeda(valor_desconto)})")
+                    st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(preco_com_desconto)}")
+                st.markdown(f"💰 *Valor unitário:* {formatar_moeda(preco_com_desconto_volume)}")
+                st.caption(f"🎉 *Inclui {int(desconto_volume_atual*100)}% desconto por volume acumulado no carrinho*")
             else:
                 st.markdown(f"💰 *Preço Bruto:* {formatar_moeda(preco_bruto)}")
                 if desconto_percentual > 0:
                     st.markdown(f"🎯 *Desconto:* {desconto_percentual*100:.2f}% ({formatar_moeda(valor_desconto)})")
                     st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(preco_com_desconto)}")
-                
-                if ipi_percentual > 0:
-                    st.markdown(f"🔷 *IPI:* {ipi_percentual*100:.2f}% = {formatar_moeda(valor_ipi)}")
+                st.markdown(f"💰 *Valor unitário:* {formatar_moeda(preco_final)}")
+            
+            if ipi_percentual > 0:
+                st.markdown(f"🔷 *IPI:* {ipi_percentual*100:.2f}% = {formatar_moeda(valor_ipi)}")
+            else:
+                st.markdown("🔷 *IPI:* Não aplicável")
+            
+            if cliente_isento:
+                st.markdown(f"🟣 *ST ({uf_selecionada}):* Cliente Isento — ST não aplicada")
+                if desconto_volume_atual > 0:
+                    novo_total_com_desconto = preco_com_desconto_volume + valor_ipi
+                    st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(novo_total_com_desconto)}")
                 else:
-                    st.markdown("🔷 *IPI:* Não aplicável")
-                
-                if cliente_isento:
-                    st.markdown(f"🟣 *ST ({uf_selecionada}):* Cliente Isento — ST não aplicada")
                     st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(preco_final + valor_ipi)}")
-                elif aliquota_st > 0:
-                    st.markdown(f"🟣 *Alíq. ST ({uf_selecionada}):* {aliquota_st*100:.2f}%")
+            elif aliquota_st > 0:
+                st.markdown(f"🟣 *Alíq. ST ({uf_selecionada}):* {aliquota_st*100:.2f}%")
+                if desconto_volume_atual > 0:
+                    novo_total_com_desconto = preco_com_desconto_volume + valor_ipi + valor_st
+                    st.markdown(f"📊 *Valor ST:* {formatar_moeda(valor_st)}")
+                    st.markdown(f"✅ *TOTAL COM IPI + ST:* {formatar_moeda(novo_total_com_desconto)}")
+                else:
                     st.markdown(f"📊 *Valor ST:* {formatar_moeda(valor_st)}")
                     st.markdown(f"✅ *TOTAL COM IPI + ST:* {formatar_moeda(valor_total)}")
+            else:
+                st.markdown(f"🟣 *ST ({uf_selecionada}):* Não aplicável")
+                if desconto_volume_atual > 0:
+                    novo_total_com_desconto = preco_com_desconto_volume + valor_ipi
+                    st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(novo_total_com_desconto)}")
                 else:
-                    st.markdown(f"🟣 *ST ({uf_selecionada}):* Não aplicável")
                     st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(preco_final + valor_ipi)}")
 
             st.markdown("---")
@@ -1736,7 +1721,7 @@ st.markdown("""
 st.markdown("""
 <div class='footer-bottom'>
     © 2026 Luvidarte - Catálogo Virtual |
-    <em>Os valores são estimativas e sujeitos à confirmação</em>
+    <em>Os valores são estimativos e sujeitos à confirmação</em>
 </div>
 """, unsafe_allow_html=True)
 
