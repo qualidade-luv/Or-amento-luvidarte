@@ -13,7 +13,6 @@ import hashlib
 import secrets
 import socket
 import urllib3
-from typing import Optional, Dict, Any
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
@@ -285,15 +284,228 @@ def calcular_desconto_volume(valor_base):
     else:
         return 0.0
 
+def calcular_faltante_para_desconto(valor_base):
+    """Calcula o valor faltante para o próximo desconto"""
+    if valor_base < 2500:
+        return 2500 - valor_base, 10
+    elif valor_base < 4000:
+        return 4000 - valor_base, 15
+    else:
+        return 0, 0
+
+def gerar_botao_desconto_flutuante():
+    """Gera o HTML/CSS para o botão flutuante de desconto"""
+    
+    # Calcular valores atuais do carrinho
+    if st.session_state.carrinho:
+        valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
+        desconto_percentual = calcular_desconto_volume(valor_base_total)
+        faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_total)
+        
+        if desconto_percentual == 0.15:
+            mensagem = f"🏆 PARABÉNS! Você atingiu 15% de desconto máximo!"
+            cor = "#FF9800"
+            icone = "🏆"
+            texto_desconto = "15% OFF"
+        elif desconto_percentual == 0.10:
+            mensagem = f"✅ Você já tem 10% de desconto! Faltam {formatar_moeda(faltante)} para 15%"
+            cor = "#4CAF50"
+            icone = "🎯"
+            texto_desconto = "10% OFF"
+        else:
+            if faltante > 0:
+                mensagem = f"📈 Adicione mais {formatar_moeda(faltante)} e ganhe {prox_desconto}% de desconto!"
+            else:
+                mensagem = f"💰 Adicione produtos para ganhar desconto por volume!"
+            cor = "#2196F3"
+            icone = "📈"
+            texto_desconto = "0% OFF"
+        
+        # Calcular barra de progresso
+        if valor_base_total >= 4000:
+            progresso = 100
+        elif valor_base_total >= 2500:
+            progresso = 75 + ((valor_base_total - 2500) / 1500) * 25
+        else:
+            progresso = (valor_base_total / 2500) * 75
+        
+        progresso = min(100, max(0, progresso))
+        
+    else:
+        mensagem = "💰 Adicione produtos para ganhar desconto por volume!"
+        faltante = 2500
+        prox_desconto = 10
+        cor = "#9E9E9E"
+        icone = "💰"
+        texto_desconto = "0% OFF"
+        progresso = 0
+    
+    # HTML do botão flutuante
+    html = f"""
+    <style>
+    @keyframes slideInRight {{
+        from {{ transform: translateX(100%); opacity: 0; }}
+        to {{ transform: translateX(0); opacity: 1; }}
+    }}
+    
+    @keyframes pulse {{
+        0% {{ transform: scale(1); }}
+        50% {{ transform: scale(1.05); }}
+        100% {{ transform: scale(1); }}
+    }}
+    
+    .desconto-float {{
+        position: fixed;
+        bottom: 100px;
+        right: 20px;
+        z-index: 99999;
+        animation: slideInRight 0.5s ease-out;
+        cursor: pointer;
+    }}
+    
+    .desconto-card {{
+        background: linear-gradient(135deg, #FFF, #F5F5F5);
+        border-radius: 16px;
+        padding: 12px 18px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        border-left: 4px solid {cor};
+        min-width: 280px;
+        max-width: 320px;
+        transition: all 0.3s ease;
+    }}
+    
+    .desconto-card:hover {{
+        transform: translateY(-5px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.2);
+    }}
+    
+    .desconto-header {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }}
+    
+    .desconto-icon {{
+        font-size: 28px;
+        animation: pulse 2s infinite;
+    }}
+    
+    .desconto-title {{
+        font-size: 14px;
+        font-weight: bold;
+        color: #333;
+        margin: 0;
+    }}
+    
+    .desconto-message {{
+        font-size: 12px;
+        color: #555;
+        margin: 8px 0;
+        line-height: 1.4;
+    }}
+    
+    .desconto-value {{
+        font-size: 18px;
+        font-weight: bold;
+        color: {cor};
+        margin: 5px 0;
+    }}
+    
+    .progress-bar-container {{
+        background-color: #E0E0E0;
+        border-radius: 10px;
+        height: 8px;
+        margin: 10px 0;
+        overflow: hidden;
+    }}
+    
+    .progress-bar-fill {{
+        background: linear-gradient(90deg, {cor}, #FF9800);
+        width: {progresso}%;
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.5s ease;
+    }}
+    
+    .progress-labels {{
+        display: flex;
+        justify-content: space-between;
+        font-size: 9px;
+        color: #666;
+        margin-top: 5px;
+    }}
+    
+    .close-btn {{
+        position: absolute;
+        top: 5px;
+        right: 10px;
+        background: none;
+        border: none;
+        font-size: 16px;
+        cursor: pointer;
+        color: #999;
+        transition: color 0.2s;
+    }}
+    
+    .close-btn:hover {{
+        color: #333;
+    }}
+    
+    @media (max-width: 768px) {{
+        .desconto-card {{
+            min-width: 260px;
+            padding: 10px 15px;
+        }}
+        .desconto-float {{
+            bottom: 90px;
+            right: 10px;
+        }}
+    }}
+    </style>
+    
+    <div class="desconto-float" id="descontoFloat">
+        <div class="desconto-card">
+            <button class="close-btn" onclick="document.getElementById('descontoFloat').style.display='none'">✕</button>
+            <div class="desconto-header">
+                <div class="desconto-icon">{icone}</div>
+                <div>
+                    <div class="desconto-title">💎 DESCONTO POR VOLUME</div>
+                    <div class="desconto-value">{texto_desconto}</div>
+                </div>
+            </div>
+            <div class="desconto-message">{mensagem}</div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill"></div>
+            </div>
+            <div class="progress-labels">
+                <span>💰 R$ 0</span>
+                <span>🎯 10% (R$ 2.500)</span>
+                <span>🏆 15% (R$ 4.000)</span>
+            </div>
+        </div>
+    </div>
+    """
+    
+    return html
+
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
 def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
     """Aplica o desconto por volume no item e recalcula IPI e ST proporcionalmente"""
+    # Valor base do item (preço final com desconto da condição de pagamento)
     valor_base_item = item['preco_final']
+    
+    # Aplicar desconto por volume no valor base
     valor_com_desconto_volume = valor_base_item * (1 - desconto_volume_percentual)
+    
+    # Recalcular IPI e ST proporcionalmente ao novo valor base
+    # Manter a mesma alíquota efetiva
     novo_valor_ipi = valor_com_desconto_volume * item['ipi_percentual']
     novo_valor_st = valor_com_desconto_volume * item['st_aliquota']
+    
+    # Novo total do item
     novo_total_geral = valor_com_desconto_volume + novo_valor_ipi + novo_valor_st
     
     return {
@@ -313,6 +525,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     
     novo_valor_base = valor_base_total - valor_desconto_volume
     
+    # Calcular fator de proporcionalidade para IPI e ST
     if valor_base_total > 0:
         fator_ipi_st = novo_valor_base / valor_base_total
     else:
@@ -402,20 +615,27 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     total_geral_exibido = 0
     
     for item in itens_carrinho:
+        # Valor base do item (já com desconto da condição de pagamento)
         valor_base_item = item['preco_final']
+        
+        # Aplicar desconto por volume no valor base do item
         valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
         
+        # Recalcular IPI e ST de cada item proporcionalmente
         aliquota_ipi_item = item['valor_ipi'] / valor_base_item if valor_base_item > 0 else 0
         aliquota_st_item = item['valor_st'] / valor_base_item if valor_base_item > 0 else 0
         
+        # Aplicar as alíquotas sobre o novo valor base
         novo_ipi_unitario = valor_com_desconto_item * aliquota_ipi_item
         novo_st_unitario = valor_com_desconto_item * aliquota_st_item
         
+        # Totais do item
         subtotal_item = valor_com_desconto_item * item['quantidade']
         ipi_total_item = novo_ipi_unitario * item['quantidade']
         st_total_item = novo_st_unitario * item['quantidade']
         total_item = (valor_com_desconto_item + novo_ipi_unitario + novo_st_unitario) * item['quantidade']
         
+        # Acumular para verificação
         total_ipi_exibido += ipi_total_item
         total_st_exibido += st_total_item
         total_geral_exibido += total_item
@@ -467,7 +687,6 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p><strong>LUVidarte - Peças exclusivas em vidro e decoração</strong></p>
             <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP | CEP: 08533-060</p>
             <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | E-mail: sac@luvidarte.com.br</p>
-            <p>CNPJ: [Seu CNPJ] | Inscrição Estadual: [Sua IE]</p>
             <p>---</p>
             <p>⚠️ <strong>AVISO IMPORTANTE:</strong> Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.</p>
             <p>Os valores são estimativas e sujeitos à confirmação de estoque e disponibilidade.</p>
@@ -491,15 +710,18 @@ def validar_cnpj(cnpj):
     if len(cnpj) != 14:
         return False
     
+    # Verificar se todos os dígitos são iguais
     if len(set(cnpj)) == 1:
         return False
     
+    # Calcular primeiro dígito verificador
     peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
     digito1 = 11 - (soma1 % 11)
     if digito1 >= 10:
         digito1 = 0
     
+    # Calcular segundo dígito verificador
     peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
     digito2 = 11 - (soma2 % 11)
@@ -569,8 +791,10 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     else:
         msg += "\n"
     
+    # Lista resumida dos itens
     msg += "ITENS SOLICITADOS\n"
     for item in st.session_state.carrinho:
+        # Mostrar preço com desconto por volume se aplicável
         valor_base_item = item['preco_final']
         valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
         msg += f"• {item['quantidade']}x {item['descricao'][:50]}\n"
@@ -917,7 +1141,7 @@ def formatar_ml(valor):
         return None
 
 # ============================================
-# CARREGAMENTO DE DADOS COM TRATAMENTO DE ERRO
+# CARREGAMENTO DE DADOS
 # ============================================
 @st.cache_data(ttl=600)
 def carregar_planilha(id_planilha, nome_aba="base"):
@@ -1069,6 +1293,12 @@ def carregar_logo():
     except:
         pass
     return None
+
+# ============================================
+# BOTÃO FLUTUANTE DE DESCONTO
+# ============================================
+# Adicionar o botão flutuante de desconto (será inserido após o CSS)
+# O HTML será adicionado no final do CSS global
 
 # ============================================
 # CSS GLOBAL
@@ -1793,6 +2023,12 @@ with ci4:
         st.info(f"📦 *Grupo:* {grupo_escolhido}")
 
 st.markdown("---")
+
+# ============================================
+# BOTÃO FLUTUANTE DE DESCONTO
+# ============================================
+# Adicionar o botão flutuante de desconto
+st.markdown(gerar_botao_desconto_flutuante(), unsafe_allow_html=True)
 
 # ============================================
 # GRID DE PRODUTOS
