@@ -65,6 +65,15 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                          total_final, total_ipi, total_st):
     """Gera um HTML com o orçamento detalhado"""
     
+    # Calcular novo valor base
+    novo_valor_base = valor_base_total - valor_desconto_volume
+    
+    # Calcular fator de proporcionalidade para IPI e ST
+    if valor_base_total > 0:
+        fator_ipi_st = novo_valor_base / valor_base_total
+    else:
+        fator_ipi_st = 0
+    
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -127,12 +136,37 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                 <tbody>
     """
     
+    # Calcular totais para verificar consistência
+    total_ipi_exibido = 0
+    total_st_exibido = 0
+    total_geral_exibido = 0
+    
     for item in itens_carrinho:
-        # Calcular valor com desconto por volume para cada item (apenas no valor base)
+        # Valor base do item (já com desconto da condição de pagamento)
         valor_base_item = item['preco_final']
+        
+        # Aplicar desconto por volume no valor base do item
         valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
-        # IPI e ST permanecem os mesmos
-        novo_total = valor_com_desconto_item + item['valor_ipi'] + item['valor_st']
+        
+        # CORREÇÃO: Recalcular IPI e ST de cada item proporcionalmente
+        # Manter a mesma alíquota efetiva do item original
+        aliquota_ipi_item = item['valor_ipi'] / valor_base_item if valor_base_item > 0 else 0
+        aliquota_st_item = item['valor_st'] / valor_base_item if valor_base_item > 0 else 0
+        
+        # Aplicar as alíquotas sobre o novo valor base
+        novo_ipi_unitario = valor_com_desconto_item * aliquota_ipi_item
+        novo_st_unitario = valor_com_desconto_item * aliquota_st_item
+        
+        # Totais do item
+        subtotal_item = valor_com_desconto_item * item['quantidade']
+        ipi_total_item = novo_ipi_unitario * item['quantidade']
+        st_total_item = novo_st_unitario * item['quantidade']
+        total_item = (valor_com_desconto_item + novo_ipi_unitario + novo_st_unitario) * item['quantidade']
+        
+        # Acumular para verificação
+        total_ipi_exibido += ipi_total_item
+        total_st_exibido += st_total_item
+        total_geral_exibido += total_item
         
         html_content += f"""
                     <tr>
@@ -140,10 +174,10 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                         <td>{item['descricao'][:50]}</td>
                         <td style="text-align:center">{item['quantidade']}</td>
                         <td style="text-align:right">{formatar_moeda(valor_com_desconto_item)}</td>
-                        <td style="text-align:right">{formatar_moeda(valor_com_desconto_item * item['quantidade'])}</td>
-                        <td style="text-align:right">{formatar_moeda(item['valor_ipi'] * item['quantidade']) if item['valor_ipi'] > 0 else '-'}</td>
-                        <td style="text-align:right">{formatar_moeda(item['valor_st'] * item['quantidade']) if item['valor_st'] > 0 else '-'}</td>
-                        <td style="text-align:right">{formatar_moeda(novo_total * item['quantidade'])}</td>
+                        <td style="text-align:right">{formatar_moeda(subtotal_item)}</td>
+                        <td style="text-align:right">{formatar_moeda(ipi_total_item) if ipi_total_item > 0 else '-'}</td>
+                        <td style="text-align:right">{formatar_moeda(st_total_item) if st_total_item > 0 else '-'}</td>
+                        <td style="text-align:right">{formatar_moeda(total_item)}</td>
                     </tr>
         """
     
@@ -156,10 +190,10 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <h2 class="section-title">RESUMO FINAL</h2>
             <p><strong>Valor Base Original:</strong> {formatar_moeda(valor_base_total)}</p>
             <p><strong>Desconto por Volume ({int(desconto_volume_percentual*100)}%):</strong> -{formatar_moeda(valor_desconto_volume)}</p>
-            <p><strong>Novo Valor Base:</strong> {formatar_moeda(valor_base_total - valor_desconto_volume)}</p>
-            <p><strong>IPI Total:</strong> {formatar_moeda(total_ipi)}</p>
-            <p><strong>ST Total:</strong> {formatar_moeda(total_st)}</p>
-            <p class="total"><strong>TOTAL GERAL DO ORÇAMENTO:</strong> {formatar_moeda(total_final)}</p>
+            <p><strong>Novo Valor Base:</strong> {formatar_moeda(novo_valor_base)}</p>
+            <p><strong>IPI Total:</strong> {formatar_moeda(total_ipi_exibido)}</p>
+            <p><strong>ST Total:</strong> {formatar_moeda(total_st_exibido)}</p>
+            <p class="total"><strong>TOTAL GERAL DO ORÇAMENTO:</strong> {formatar_moeda(total_geral_exibido)}</p>
         </div>
         
         <div class="footer">
