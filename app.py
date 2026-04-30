@@ -62,17 +62,16 @@ def conectar_google_sheets():
                     "private_key": st.secrets["google"].get("private_key", ""),
                     "client_email": st.secrets["google"].get("client_email", ""),
                     "client_id": st.secrets["google"].get("client_id", ""),
-                    "auth_uri": st.secrets["google"].get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
-                    "token_uri": st.secrets["google"].get("token_uri", "https://oauth2.googleapis.com/token"),
-                    "auth_provider_x509_cert_url": st.secrets["google"].get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
                     "client_x509_cert_url": st.secrets["google"].get("client_x509_cert_url", "")
                 }
-                # Remover campos vazios
                 credenciais_dict = {k: v for k, v in credenciais_dict.items() if v}
                 if credenciais_dict.get('private_key'):
                     st.info("🔐 Usando credenciais do Streamlit Secrets")
         except Exception as e:
-            pass  # Silencia erro para tentar próximo método
+            pass
         
         # 2. TENTAR ARQUIVO LOCAL (para desenvolvimento)
         if not credenciais_dict or not credenciais_dict.get('private_key'):
@@ -90,23 +89,12 @@ def conectar_google_sheets():
             st.error("❌ Credenciais não encontradas!")
             st.info("""
             **Para resolver:**
-            
-            **Opção 1 - Desenvolvimento Local:**
-            - Coloque o arquivo `credentials.json` na mesma pasta do `app.py`
-            
-            **Opção 2 - Streamlit Cloud:**
-            - Vá em Settings → Secrets
-            - Cole as credenciais formatadas como TOML
+            - Coloque o arquivo `credentials.json` na mesma pasta do app.py
             """)
             return None
         
         # 4. CONECTAR
-        escopos = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, escopos)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, ESCOPOS)
         cliente = gspread.authorize(creds)
         
         # 5. TESTAR CONEXÃO
@@ -123,11 +111,13 @@ def conectar_google_sheets():
         st.error(f"❌ Erro na conexão: {str(e)}")
         return None
 
+
 def salvar_cadastro_cliente(dados_cliente):
     """Salva os dados do cliente na planilha Cadastro_Virtual (aba Cadastro)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
+            st.warning("⚠️ Não foi possível conectar. Cadastro NÃO salvo.")
             return False
         
         # Abrir a planilha
@@ -139,78 +129,73 @@ def salvar_cadastro_cliente(dados_cliente):
         except:
             # Se a aba não existir, criar
             aba_cadastro = planilha.add_worksheet(title="Cadastro", rows="1000", cols="20")
-            # Adicionar cabeçalho
             cabecalho = ["RAZÃO SOCIAL", "CNPJ", "INSCRIÇÃO ESTADUAL", "ENDEREÇO", "E-MAIL", 
                         "NÚMERO", "BAIRRO", "CEP", "TEL/CONTATO", "UF", "DATA_CADASTRO", "HORA_CADASTRO"]
             aba_cadastro.append_row(cabecalho)
         
-        # IMPORTANTE: Limpar o CNPJ para busca (remover pontos, barras)
+        # Limpar o CNPJ para busca (apenas números)
         cnpj_limpo = re.sub(r'[^0-9]', '', dados_cliente.get('cnpj', ''))
         
         # Buscar se CNPJ já existe
-        celulas_cnpj = None
-        try:
-            # Procurar em toda a coluna B (CNPJ)
-            coluna_cnpj = aba_cadastro.col_values(2)
-            for i, valor in enumerate(coluna_cnpj, start=1):
-                if i == 1:  # Pular cabeçalho
-                    continue
-                if valor and re.sub(r'[^0-9]', '', valor) == cnpj_limpo:
-                    celulas_cnpj = [type('obj', (object,), {'row': i})()]
+        todas_linhas = aba_cadastro.get_all_values()
+        linha_encontrada = None
+        
+        for i, linha in enumerate(todas_linhas):
+            if i == 0:  # Pular cabeçalho
+                continue
+            if len(linha) > 1:
+                cnpj_linha = re.sub(r'[^0-9]', '', str(linha[1]))
+                if cnpj_linha == cnpj_limpo:
+                    linha_encontrada = i + 1  # +1 porque o índice 0 é linha 1
                     break
-        except:
-            pass
         
         data_atual = formatar_data_brasil().split()[0]
         hora_atual = formatar_data_brasil().split()[1]
         
-        if celulas_cnpj:
-            # CNPJ já cadastrado - atualizar dados
-            linha = celulas_cnpj[0].row
-            # Atualizar cada célula individualmente
-            aba_cadastro.update(f'A{linha}', dados_cliente.get('razao_social', ''))
-            aba_cadastro.update(f'B{linha}', dados_cliente.get('cnpj', ''))
-            aba_cadastro.update(f'C{linha}', dados_cliente.get('inscricao_estadual', ''))
-            aba_cadastro.update(f'D{linha}', dados_cliente.get('endereco', ''))
-            aba_cadastro.update(f'E{linha}', dados_cliente.get('email', ''))
-            aba_cadastro.update(f'F{linha}', dados_cliente.get('numero', ''))
-            aba_cadastro.update(f'G{linha}', dados_cliente.get('bairro', ''))
-            aba_cadastro.update(f'H{linha}', dados_cliente.get('cep', ''))
-            aba_cadastro.update(f'I{linha}', dados_cliente.get('telefone', ''))
-            aba_cadastro.update(f'J{linha}', dados_cliente.get('uf', ''))
-            aba_cadastro.update(f'K{linha}', data_atual)
-            aba_cadastro.update(f'L{linha}', hora_atual)
-            st.info(f"✅ Cadastro atualizado para CNPJ: {dados_cliente.get('cnpj', '')}")
+        # Preparar dados para salvar
+        nova_linha = [
+            dados_cliente.get('razao_social', ''),
+            dados_cliente.get('cnpj', ''),
+            dados_cliente.get('inscricao_estadual', ''),
+            dados_cliente.get('endereco', ''),
+            dados_cliente.get('email', ''),
+            dados_cliente.get('numero', ''),
+            dados_cliente.get('bairro', ''),
+            dados_cliente.get('cep', ''),
+            dados_cliente.get('telefone', ''),
+            dados_cliente.get('uf', ''),
+            data_atual,
+            hora_atual
+        ]
+        
+        if linha_encontrada:
+            # Atualizar linha existente
+            for col, valor in enumerate(nova_linha, start=1):
+                try:
+                    aba_cadastro.update_cell(linha_encontrada, col, valor)
+                except:
+                    pass
+            st.success(f"✅ Cadastro ATUALIZADO: {dados_cliente.get('razao_social', '')}")
         else:
-            # Novo cadastro - adicionar linha
-            nova_linha = [
-                dados_cliente.get('razao_social', ''),
-                dados_cliente.get('cnpj', ''),
-                dados_cliente.get('inscricao_estadual', ''),
-                dados_cliente.get('endereco', ''),
-                dados_cliente.get('email', ''),
-                dados_cliente.get('numero', ''),
-                dados_cliente.get('bairro', ''),
-                dados_cliente.get('cep', ''),
-                dados_cliente.get('telefone', ''),
-                dados_cliente.get('uf', ''),
-                data_atual,
-                hora_atual
-            ]
+            # Adicionar nova linha
             aba_cadastro.append_row(nova_linha)
-            st.info(f"✅ Novo cadastro salvo para: {dados_cliente.get('razao_social', '')}")
+            st.success(f"✅ Novo CADASTRO salvo: {dados_cliente.get('razao_social', '')}")
         
         return True
+        
     except Exception as e:
         st.error(f"❌ Erro ao salvar cadastro: {str(e)}")
         import traceback
         st.error(f"Detalhes: {traceback.format_exc()}")
         return False
+
+
 def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, itens_resumo):
     """Salva o histórico do orçamento na planilha (aba Historico)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
+            st.warning("⚠️ Não foi possível conectar. Histórico NÃO salvo.")
             return False
         
         # Abrir a planilha
@@ -222,7 +207,6 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
         except:
             # Se a aba não existir, criar
             aba_historico = planilha.add_worksheet(title="Historico", rows="10000", cols="20")
-            # Adicionar cabeçalho
             cabecalho = ["DATA", "HORA", "CNPJ", "RAZÃO SOCIAL", "UF", "E-MAIL", "VALOR", 
                         "FORMA_PAGAMENTO", "QTD_ITENS", "TIPO_CLIENTE", "DATA_HORA_COMPLETA"]
             aba_historico.append_row(cabecalho)
@@ -243,7 +227,7 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
             dados_cliente.get('razao_social', ''),
             uf,
             dados_cliente.get('email', ''),
-            valor_total,
+            f"R$ {valor_total:,.2f}".replace('.', ','),
             forma_pagamento,
             qtd_itens,
             tipo_cliente_str,
@@ -251,10 +235,15 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
         ]
         
         aba_historico.append_row(nova_linha)
+        st.success(f"✅ Histórico salvo! Orçamento registrado em {data_hora_completa}")
         return True
+        
     except Exception as e:
         st.error(f"❌ Erro ao salvar histórico: {str(e)}")
+        import traceback
+        st.error(f"Detalhes: {traceback.format_exc()}")
         return False
+
 
 def buscar_cadastro_por_cnpj(cnpj):
     """Busca cadastro do cliente pelo CNPJ na planilha"""
@@ -270,24 +259,30 @@ def buscar_cadastro_por_cnpj(cnpj):
         except:
             return None
         
-        # Buscar o CNPJ
-        celulas = aba_cadastro.findall(cnpj)
-        if celulas:
-            linha = celulas[0].row
-            dados = aba_cadastro.row_values(linha)
-            if len(dados) >= 10:
-                return {
-                    'razao_social': dados[0] if len(dados) > 0 else '',
-                    'cnpj': dados[1] if len(dados) > 1 else '',
-                    'inscricao_estadual': dados[2] if len(dados) > 2 else '',
-                    'endereco': dados[3] if len(dados) > 3 else '',
-                    'email': dados[4] if len(dados) > 4 else '',
-                    'numero': dados[5] if len(dados) > 5 else '',
-                    'bairro': dados[6] if len(dados) > 6 else '',
-                    'cep': dados[7] if len(dados) > 7 else '',
-                    'telefone': dados[8] if len(dados) > 8 else '',
-                    'uf': dados[9] if len(dados) > 9 else ''
-                }
+        # Limpar CNPJ para busca
+        cnpj_limpo = re.sub(r'[^0-9]', '', cnpj)
+        
+        # Buscar em todas as linhas
+        todas_linhas = aba_cadastro.get_all_values()
+        
+        for i, linha in enumerate(todas_linhas):
+            if i == 0:  # Pular cabeçalho
+                continue
+            if len(linha) > 1:
+                cnpj_linha = re.sub(r'[^0-9]', '', str(linha[1]))
+                if cnpj_linha == cnpj_limpo:
+                    return {
+                        'razao_social': linha[0] if len(linha) > 0 else '',
+                        'cnpj': linha[1] if len(linha) > 1 else '',
+                        'inscricao_estadual': linha[2] if len(linha) > 2 else '',
+                        'endereco': linha[3] if len(linha) > 3 else '',
+                        'email': linha[4] if len(linha) > 4 else '',
+                        'numero': linha[5] if len(linha) > 5 else '',
+                        'bairro': linha[6] if len(linha) > 6 else '',
+                        'cep': linha[7] if len(linha) > 7 else '',
+                        'telefone': linha[8] if len(linha) > 8 else '',
+                        'uf': linha[9] if len(linha) > 9 else ''
+                    }
         return None
     except Exception as e:
         st.warning(f"⚠️ Erro ao buscar cadastro: {str(e)}")
