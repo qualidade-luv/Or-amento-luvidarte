@@ -1,6 +1,9 @@
-streamlit
-pandas
-numpy
-pillow
-requests
-pytz
+streamlit>=1.28.0
+pandas>=2.0.0
+numpy>=1.24.0
+Pillow>=10.0.0
+requests>=2.31.0
+gspread>=6.0.0
+oauth2client>=4.1.3
+pytz>=2023.3
+urllib3>=2.0.0
