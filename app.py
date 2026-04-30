@@ -13,6 +13,7 @@ import hashlib
 import secrets
 import socket
 import urllib3
+import pytz  # Adicionado para timezone
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
@@ -26,6 +27,9 @@ socket.setdefaulttimeout(30)
 
 # Configurações de sessão - tempo limite (em segundos)
 SESSION_TIMEOUT = 1800  # 30 minutos
+
+# Configurar timezone do Brasil
+TIMEZONE_BR = pytz.timezone('America/Sao_Paulo')
 
 # ============================================
 # FUNÇÕES DE SEGURANÇA
@@ -76,12 +80,153 @@ def limpar_dados_sensiveis():
     return False
 
 # ============================================
-# POLÍTICA DE PRIVACIDADE E TERMOS DE USO
+# FUNÇÃO PARA OBTER HORÁRIO LOCAL DO BRASIL
 # ============================================
+def get_horario_brasil():
+    """Retorna a data e hora atual no fuso horário do Brasil"""
+    return datetime.now(TIMEZONE_BR)
+
+def formatar_data_brasil():
+    """Formata a data e hora atual no padrão brasileiro"""
+    agora = get_horario_brasil()
+    return agora.strftime('%d/%m/%Y %H:%M:%S')
+
+# ============================================
+# PASSOS DO SISTEMA
+# ============================================
+def mostrar_passo_a_passo():
+    """Exibe um tutorial passo a passo do sistema"""
+    with st.sidebar.expander("📖 PASSO A PASSO - Como usar", expanded=False):
+        st.markdown("""
+        ### 🎯 Guia Rápido do Sistema
+        
+        ---
+        
+        #### 📌 **PASSO 1: Aceite a LGPD**
+        - Na primeira vez que acessar, você verá a **Política de Privacidade**
+        - Leia com atenção os termos
+        - Clique em **"✅ Aceito e Concordo com a Política de Privacidade"**
+        - ⚠️ *Sem aceitar, você não pode continuar*
+        
+        ---
+        
+        #### 🔍 **PASSO 2: Configure os Filtros (Sidebar Esquerda)**
+        - **📍 UF (ICMS):** Selecione o estado de entrega
+          *Importante: Use o mesmo estado do endereço final!*
+        - **📦 Grupo:** Escolha categoria do produto
+        - **🔎 Buscar Referência:** Pesquise por código
+        - **💰 Faixa de Preço:** Ajuste o slider
+        - **🏷️ Cliente Isento:** Marque se for MEI/Isento
+        - **💳 Pagamento:** Escolha a condição (Vista ou Prazo)
+        
+        ---
+        
+        #### 🛍️ **PASSO 3: Adicione Produtos**
+        - Navegue pelos produtos na página principal
+        - Defina a **quantidade** desejada
+        - Clique em **"🛒 Adicionar"**
+        - 🎉 *Descontos por volume são aplicados automaticamente!*
+        
+        ---
+        
+        #### 📊 **PASSO 4: Revise o Carrinho**
+        - Clique em **"🛒 Acessar meu carrinho"** (canto superior direito)
+        - Verifique os valores, quantidades e descontos
+        - **IPI e ST** são calculados automaticamente
+        - 💰 *Desconto por volume:* 
+          - R$ 2.500 = 10% OFF
+          - R$ 4.000 = 15% OFF
+        
+        ---
+        
+        #### 📝 **PASSO 5: Preencha os Dados do Cliente**
+        - No carrinho, clique em **"📋 Solicitar Orçamento"**
+        - Preencha TODOS os campos obrigatórios (*)
+        - ⚠️ **ATENÇÃO:** A UF será automaticamente a mesma selecionada nos filtros!
+        - Confirme seus dados (LGPD - Lei 13.709/2018)
+        
+        ---
+        
+        #### 📤 **PASSO 6: Finalize o Orçamento**
+        - Após validar os dados, você terá duas opções:
+          - **📄 Baixar Orçamento (HTML):** Salve em seu computador
+          - **💬 Enviar via WhatsApp:** Envie para nossa equipe
+        - Nossa equipe retornará em até 24h úteis
+        
+        ---
+        
+        #### ❓ **Dúvidas Frequentes**
+        
+        **❔ O que fazer se o horário estiver errado?**
+        - O sistema utiliza horário oficial de Brasília
+        - Verifique o fuso horário do seu dispositivo
+        
+        **❔ Posso mudar a UF depois de adicionar produtos?**
+        - Sim, mas os valores serão recalculados automaticamente
+        - ⚠️ A UF do endereço é bloqueada e sempre igual ao filtro!
+        
+        **❔ Meus dados ficam salvos?**
+        - Não! Conforme LGPD, seus dados são descartados após 30 min
+        - Orçamentos baixados são sua responsabilidade
+        
+        **❔ Como solicitar exclusão dos meus dados?**
+        - Envie e-mail para: sac@luvidarte.com.br
+        
+        ---
+        
+        #### 📞 **Suporte**
+        - WhatsApp: (11) 93011-9335
+        - E-mail: sac@luvidarte.com.br
+        - DPO (LGPD): sac@luvidarte.com.br
+        
+        ---
+        *Última atualização: 15/04/2026*
+        """)
+        
+        st.markdown("---")
+        if st.button("✅ Já entendi, vamos começar!", use_container_width=True):
+            st.session_state.passo_a_passo_visto = True
+            st.rerun()
 
 def mostrar_politica_privacidade():
-    """Exibe a política de privacidade"""
-    with st.expander("📋 Política de Privacidade - LGPD (Lei 13.709/2018)"):
+    """Exibe a política de privacidade com imagem de fundo"""
+    
+    # Carregar imagem para fundo da LGPD
+    img_fundo_base64 = ""
+    try:
+        with open("Frontpage.jpeg", "rb") as f:
+            img_fundo_base64 = base64.b64encode(f.read()).decode()
+    except:
+        pass
+    
+    # Adicionar fundo na tela LGPD
+    if img_fundo_base64:
+        st.markdown(f"""
+        <style>
+        /* Fundo para a tela LGPD */
+        .stApp {{
+            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
+            background-size: cover;
+        }}
+        .stApp::before {{
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.88);
+            z-index: 0;
+            pointer-events: none;
+        }}
+        .main {{
+            position: relative;
+            z-index: 1;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+    
+    with st.expander("📋 Política de Privacidade - LGPD (Lei 13.709/2018)", expanded=True):
         st.markdown("""
         ### POLÍTICA DE PRIVACIDADE LUVidarte
         
@@ -111,17 +256,14 @@ def mostrar_politica_privacidade():
         - Seus dados NÃO são armazenados em banco de dados persistente
         - Permanecem apenas durante a sessão do navegador
         - São automaticamente excluídos após 30 minutos de inatividade
-        - Os orçamentos gerados em PDF/HTML são de responsabilidade do usuário
         
         **5. COMPARTILHAMENTO (Art. 6º, VI)**
         - Seus dados são compartilhados APENAS com a equipe LUVidarte via WhatsApp
         - Não compartilhamos com terceiros, plataformas de marketing ou publicidade
-        - Não transferimos dados internacionalmente
         
         **6. SEGURANÇA (Art. 46º)**
         - Utilizamos criptografia e medidas técnicas para proteger seus dados
         - Acesso restrito a funcionários autorizados
-        - Monitoramento de incidentes de segurança
         
         **7. SEUS DIREITOS (Art. 18º da LGPD)**
         Você tem direito a solicitar:
@@ -131,39 +273,24 @@ def mostrar_politica_privacidade():
         - Anonimização, bloqueio ou eliminação de dados desnecessários
         - Portabilidade dos dados a outro fornecedor
         - Eliminação dos dados tratados com consentimento
-        - Informação sobre compartilhamento de dados
         - Revogação do consentimento
         
-        **8. ENCARREGADO (DPO - Data Protection Officer)**
-        Para questões sobre privacidade, solicitações de dados ou cancelamento:
-        - 📧 E-mail: privacidade@luvidarte.com.br
+        **8. ENCARREGADO (DPO)**
+        - 📧 E-mail: sac@luvidarte.com.br
         - 📞 Telefone: (11) 4676-9000
-        - 📍 Endereço: Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP
-        
-        **9. REGISTRO DE ATIVIDADES (Art. 37º)**
-        Mantemos registro das operações de tratamento de dados pessoais que realizamos.
-        
-        **10. CANAIS DE COMUNICAÇÃO**
-        - Para exercer seus direitos LGPD: dpo@luvidarte.com.br
-        - Para reclamações à ANPD: https://www.gov.br/anpd/pt-br
-        
-        **11. ATUALIZAÇÕES DESTA POLÍTICA**
-        Esta política pode ser atualizada periodicamente. A versão mais recente está sempre disponível em nosso site.
+        - 📍 Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP
         
         **Data da última atualização:** 15/04/2026
-        **Versão:** 1.0
         
         ---
         ✅ **Ao clicar em "Aceito e Concordo", você declara que:**
         - Leu e compreendeu esta política de privacidade
-        - Concorda com a coleta e tratamento de seus dados conforme descrito
-        - Confirma que as informações fornecidas são verdadeiras
-        - Autoriza o contato comercial via WhatsApp, e-mail ou telefone
+        - Concorda com a coleta e tratamento de seus dados
         """)
         
         if st.button("✅ Aceito e Concordo com a Política de Privacidade", key="aceitar_privacidade", use_container_width=True):
             st.session_state.privacidade_aceita = True
-            st.session_state.consentimento_data = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            st.session_state.consentimento_data = formatar_data_brasil()
             st.rerun()
 
 def mostrar_termos_uso():
@@ -237,30 +364,39 @@ def obter_consentimento_lgpd() -> bool:
         st.session_state.privacidade_aceita = False
     
     if not st.session_state.privacidade_aceita:
-        st.warning("🔒 **Aviso LGPD:** Coletamos seus dados pessoais para elaboração do orçamento conforme Lei 13.709/2018.")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("❌ Recusar e Sair", use_container_width=True):
-                st.error("❌ Você recusou os termos de privacidade. Para utilizar o sistema, é necessário aceitar a política de privacidade e os termos de uso.")
-                st.markdown("""
-                ---
-                ### 🔒 Seus direitos LGPD:
-                - Você pode solicitar a exclusão dos seus dados a qualquer momento
-                - Não armazenamos seus dados em banco de dados
-                - Seus dados são usados apenas para este orçamento
-                
-                Para mais informações: **privacidade@luvidarte.com.br**
-                """)
-                st.stop()
-        
-        with col2:
-            st.info("✅ Para continuar, clique em 'Política de Privacidade' abaixo e aceite os termos.")
-        
         mostrar_politica_privacidade()
         mostrar_termos_uso()
-        
         return False
+    
+    # Após aceitar, restaurar o fundo normal (sem duplicar)
+    img_fundo_base64 = ""
+    try:
+        with open("Frontpage.jpeg", "rb") as f:
+            img_fundo_base64 = base64.b64encode(f.read()).decode()
+    except:
+        pass
+    
+    if img_fundo_base64:
+        st.markdown(f"""
+        <style>
+        .stApp {{
+            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
+            background-size: cover;
+        }}
+        .stApp::before {{
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.88);
+            z-index: 0;
+            pointer-events: none;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+    
     return True
 
 # ============================================
@@ -532,7 +668,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
         fator_ipi_st = 0
     
     # Adicionar aviso de confidencialidade
-    data_geracao = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    data_geracao = formatar_data_brasil()  # USAR HORÁRIO LOCAL BRASIL
     id_documento = hashlib.sha256(f"{dados_cliente.get('cnpj', '')}{data_geracao}".encode()).hexdigest()[:8]
     
     html_content = f"""
@@ -556,6 +692,8 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                            padding: 10px; margin: 20px 0; font-size: 11px; }}
             .confidencial {{ background-color: #FFEBEE; border-left: 4px solid #D32F2F;
                            padding: 10px; margin: 20px 0; font-size: 11px; }}
+            .alert-uf {{ background-color: #FFE0B2; border-left: 4px solid #FF9800;
+                        padding: 10px; margin: 20px 0; font-size: 12px; }}
         </style>
     </head>
     <body>
@@ -564,6 +702,12 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             Gerado em: {data_geracao}<br>
             Este orçamento contém informações comerciais privilegiadas. 
             O compartilhamento não autorizado é proibido nos termos da LGPD.
+        </div>
+        
+        <div class="alert-uf">
+            ⚠️ <strong>CONFIRMAÇÃO DE LOCALIDADE:</strong><br>
+            Este orçamento foi calculado com base na UF <strong>{uf}</strong> (ICMS conforme legislação).<br>
+            O endereço de entrega informado está de acordo com esta localidade.
         </div>
         
         <div class="header">
@@ -580,7 +724,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p><strong>Endereço:</strong> {dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')}</p>
             <p><strong>Bairro:</strong> {dados_cliente.get('bairro', '')}</p>
             <p><strong>CEP:</strong> {dados_cliente.get('cep', '')}</p>
-            <p><strong>UF:</strong> {uf}</p>
+            <p><strong>UF (ICMS calculado):</strong> {uf}</p>
         </div>
         
         <div class="section">
@@ -679,7 +823,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             • Acesso, correção e eliminação de dados<br>
             • Revogação do consentimento<br>
             • Portabilidade de dados<br><br>
-            <strong>Encarregado (DPO):</strong> privacidade@luvidarte.com.br | (11) 4676-9000<br>
+            <strong>Encarregado (DPO):</strong> sac@luvidarte.com.br | (11) 4676-9000<br>
             <strong>ANPD:</strong> https://www.gov.br/anpd/pt-br
         </div>
         
@@ -773,10 +917,10 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     msg += f"📍 Endereço: {dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')}\n"
     msg += f"🏘️ Bairro: {dados_cliente.get('bairro', '')}\n"
     msg += f"📮 CEP: {dados_cliente.get('cep', '')}\n"
-    msg += f"🗺️ UF: {uf}\n\n"
+    msg += f"🗺️ UF (ICMS calculado): {uf}\n\n"
     msg += "━" * 30 + "\n\n"
     msg += "RESUMO DO ORÇAMENTO\n"
-    msg += f"📅 Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n"
+    msg += f"📅 Data: {formatar_data_brasil()}\n"
     msg += f"👤 Tipo Cliente: {tipo_cliente}\n"
     msg += f"💳 Pagamento: {forma_pagamento}\n"
     
@@ -807,7 +951,7 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     msg += "2️⃣ Confirmaremos disponibilidade dos produtos\n"
     msg += "3️⃣ Enviaremos as condições de pagamento e frete\n\n"
     msg += "🔒 LGPD: Seus dados são tratados com confidencialidade conforme Lei 13.709/2018\n"
-    msg += "📧 DPO: privacidade@luvidarte.com.br\n\n"
+    msg += "📧 DPO: sac@luvidarte.com.br\n\n"
     msg += "✨ Agradecemos a preferência! ✨"
     
     return msg
@@ -819,6 +963,18 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
 # Verificar consentimento LGPD antes de continuar
 if not obter_consentimento_lgpd():
     st.stop()
+
+# Restaurar padding normal após aceitar LGPD
+st.markdown("""
+<style>
+.main {
+    padding: 1rem !important;
+}
+.stApp > header {
+    display: block !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Verificar timeout da sessão
 limpar_dados_sensiveis()
@@ -886,6 +1042,8 @@ if 'ultimo_acesso' not in st.session_state:
     st.session_state.ultimo_acesso = datetime.now()
 if 'consentimento_data' not in st.session_state:
     st.session_state.consentimento_data = None
+if 'passo_a_passo_visto' not in st.session_state:
+    st.session_state.passo_a_passo_visto = False
 
 # ============================================
 # FUNÇÕES PARA CONTROLAR CARRINHO
@@ -1293,23 +1451,35 @@ def carregar_logo():
     except:
         pass
     return None
+# ============================================
+# CSS GLOBAL COMPLETO COM IMAGEM DE FUNDO
+# ============================================
 
-# ============================================
-# BOTÃO FLUTUANTE DE DESCONTO
-# ============================================
-# Adicionar o botão flutuante de desconto (será inserido após o CSS)
-# O HTML será adicionado no final do CSS global
+# Função para carregar imagem de fundo
+def carregar_imagem_fundo_base64():
+    """Carrega a imagem Frontpage.jpeg e retorna em base64"""
+    try:
+        with open("Frontpage.jpeg", "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except FileNotFoundError:
+        try:
+            import os
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(current_dir, "Frontpage.jpeg")
+            with open(file_path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+        except:
+            return None
 
-# ============================================
-# CSS GLOBAL
-# ============================================
-st.markdown("""
-<style>
+# Carregar imagem
+img_fundo_base64 = carregar_imagem_fundo_base64()
+
+# CSS Base (comum para ambos os casos)
+css_base = """
 * { margin: 0; padding: 0; box-sizing: border-box; }
 .stDecoration { display: none; }
 .stAppDeployButton { display: none !important; }
 .main > div { padding-top: 0.5rem; }
-.stApp { background-color: #F7F7F7; }
 
 .main-banner {
     background-color: #FFF; border-radius: 16px; padding: 15px 20px;
@@ -1332,9 +1502,7 @@ st.markdown("""
     border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #E8E8E8;
 }
 
-.cart-link-top {
-    text-align: right;
-}
+.cart-link-top { text-align: right; }
 .cart-link-button {
     background: none !important;
     border: none !important;
@@ -1349,22 +1517,18 @@ st.markdown("""
     white-space: nowrap;
     text-decoration: none !important;
 }
-.cart-link-button:hover {
-    color: #1B5E20 !important;
-    text-decoration: underline !important;
-}
+.cart-link-button:hover { color: #1B5E20 !important; text-decoration: underline !important; }
 .cart-link-badge {
-    background: #D32F2F;
-    color: white;
-    border-radius: 50%;
-    min-width: 20px;
-    height: 20px;
-    font-size: 11px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    padding: 0 4px;
+    background: #D32F2F; color: white; border-radius: 50%;
+    min-width: 20px; height: 20px; font-size: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: bold; padding: 0 4px;
+}
+
+.filtro-sidebar {
+    font-weight: bold; font-size: 16px; padding: 10px;
+    background: linear-gradient(135deg, #2E7D32, #1B5E20);
+    color: white; border-radius: 8px; text-align: center; margin-bottom: 15px;
 }
 
 .whatsapp-float-fixed { position: fixed; bottom: 20px; right: 20px; z-index: 99990; }
@@ -1377,27 +1541,16 @@ st.markdown("""
 .whatsapp-float:hover { transform: scale(1.05); background-color: #075E54; }
 
 .formulario-cliente {
-    background-color: #FFF;
-    border-radius: 16px;
-    padding: 25px;
-    margin: 20px 0;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    background-color: #FFF; border-radius: 16px; padding: 25px;
+    margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     border: 1px solid #E0E0E0;
 }
 .formulario-titulo {
-    color: #2E7D32;
-    font-size: 20px;
-    font-weight: bold;
-    margin-bottom: 20px;
-    border-bottom: 2px solid #C9A03D;
-    display: inline-block;
-    padding-bottom: 5px;
+    color: #2E7D32; font-size: 20px; font-weight: bold;
+    margin-bottom: 20px; border-bottom: 2px solid #C9A03D;
+    display: inline-block; padding-bottom: 5px;
 }
-.campo-obrigatorio {
-    color: #D32F2F;
-    font-size: 12px;
-    margin-left: 5px;
-}
+.campo-obrigatorio { color: #D32F2F; font-size: 12px; margin-left: 5px; }
 
 .product-card {
     background-color: #FFF; border-radius: 12px; padding: 16px; margin: 10px 0;
@@ -1428,8 +1581,9 @@ st.markdown("""
     box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #E0E0E0;
 }
 .resumo-title {
-    font-size: 16px; font-weight: bold; color: #2E7D32; margin-bottom: 10px;
-    border-bottom: 2px solid #C9A03D; display: inline-block; padding-bottom: 5px;
+    font-size: 16px; font-weight: bold; color: #2E7D32;
+    margin-bottom: 10px; border-bottom: 2px solid #C9A03D;
+    display: inline-block; padding-bottom: 5px;
 }
 .resumo-line { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
 .resumo-line.total {
@@ -1454,8 +1608,7 @@ st.markdown("""
 .contact-footer { text-align: center; font-size: 13px; color: #555; }
 .footer-bottom {
     text-align: center; font-size: 12px; color: #666;
-    padding: 15px 0;
-    margin-top: 20px;
+    padding: 15px 0; margin-top: 20px;
 }
 .horario-atendimento { text-align: center; margin: 10px 0; font-size: 13px; }
 .horario-label { color: #C9A03D; font-weight: bold; }
@@ -1465,8 +1618,49 @@ st.markdown("""
     .whatsapp-float-fixed { bottom: 15px; right: 15px; }
     .cart-link-button { font-size: 12px !important; white-space: normal; }
 }
-</style>
-""", unsafe_allow_html=True)
+
+.alert-uf-consistente {
+    background-color: #FFF3E0; border-left: 4px solid #FF9800;
+    border-radius: 8px; padding: 12px; margin: 10px 0; font-size: 13px;
+}
+.uf-bloqueada-info {
+    background-color: #E8F5E9; border-left: 4px solid #4CAF50;
+    border-radius: 8px; padding: 12px; margin: 10px 0;
+    font-size: 13px; color: #2E7D32;
+}
+"""
+
+# Aplicar CSS com ou sem imagem de fundo
+if img_fundo_base64:
+    css_fundo = f"""
+    /* Imagem de fundo */
+    .stApp {{
+        background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
+        background-size: cover;
+    }}
+    
+    /* Overlay para legibilidade */
+    .stApp::before {{
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.88);
+        z-index: 0;
+        pointer-events: none;
+    }}
+    
+    .main {{
+        position: relative;
+        z-index: 1;
+    }}
+    """
+    st.markdown(f"<style>{css_fundo}{css_base}</style>", unsafe_allow_html=True)
+else:
+    css_sem_fundo = ".stApp { background-color: #F7F7F7; }"
+    st.markdown(f"<style>{css_sem_fundo}{css_base}</style>", unsafe_allow_html=True)
 
 # ============================================
 # BANNER PRINCIPAL
@@ -1511,11 +1705,22 @@ st.markdown("""
     📞 (11) 4676-9000 &nbsp;|&nbsp;
     💬 (11) 93011-9335 &nbsp;|&nbsp;
     ✉️ sac@luvidarte.com.br &nbsp;|&nbsp;
-    🔒 DPO: privacidade@luvidarte.com.br
+    🔒 DPO: sac@luvidarte.com.br
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("---")
+
+# ============================================
+# SIDEBAR COM TÍTULO "FILTROS"
+# ============================================
+st.sidebar.markdown('<div class="filtro-sidebar">🔍 FILTROS</div>', unsafe_allow_html=True)
+
+# Adicionar botão "Passo a Passo" no topo do sidebar
+if st.sidebar.button("📖 Ver Passo a Passo do Sistema", use_container_width=True):
+    mostrar_passo_a_passo()
+
+st.sidebar.markdown("---")
 
 # ============================================
 # CONFIGURAÇÕES
@@ -1551,29 +1756,34 @@ if dados.empty:
     st.stop()
 
 # ============================================
-# SIDEBAR
+# FILTROS SIDEBAR
 # ============================================
-st.sidebar.header("🔍 FILTRAR PRODUTOS")
-st.sidebar.markdown(f"📊 *Total:* {len(dados)} produtos")
+st.sidebar.subheader("📍 Localização e Tributos")
 
 uf_selecionada = st.sidebar.selectbox(
-    "📍 UF (ICMS)",
+    "UF (ICMS) - *Importante para cálculo dos tributos*",
     options=["SP","MG","RS","SE","PR","RJ","SC","MT","AC","AL","AP","AM",
              "BA","CE","DF","ES","GO","MA","MS","PA","PB","PE","PI","RN","RO","RR","TO"],
-    index=0
+    index=0,
+    help="Selecione o estado de entrega. O formulário usará automaticamente esta UF!"
 )
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📦 Categorias")
 
 grupos = ["Todos"] + sorted(dados['GRUPO'].unique().tolist())
 if "Promoção" not in grupos:
     grupos.insert(1, "Promoção")
-grupo_escolhido = st.sidebar.selectbox("📦 Grupo", grupos)
+grupo_escolhido = st.sidebar.selectbox("Grupo", grupos)
 
-busca_referencia = st.sidebar.text_input("🔎 Buscar Referência", placeholder="Ex: 510 P TR")
+st.sidebar.subheader("🔎 Busca")
+busca_referencia = st.sidebar.text_input("Referência do Produto", placeholder="Ex: 510 P TR")
 
 precos_validos = dados['Preço'].dropna()
 if len(precos_validos) > 0:
+    st.sidebar.subheader("💰 Faixa de Preço")
     faixa_preco = st.sidebar.slider(
-        "💰 Faixa de Preço",
+        "Valores",
         min_value=float(precos_validos.min()),
         max_value=float(precos_validos.max()),
         value=(float(precos_validos.min()), float(precos_validos.max()))
@@ -1581,8 +1791,11 @@ if len(precos_validos) > 0:
 else:
     faixa_preco = (0, 1000)
 
-cliente_isento  = st.sidebar.checkbox("🏷️ Cliente Isento", value=False)
-forma_pagamento = st.sidebar.radio("💳 Pagamento",
+st.sidebar.markdown("---")
+st.sidebar.subheader("🏷️ Condições Comerciais")
+
+cliente_isento  = st.sidebar.checkbox("Cliente Isento (MEI/Isento)", value=False, help="Marque se for MEI ou Isento de ST")
+forma_pagamento = st.sidebar.radio("Condição de Pagamento",
                                    options=["PREÇO BASE","VISTA","30","45","60"], index=0)
 
 # Monitorar mudanças nos filtros
@@ -1595,7 +1808,7 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO (CORRIGIDA)
+# TELA DO CARRINHO
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
 
@@ -1809,6 +2022,15 @@ if st.session_state.get('carrinho_aberto', False):
         st.markdown('<div class="formulario-titulo">📝 Dados do Cliente</div>', unsafe_allow_html=True)
         st.markdown('<p style="color:#D32F2F; font-size:12px; margin-bottom:15px;">* Campos obrigatórios</p>', unsafe_allow_html=True)
         
+        # INFORMAÇÃO DA UF BLOQUEADA
+        st.markdown(f"""
+        <div class='uf-bloqueada-info'>
+            🔒 <strong>UF Bloqueada para Edição:</strong> A UF foi definida como <strong>{uf_selecionada}</strong> no filtro do sistema.<br>
+            Este valor será usado automaticamente no cálculo dos tributos (ICMS/ST).<br>
+            <small>Para alterar a UF, modifique no filtro da barra lateral esquerda.</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
         with st.form(key="form_cliente"):
             col1, col2 = st.columns(2)
             with col1:
@@ -1823,6 +2045,9 @@ if st.session_state.get('carrinho_aberto', False):
                 numero = st.text_input("Número *", value=st.session_state.form_data['numero'])
                 bairro = st.text_input("Bairro *", value=st.session_state.form_data['bairro'])
                 cep = st.text_input("CEP *", value=st.session_state.form_data['cep'], help="Digite apenas números")
+                # Campo UF do cliente - DESABILITADO e com valor fixo do filtro
+                uf_cliente = st.text_input("UF do Endereço *", value=uf_selecionada, disabled=True, 
+                                          help="A UF é definida pelos filtros do sistema e não pode ser alterada aqui")
             
             enviar = st.form_submit_button("📤 Enviar Orçamento", use_container_width=True)
             
@@ -1866,7 +2091,7 @@ if st.session_state.get('carrinho_aberto', False):
                     erros.append("CEP inválido")
                 
                 if erros:
-                    st.error(f"❌ Por favor, preencha os campos obrigatórios: {', '.join(erros)}")
+                    st.error(f"❌ Por favor, corrija os seguintes erros:\n\n- " + "\n- ".join(erros))
                 else:
                     dados_cliente = {
                         'razao_social': razao_social,
@@ -1877,13 +2102,17 @@ if st.session_state.get('carrinho_aberto', False):
                         'endereco': endereco,
                         'numero': numero,
                         'bairro': bairro,
-                        'cep': cep
+                        'cep': cep,
+                        'uf': uf_selecionada  # Usar a UF do filtro
                     }
                     st.session_state.dados_cliente = dados_cliente
                     
                     tipo_cliente_str = "ISENTO" if cliente_isento else "NORMAL"
+                    # Usar a UF do filtro para o cálculo
+                    uf_para_calculo = uf_selecionada
+                    
                     html_bytes = gerar_html_orcamento(dados_cliente, st.session_state.carrinho, 
-                                                      uf_selecionada, tipo_cliente_str, forma_pagamento,
+                                                      uf_para_calculo, tipo_cliente_str, forma_pagamento,
                                                       desconto_volume_percentual, valor_base_total, valor_desconto_volume,
                                                       total_final_com_vol, total_ipi_recalculado, total_st_recalculado)
                     
@@ -1941,7 +2170,7 @@ if st.session_state.get('carrinho_aberto', False):
     st.stop()
 
 # ============================================
-# FILTROS
+# APLICAÇÃO DOS FILTROS
 # ============================================
 icms_uf         = determinar_icms_por_uf(uf_selecionada)
 tabela_desconto = dados_isento if cliente_isento else dados_normal
@@ -2027,7 +2256,6 @@ st.markdown("---")
 # ============================================
 # BOTÃO FLUTUANTE DE DESCONTO
 # ============================================
-# Adicionar o botão flutuante de desconto
 st.markdown(gerar_botao_desconto_flutuante(), unsafe_allow_html=True)
 
 # ============================================
@@ -2261,7 +2489,7 @@ st.markdown("""
 
 st.markdown("""
 <div class='contact-footer'>
-    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br | 🔒 DPO: privacidade@luvidarte.com.br
+    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br | 🔒 DPO: sac@luvidarte.com.br
 </div>""", unsafe_allow_html=True)
 
 st.markdown("""
