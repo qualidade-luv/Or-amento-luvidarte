@@ -13,7 +13,10 @@ import hashlib
 import secrets
 import socket
 import urllib3
-import pytz  # Adicionado para timezone
+import pytz
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import json
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
@@ -30,6 +33,265 @@ SESSION_TIMEOUT = 1800  # 30 minutos
 
 # Configurar timezone do Brasil
 TIMEZONE_BR = pytz.timezone('America/Sao_Paulo')
+
+# ============================================
+# CONFIGURAÇÃO DO GOOGLE SHEETS
+# ============================================
+
+# ID da planilha de cadastro
+ID_PLANILHA_CADASTRO = "1_s01QhZJni2dYoJwkWflEtdrKzSZ5yt7mpZvASPlFxk"
+
+# Escopos necessários para o Google Sheets API
+ESCOPOS = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+
+def conectar_google_sheets():
+    """Conecta ao Google Sheets usando credenciais (local ou secrets)"""
+    try:
+        credenciais_dict = None
+        
+        # 1. TENTAR STREAMLIT SECRETS (para produção/nuvem)
+        try:
+            if hasattr(st, 'secrets') and 'google' in st.secrets:
+                credenciais_dict = {
+                    "type": st.secrets["google"].get("type", "service_account"),
+                    "project_id": st.secrets["google"].get("project_id", ""),
+                    "private_key_id": st.secrets["google"].get("private_key_id", ""),
+                    "private_key": st.secrets["google"].get("private_key", ""),
+                    "client_email": st.secrets["google"].get("client_email", ""),
+                    "client_id": st.secrets["google"].get("client_id", ""),
+                    "auth_uri": st.secrets["google"].get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+                    "token_uri": st.secrets["google"].get("token_uri", "https://oauth2.googleapis.com/token"),
+                    "auth_provider_x509_cert_url": st.secrets["google"].get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+                    "client_x509_cert_url": st.secrets["google"].get("client_x509_cert_url", "")
+                }
+                # Remover campos vazios
+                credenciais_dict = {k: v for k, v in credenciais_dict.items() if v}
+                if credenciais_dict.get('private_key'):
+                    st.info("🔐 Usando credenciais do Streamlit Secrets")
+        except Exception as e:
+            pass  # Silencia erro para tentar próximo método
+        
+        # 2. TENTAR ARQUIVO LOCAL (para desenvolvimento)
+        if not credenciais_dict or not credenciais_dict.get('private_key'):
+            try:
+                with open('credentials.json', 'r') as f:
+                    credenciais_dict = json.load(f)
+                st.info("📁 Usando credenciais do arquivo credentials.json")
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                st.warning(f"⚠️ Erro ao ler credentials.json: {str(e)[:100]}")
+        
+        # 3. VERIFICAR SE TEM CREDENCIAIS
+        if not credenciais_dict or not credenciais_dict.get('private_key'):
+            st.error("❌ Credenciais não encontradas!")
+            st.info("""
+            **Para resolver:**
+            
+            **Opção 1 - Desenvolvimento Local:**
+            - Coloque o arquivo `credentials.json` na mesma pasta do `app.py`
+            
+            **Opção 2 - Streamlit Cloud:**
+            - Vá em Settings → Secrets
+            - Cole as credenciais formatadas como TOML
+            """)
+            return None
+        
+        # 4. CONECTAR
+        escopos = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, escopos)
+        cliente = gspread.authorize(creds)
+        
+        # 5. TESTAR CONEXÃO
+        try:
+            test_planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
+            st.success(f"✅ Conectado à planilha: {test_planilha.title}")
+            return cliente
+        except Exception as e:
+            st.error(f"❌ Erro ao acessar planilha: {str(e)}")
+            st.info("Verifique se a planilha foi compartilhada com o e-mail da service account")
+            return None
+        
+    except Exception as e:
+        st.error(f"❌ Erro na conexão: {str(e)}")
+        return None
+
+def salvar_cadastro_cliente(dados_cliente):
+    """Salva os dados do cliente na planilha Cadastro_Virtual (aba Cadastro)"""
+    try:
+        cliente = conectar_google_sheets()
+        if not cliente:
+            return False
+        
+        # Abrir a planilha
+        planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
+        
+        # Selecionar a aba Cadastro
+        try:
+            aba_cadastro = planilha.worksheet("Cadastro")
+        except:
+            # Se a aba não existir, criar
+            aba_cadastro = planilha.add_worksheet(title="Cadastro", rows="1000", cols="20")
+            # Adicionar cabeçalho
+            cabecalho = ["RAZÃO SOCIAL", "CNPJ", "INSCRIÇÃO ESTADUAL", "ENDEREÇO", "E-MAIL", 
+                        "NÚMERO", "BAIRRO", "CEP", "TEL/CONTATO", "UF", "DATA_CADASTRO", "HORA_CADASTRO"]
+            aba_cadastro.append_row(cabecalho)
+        
+        # IMPORTANTE: Limpar o CNPJ para busca (remover pontos, barras)
+        cnpj_limpo = re.sub(r'[^0-9]', '', dados_cliente.get('cnpj', ''))
+        
+        # Buscar se CNPJ já existe
+        celulas_cnpj = None
+        try:
+            # Procurar em toda a coluna B (CNPJ)
+            coluna_cnpj = aba_cadastro.col_values(2)
+            for i, valor in enumerate(coluna_cnpj, start=1):
+                if i == 1:  # Pular cabeçalho
+                    continue
+                if valor and re.sub(r'[^0-9]', '', valor) == cnpj_limpo:
+                    celulas_cnpj = [type('obj', (object,), {'row': i})()]
+                    break
+        except:
+            pass
+        
+        data_atual = formatar_data_brasil().split()[0]
+        hora_atual = formatar_data_brasil().split()[1]
+        
+        if celulas_cnpj:
+            # CNPJ já cadastrado - atualizar dados
+            linha = celulas_cnpj[0].row
+            # Atualizar cada célula individualmente
+            aba_cadastro.update(f'A{linha}', dados_cliente.get('razao_social', ''))
+            aba_cadastro.update(f'B{linha}', dados_cliente.get('cnpj', ''))
+            aba_cadastro.update(f'C{linha}', dados_cliente.get('inscricao_estadual', ''))
+            aba_cadastro.update(f'D{linha}', dados_cliente.get('endereco', ''))
+            aba_cadastro.update(f'E{linha}', dados_cliente.get('email', ''))
+            aba_cadastro.update(f'F{linha}', dados_cliente.get('numero', ''))
+            aba_cadastro.update(f'G{linha}', dados_cliente.get('bairro', ''))
+            aba_cadastro.update(f'H{linha}', dados_cliente.get('cep', ''))
+            aba_cadastro.update(f'I{linha}', dados_cliente.get('telefone', ''))
+            aba_cadastro.update(f'J{linha}', dados_cliente.get('uf', ''))
+            aba_cadastro.update(f'K{linha}', data_atual)
+            aba_cadastro.update(f'L{linha}', hora_atual)
+            st.info(f"✅ Cadastro atualizado para CNPJ: {dados_cliente.get('cnpj', '')}")
+        else:
+            # Novo cadastro - adicionar linha
+            nova_linha = [
+                dados_cliente.get('razao_social', ''),
+                dados_cliente.get('cnpj', ''),
+                dados_cliente.get('inscricao_estadual', ''),
+                dados_cliente.get('endereco', ''),
+                dados_cliente.get('email', ''),
+                dados_cliente.get('numero', ''),
+                dados_cliente.get('bairro', ''),
+                dados_cliente.get('cep', ''),
+                dados_cliente.get('telefone', ''),
+                dados_cliente.get('uf', ''),
+                data_atual,
+                hora_atual
+            ]
+            aba_cadastro.append_row(nova_linha)
+            st.info(f"✅ Novo cadastro salvo para: {dados_cliente.get('razao_social', '')}")
+        
+        return True
+    except Exception as e:
+        st.error(f"❌ Erro ao salvar cadastro: {str(e)}")
+        import traceback
+        st.error(f"Detalhes: {traceback.format_exc()}")
+        return False
+def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, itens_resumo):
+    """Salva o histórico do orçamento na planilha (aba Historico)"""
+    try:
+        cliente = conectar_google_sheets()
+        if not cliente:
+            return False
+        
+        # Abrir a planilha
+        planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
+        
+        # Selecionar a aba Historico
+        try:
+            aba_historico = planilha.worksheet("Historico")
+        except:
+            # Se a aba não existir, criar
+            aba_historico = planilha.add_worksheet(title="Historico", rows="10000", cols="20")
+            # Adicionar cabeçalho
+            cabecalho = ["DATA", "HORA", "CNPJ", "RAZÃO SOCIAL", "UF", "E-MAIL", "VALOR", 
+                        "FORMA_PAGAMENTO", "QTD_ITENS", "TIPO_CLIENTE", "DATA_HORA_COMPLETA"]
+            aba_historico.append_row(cabecalho)
+        
+        data_atual = formatar_data_brasil().split()[0]
+        hora_atual = formatar_data_brasil().split()[1]
+        data_hora_completa = formatar_data_brasil()
+        
+        # Contar quantidade de itens no carrinho
+        qtd_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
+        
+        tipo_cliente_str = "NÃO CONTRIBUINTE" if st.session_state.get('cliente_isento', False) else "NORMAL"
+        
+        nova_linha = [
+            data_atual,
+            hora_atual,
+            dados_cliente.get('cnpj', ''),
+            dados_cliente.get('razao_social', ''),
+            uf,
+            dados_cliente.get('email', ''),
+            valor_total,
+            forma_pagamento,
+            qtd_itens,
+            tipo_cliente_str,
+            data_hora_completa
+        ]
+        
+        aba_historico.append_row(nova_linha)
+        return True
+    except Exception as e:
+        st.error(f"❌ Erro ao salvar histórico: {str(e)}")
+        return False
+
+def buscar_cadastro_por_cnpj(cnpj):
+    """Busca cadastro do cliente pelo CNPJ na planilha"""
+    try:
+        cliente = conectar_google_sheets()
+        if not cliente:
+            return None
+        
+        planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
+        
+        try:
+            aba_cadastro = planilha.worksheet("Cadastro")
+        except:
+            return None
+        
+        # Buscar o CNPJ
+        celulas = aba_cadastro.findall(cnpj)
+        if celulas:
+            linha = celulas[0].row
+            dados = aba_cadastro.row_values(linha)
+            if len(dados) >= 10:
+                return {
+                    'razao_social': dados[0] if len(dados) > 0 else '',
+                    'cnpj': dados[1] if len(dados) > 1 else '',
+                    'inscricao_estadual': dados[2] if len(dados) > 2 else '',
+                    'endereco': dados[3] if len(dados) > 3 else '',
+                    'email': dados[4] if len(dados) > 4 else '',
+                    'numero': dados[5] if len(dados) > 5 else '',
+                    'bairro': dados[6] if len(dados) > 6 else '',
+                    'cep': dados[7] if len(dados) > 7 else '',
+                    'telefone': dados[8] if len(dados) > 8 else '',
+                    'uf': dados[9] if len(dados) > 9 else ''
+                }
+        return None
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao buscar cadastro: {str(e)}")
+        return None
 
 # ============================================
 # FUNÇÕES DE SEGURANÇA
@@ -92,106 +354,65 @@ def formatar_data_brasil():
     return agora.strftime('%d/%m/%Y %H:%M:%S')
 
 # ============================================
-# PASSOS DO SISTEMA
+# FUNÇÃO PARA VALIDAR CNPJ
 # ============================================
-def mostrar_passo_a_passo():
-    """Exibe um tutorial passo a passo do sistema"""
-    with st.sidebar.expander("📖 PASSO A PASSO - Como usar", expanded=False):
-        st.markdown("""
-        ### 🎯 Guia Rápido do Sistema
-        
-        ---
-        
-        #### 📌 **PASSO 1: Aceite a LGPD**
-        - Na primeira vez que acessar, você verá a **Política de Privacidade**
-        - Leia com atenção os termos
-        - Clique em **"✅ Aceito e Concordo com a Política de Privacidade"**
-        - ⚠️ *Sem aceitar, você não pode continuar*
-        
-        ---
-        
-        #### 🔍 **PASSO 2: Configure os Filtros (Sidebar Esquerda)**
-        - **📍 UF (ICMS):** Selecione o estado de entrega
-          *Importante: Use o mesmo estado do endereço final!*
-        - **📦 Grupo:** Escolha categoria do produto
-        - **🔎 Buscar Referência:** Pesquise por código
-        - **💰 Faixa de Preço:** Ajuste o slider
-        - **🏷️ Cliente Isento:** Marque se for MEI/Isento
-        - **💳 Pagamento:** Escolha a condição (Vista ou Prazo)
-        
-        ---
-        
-        #### 🛍️ **PASSO 3: Adicione Produtos**
-        - Navegue pelos produtos na página principal
-        - Defina a **quantidade** desejada
-        - Clique em **"🛒 Adicionar"**
-        - 🎉 *Descontos por volume são aplicados automaticamente!*
-        
-        ---
-        
-        #### 📊 **PASSO 4: Revise o Carrinho**
-        - Clique em **"🛒 Acessar meu carrinho"** (canto superior direito)
-        - Verifique os valores, quantidades e descontos
-        - **IPI e ST** são calculados automaticamente
-        - 💰 *Desconto por volume:* 
-          - R$ 2.500 = 10% OFF
-          - R$ 4.000 = 15% OFF
-        
-        ---
-        
-        #### 📝 **PASSO 5: Preencha os Dados do Cliente**
-        - No carrinho, clique em **"📋 Solicitar Orçamento"**
-        - Preencha TODOS os campos obrigatórios (*)
-        - ⚠️ **ATENÇÃO:** A UF será automaticamente a mesma selecionada nos filtros!
-        - Confirme seus dados (LGPD - Lei 13.709/2018)
-        
-        ---
-        
-        #### 📤 **PASSO 6: Finalize o Orçamento**
-        - Após validar os dados, você terá duas opções:
-          - **📄 Baixar Orçamento (HTML):** Salve em seu computador
-          - **💬 Enviar via WhatsApp:** Envie para nossa equipe
-        - Nossa equipe retornará em até 24h úteis
-        
-        ---
-        
-        #### ❓ **Dúvidas Frequentes**
-        
-        **❔ O que fazer se o horário estiver errado?**
-        - O sistema utiliza horário oficial de Brasília
-        - Verifique o fuso horário do seu dispositivo
-        
-        **❔ Posso mudar a UF depois de adicionar produtos?**
-        - Sim, mas os valores serão recalculados automaticamente
-        - ⚠️ A UF do endereço é bloqueada e sempre igual ao filtro!
-        
-        **❔ Meus dados ficam salvos?**
-        - Não! Conforme LGPD, seus dados são descartados após 30 min
-        - Orçamentos baixados são sua responsabilidade
-        
-        **❔ Como solicitar exclusão dos meus dados?**
-        - Envie e-mail para: sac@luvidarte.com.br
-        
-        ---
-        
-        #### 📞 **Suporte**
-        - WhatsApp: (11) 93011-9335
-        - E-mail: sac@luvidarte.com.br
-        - DPO (LGPD): sac@luvidarte.com.br
-        
-        ---
-        *Última atualização: 15/04/2026*
-        """)
-        
-        st.markdown("---")
-        if st.button("✅ Já entendi, vamos começar!", use_container_width=True):
-            st.session_state.passo_a_passo_visto = True
-            st.rerun()
-
-def mostrar_politica_privacidade():
-    """Exibe a política de privacidade com imagem de fundo"""
+def validar_cnpj(cnpj):
+    """Valida se o CNPJ é válido"""
+    cnpj = re.sub(r'[^0-9]', '', str(cnpj))
+    if len(cnpj) != 14:
+        return False
     
-    # Carregar imagem para fundo da LGPD
+    # Verificar se todos os dígitos são iguais
+    if len(set(cnpj)) == 1:
+        return False
+    
+    # Calcular primeiro dígito verificador
+    peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
+    digito1 = 11 - (soma1 % 11)
+    if digito1 >= 10:
+        digito1 = 0
+    
+    # Calcular segundo dígito verificador
+    peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
+    digito2 = 11 - (soma2 % 11)
+    if digito2 >= 10:
+        digito2 = 0
+    
+    return int(cnpj[12]) == digito1 and int(cnpj[13]) == digito2
+
+# ============================================
+# FUNÇÃO PARA VALIDAR EMAIL
+# ============================================
+def validar_email(email):
+    """Valida se o email tem formato correto"""
+    padrao = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(padrao, email) is not None
+
+# ============================================
+# FUNÇÃO PARA VALIDAR TELEFONE
+# ============================================
+def validar_telefone(telefone):
+    """Valida se o telefone tem formato correto"""
+    telefone = re.sub(r'[^0-9]', '', str(telefone))
+    return len(telefone) >= 10 and len(telefone) <= 11
+
+# ============================================
+# FUNÇÃO PARA VALIDAR CEP
+# ============================================
+def validar_cep(cep):
+    """Valida se o CEP tem formato correto"""
+    cep = re.sub(r'[^0-9]', '', str(cep))
+    return len(cep) == 8
+
+# ============================================
+# TELA DE VALIDAÇÃO INICIAL (PESSOA FÍSICA vs JURÍDICA)
+# ============================================
+def verificar_tipo_cliente_inicial():
+    """Verifica se o usuário já selecionou o tipo de cliente"""
+    
+    # Carregar imagem de fundo
     img_fundo_base64 = ""
     try:
         with open("Frontpage.jpeg", "rb") as f:
@@ -199,11 +420,9 @@ def mostrar_politica_privacidade():
     except:
         pass
     
-    # Adicionar fundo na tela LGPD
     if img_fundo_base64:
         st.markdown(f"""
         <style>
-        /* Fundo para a tela LGPD */
         .stApp {{
             background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
             background-size: cover;
@@ -226,129 +445,326 @@ def mostrar_politica_privacidade():
         </style>
         """, unsafe_allow_html=True)
     
+    st.markdown("""
+    <div style='text-align: center; padding: 40px 20px;'>
+        <h1 style='color: #2E7D32;'>Catálogo Interativo Virtual</h1>
+        <p style='font-size: 18px; color: #555; margin-top: 10px;'>
+        Peças exclusivas em vidro e decoração
+        </p>
+        <hr style='margin: 30px auto; width: 50%;'>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style='max-width: 600px; margin: 0 auto; padding: 20px;'>
+        <h3 style='color: #333; text-align: center;'>🔐 Identificação do Perfil</h3>
+        <p style='text-align: center; color: #666; margin-bottom: 30px;'>
+        Para acessar nosso catálogo, precisamos confirmar seu perfil de acordo com a LGPD.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("👤 Pessoa Física", use_container_width=True, type="primary"):
+            st.session_state.tipo_pessoa = "FISICA"
+            st.session_state.pessoa_fisica_recusada = True
+            st.rerun()
+    
+    with col2:
+        if st.button("🏢 Pessoa Jurídica", use_container_width=True, type="primary"):
+            st.session_state.tipo_pessoa = "JURIDICA"
+            st.session_state.aguardando_cnpj = True
+            st.rerun()
+    
+    # Se for Pessoa Física, mostrar mensagem de bloqueio
+    if st.session_state.get('pessoa_fisica_recusada', False):
+        st.markdown("---")
+        st.markdown("""
+        <div style='background-color: #FFEBEE; border-left: 4px solid #D32F2F; 
+                    padding: 20px; border-radius: 8px; margin-top: 20px;'>
+            <h3 style='color: #D32F2F; margin-bottom: 15px;'>⛔ Acesso Restrito</h3>
+            <p style='color: #333; font-size: 16px;'>
+            <strong>Este catálogo é exclusivo para PESSOAS JURÍDICAS (CNPJ).</strong>
+            </p>
+            <p style='color: #555; margin-top: 15px;'>
+            A LUVidarte atende exclusivamente empresas, revendedores e profissionais do setor.
+            </p>
+            <p style='color: #555; margin-top: 15px;'>
+            Caso você seja uma pessoa física e tenha interesse em nossos produtos, 
+            entre em contato conosco através dos canais abaixo:
+            </p>
+            <div style='margin-top: 20px; padding: 15px; background-color: #FFF; border-radius: 8px;'>
+                <p>📞 <strong>Telefone:</strong> (11) 4676-9000</p>
+                <p>💬 <strong>WhatsApp:</strong> (11) 93011-9335</p>
+                <p>✉️ <strong>E-mail:</strong> sac@luvidarte.com.br</p>
+                <p>📍 <strong>Endereço:</strong> Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP</p>
+            </div>
+            <p style='color: #666; margin-top: 20px; font-size: 14px;'>
+            Nossa equipe terá prazer em atendê-lo e apresentar nossas soluções personalizadas.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("◀ Voltar e Selecionar Pessoa Jurídica", use_container_width=True):
+            st.session_state.pessoa_fisica_recusada = False
+            st.rerun()
+        
+        st.stop()
+    
+    # Se estiver aguardando CNPJ
+    if st.session_state.get('aguardando_cnpj', False):
+        st.markdown("---")
+        st.markdown("""
+        <div style='max-width: 600px; margin: 0 auto;'>
+            <h3 style='color: #2E7D32; text-align: center;'>📋 Validação de Pessoa Jurídica</h3>
+            <p style='text-align: center; color: #666; margin-bottom: 20px;'>
+            Conforme a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018), 
+            solicitamos a confirmação do seu CNPJ para acesso ao catálogo.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.form(key="form_validacao_cnpj"):
+            cnpj_input = st.text_input(
+                "CNPJ da Empresa *",
+                placeholder="99.999.999/9999-99",
+                help="Digite apenas números ou utilize máscara"
+            )
+            
+            st.caption("🔒 **LGPD - Proteção de Dados:**")
+            st.caption("• Seu CNPJ será utilizado apenas para validação de acesso")
+            st.caption("• Seus dados serão armazenados conforme consentimento LGPD")
+            st.caption("• Você pode solicitar a exclusão dos seus dados a qualquer momento")
+            st.caption("• DPO para questões LGPD: sac@luvidarte.com.br")
+            
+            # Botão para buscar cadastro existente
+            if cnpj_input:
+                cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_input)
+                if len(cnpj_limpo) == 14:
+                    cadastro_existente = buscar_cadastro_por_cnpj(cnpj_limpo)
+                    if cadastro_existente:
+                        st.info("✅ CNPJ já cadastrado! Os dados serão carregados automaticamente.")
+            
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+            
+            with col_btn2:
+                enviar = st.form_submit_button("✅ Validar e Continuar", use_container_width=True)
+            
+            with col_btn1:
+                if st.form_submit_button("◀ Voltar", use_container_width=True):
+                    st.session_state.aguardando_cnpj = False
+                    st.session_state.tipo_pessoa = None
+                    st.rerun()
+            
+            if enviar:
+                cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_input)
+                if len(cnpj_limpo) == 14 and validar_cnpj(cnpj_limpo):
+                    st.session_state.cnpj_validado = cnpj_limpo
+                    st.session_state.cnpj_validado_data = formatar_data_brasil()
+                    st.session_state.acesso_autorizado = True
+                    st.session_state.mostrar_lgpd = True
+                    
+                    # Buscar cadastro existente para pré-preencher
+                    cadastro = buscar_cadastro_por_cnpj(cnpj_limpo)
+                    if cadastro:
+                        st.session_state.cadastro_precarregado = cadastro
+                    else:
+                        st.session_state.cadastro_precarregado = None
+                    
+                    st.rerun()
+                else:
+                    st.error("❌ CNPJ inválido. Verifique os dígitos e tente novamente.")
+        
+        st.stop()
+    
+    # Primeira vez, apenas mostrar tela inicial
+    if 'acesso_autorizado' not in st.session_state:
+        st.stop()
+    
+    return True
+
+# ============================================
+# PASSOS DO SISTEMA
+# ============================================
+def mostrar_passo_a_passo():
+    """Exibe um tutorial passo a passo do sistema"""
+    with st.sidebar.expander("📖 PASSO A PASSO - Como usar", expanded=False):
+        st.markdown("""
+        ### 🎯 Guia Rápido do Sistema - Catálogo Interativo Virtual
+        
+        ---
+        
+        #### 📌 **PASSO 1: Validação de CNPJ**
+        - Informe seu CNPJ válido para acesso ao catálogo
+        - Conforme LGPD, seus dados são tratados com confidencialidade
+        - ⚠️ *Catálogo exclusivo para Pessoa Jurídica*
+        
+        ---
+        
+        #### 🔍 **PASSO 2: Configure os Filtros (Sidebar Esquerda)**
+        - **📍 UF (ICMS):** Selecione o estado de entrega
+        - **📦 Família de Produtos:** Escolha categoria do produto
+        - **🔎 Buscar Referência:** Pesquise por código
+        - **💰 Faixa de Preço:** Ajuste o slider
+        - **🏷️ Cliente Não Contribuinte:** Marque se for Não Contribuinte
+        - **💳 Pagamento:** Escolha a condição (Vista ou Prazo)
+        
+        ---
+        
+        #### 🛍️ **PASSO 3: Adicione Produtos**
+        - Navegue pelos produtos na página principal
+        - Defina a **quantidade** desejada
+        - Clique em **"🛒 Adicionar"**
+        
+        ---
+        
+        #### 📊 **PASSO 4: Revise o Carrinho**
+        - Clique em **"🛒 Acessar meu carrinho"**
+        - Verifique os valores, quantidades e descontos
+        
+        ---
+        
+        #### 📝 **PASSO 5: Preencha os Dados do Cliente**
+        - No carrinho, clique em **"📋 Solicitar Orçamento"**
+        - Seus dados serão salvos na planilha de cadastro
+        - Aceite os termos da LGPD
+        
+        ---
+        
+        #### 📤 **PASSO 6: Finalize o Orçamento**
+        - Baixe o orçamento em HTML
+        - Envie via WhatsApp
+        - O histórico é salvo automaticamente
+        
+        ---
+        
+        #### 📞 **Suporte**
+        - WhatsApp: (11) 93011-9335
+        - E-mail: sac@luvidarte.com.br
+        """)
+        
+        st.markdown("---")
+        if st.button("✅ Já entendi, vamos começar!", use_container_width=True):
+            st.session_state.passo_a_passo_visto = True
+            st.rerun()
+
+def mostrar_politica_privacidade():
+    """Exibe a política de privacidade com imagem de fundo"""
+    
+    # Carregar imagem para fundo da LGPD
+    img_fundo_base64 = ""
+    try:
+        with open("Frontpage.jpeg", "rb") as f:
+            img_fundo_base64 = base64.b64encode(f.read()).decode()
+    except:
+        pass
+    
+    # Adicionar fundo na tela LGPD
+    if img_fundo_base64:
+        st.markdown(f"""
+        <style>
+        .stApp {{
+            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
+            background-size: cover;
+        }}
+        .stApp::before {{
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.88);
+            z-index: 0;
+            pointer-events: none;
+        }}
+        .main {{
+            position: relative;
+            z-index: 1;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+    
+    # Mostrar CNPJ validado
+    if st.session_state.get('cnpj_validado'):
+        cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
+        st.success(f"✅ CNPJ Validado: {cnpj_mascarado} | Data: {st.session_state.cnpj_validado_data}")
+    
     with st.expander("📋 Política de Privacidade - LGPD (Lei 13.709/2018)", expanded=True):
         st.markdown("""
         ### POLÍTICA DE PRIVACIDADE LUVidarte
         
-        **1. DADOS COLETADOS**
-        - Nome/Razão Social
-        - CNPJ/CPF
+        **1. DADOS COLETADOS E ARMAZENADOS**
+        - Razão Social
+        - CNPJ
         - Inscrição Estadual
+        - Endereço completo
         - E-mail
         - Telefone/WhatsApp
-        - Endereço completo (Logradouro, Número, Bairro, CEP)
-        - UF (Estado)
-        - Itens do orçamento selecionados
+        - CEP e UF
+        - Histórico de orçamentos solicitados
         
-        **2. FINALIDADE DA COLETA (Art. 7º da LGPD)**
-        Os dados são coletados exclusivamente para:
-        - Elaboração de orçamentos personalizados
-        - Contato comercial para finalização do pedido
-        - Emissão de notas fiscais (quando aplicável)
-        - Cálculo de tributos (ICMS, IPI, ST) conforme legislação
+        **2. FINALIDADE DO ARMAZENAMENTO (Art. 7º da LGPD)**
+        Os dados são armazenados para:
+        - Agilizar futuros orçamentos
+        - Histórico de cotações
+        - Emissão de notas fiscais
+        - Cumprimento de obrigações legais
         
         **3. BASES LEGAIS (Art. 7º e 11º)**
-        - Execução de contrato ou procedimentos preliminares (Art. 7º, V)
-        - Legítimo interesse do controlador (Art. 7º, IX)
+        - Execução de contrato (Art. 7º, V)
+        - Legítimo interesse (Art. 7º, IX)
         - Cumprimento de obrigação legal (Art. 7º, II)
         
-        **4. ARMAZENAMENTO E RETENÇÃO**
-        - Seus dados NÃO são armazenados em banco de dados persistente
-        - Permanecem apenas durante a sessão do navegador
-        - São automaticamente excluídos após 30 minutos de inatividade
-        
-        **5. COMPARTILHAMENTO (Art. 6º, VI)**
-        - Seus dados são compartilhados APENAS com a equipe LUVidarte via WhatsApp
-        - Não compartilhamos com terceiros, plataformas de marketing ou publicidade
-        
-        **6. SEGURANÇA (Art. 46º)**
-        - Utilizamos criptografia e medidas técnicas para proteger seus dados
+        **4. RETENÇÃO DOS DADOS**
+        - Seus dados são armazenados em planilha protegida
         - Acesso restrito a funcionários autorizados
+        - Mantidos conforme necessário para finalidades comerciais
         
-        **7. SEUS DIREITOS (Art. 18º da LGPD)**
-        Você tem direito a solicitar:
-        - Confirmação da existência de tratamento de seus dados
-        - Acesso aos seus dados pessoais
-        - Correção de dados incompletos ou inexatos
-        - Anonimização, bloqueio ou eliminação de dados desnecessários
-        - Portabilidade dos dados a outro fornecedor
-        - Eliminação dos dados tratados com consentimento
+        **5. SEUS DIREITOS (Art. 18º da LGPD)**
+        - Acesso aos dados armazenados
+        - Correção de dados incompletos
+        - Eliminação de dados (exceto quando exigido por lei)
         - Revogação do consentimento
         
-        **8. ENCARREGADO (DPO)**
+        **6. ENCARREGADO (DPO)**
         - 📧 E-mail: sac@luvidarte.com.br
         - 📞 Telefone: (11) 4676-9000
-        - 📍 Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP
-        
-        **Data da última atualização:** 15/04/2026
         
         ---
-        ✅ **Ao clicar em "Aceito e Concordo", você declara que:**
-        - Leu e compreendeu esta política de privacidade
-        - Concorda com a coleta e tratamento de seus dados
+        ✅ **Ao clicar em "Aceito e Concordo", você autoriza o armazenamento dos seus dados conforme esta política.**
         """)
         
         if st.button("✅ Aceito e Concordo com a Política de Privacidade", key="aceitar_privacidade", use_container_width=True):
             st.session_state.privacidade_aceita = True
             st.session_state.consentimento_data = formatar_data_brasil()
+            st.session_state.mostrar_lgpd = False
             st.rerun()
 
 def mostrar_termos_uso():
     """Exibe os termos de uso"""
     with st.expander("📜 Termos de Uso - Orçamento Virtual"):
         st.markdown("""
-        ### TERMOS DE USO - ORÇAMENTO VIRTUAL LUVidarte
+        ### TERMOS DE USO - CATÁLOGO INTERATIVO VIRTUAL LUVidarte
         
         **1. NATUREZA DO ORÇAMENTO**
-        - Este é um ORÇAMENTO VIRTUAL, NÃO uma compra finalizada (Art. 39 do CDC)
+        - Este é um ORÇAMENTO VIRTUAL, NÃO uma compra finalizada
         - Os valores são ESTIMATIVAS sujeitas à confirmação
-        - Produtos sujeitos à disponibilidade em estoque
         
-        **2. VALIDADE DO ORÇAMENTO**
-        - O orçamento tem validade de 7 (sete) dias corridos
-        - Após este período, os valores devem ser revalidados pela equipe
-        - Condições comerciais podem ser alteradas sem aviso prévio
+        **2. ARMAZENAMENTO DE DADOS**
+        - Seus dados serão armazenados para agilizar futuros atendimentos
+        - O histórico de orçamentos é mantido para consulta
         
-        **3. RESPONSABILIDADES DO CLIENTE (Art. 14 do CDC)**
-        - Fornecer dados corretos, verdadeiros e atualizados
-        - Não compartilhar o orçamento com terceiros sem autorização
-        - Manter o sigilo das informações comerciais
-        - Responsabilizar-se por informações falsas ou imprecisas
+        **3. PÚBLICO-ALVO**
+        - Este catálogo é exclusivo para PESSOAS JURÍDICAS
         
-        **4. RESPONSABILIDADES DA LUVidarte (Art. 14 do CDC)**
-        - Confidencialidade dos dados do cliente (LGPD)
-        - Transparência nos valores e tributos aplicados
-        - Atendimento conforme Lei Geral de Proteção de Dados
-        - Entrega de produtos conforme especificações
+        **4. CANCELAMENTO DE DADOS**
+        - Solicite a exclusão dos seus dados via e-mail: sac@luvidarte.com.br
         
-        **5. FORMAÇÃO DE PREÇOS**
-        - Os preços incluem tributos conforme legislação (ICMS, IPI, ST)
-        - Descontos por volume conforme política comercial
-        - Sujeito à análise de crédito quando aplicável
-        - Valores em Reais (R$ - BRL)
-        
-        **6. CANCELAMENTO E DEVOLUÇÃO**
-        - Conforme Código de Defesa do Consumidor (Lei 8.078/90)
-        - Arrependimento: 7 dias úteis para compras fora da loja (Art. 49)
-        - Produtos com defeito: garantia de 90 dias (Art. 26)
-        
-        **7. PROPRIEDADE INTELECTUAL**
-        - As imagens, textos e marcas são propriedade da LUVidarte
-        - É proibida a reprodução não autorizada do catálogo
-        
-        **8. DISPOSIÇÕES GERAIS**
+        **5. DISPOSIÇÕES GERAIS**
         - A LUVidarte se reserva o direito de recusar pedidos
-        - Em caso de erro de precificação, o cliente será contatado
-        
-        **9. FORO (Art. 101 do CDC)**
-        - Fica eleito o foro da comarca de Ferraz de Vasconcelos - SP
-        - Para consumidores, pode optar pelo foro de seu domicílio
-        
-        **10. LEGISLAÇÃO APLICÁVEL**
-        - Lei Geral de Proteção de Dados (13.709/2018)
-        - Código de Defesa do Consumidor (8.078/90)
-        - Código Civil (10.406/2002)
-        - Legislação tributária aplicável
         
         ---
         📞 **Dúvidas:** (11) 4676-9000 | sac@luvidarte.com.br
@@ -360,15 +776,16 @@ def mostrar_termos_uso():
 
 def obter_consentimento_lgpd() -> bool:
     """Verifica se o usuário já consentiu com a LGPD"""
-    if 'privacidade_aceita' not in st.session_state:
+    
+    if st.session_state.get('mostrar_lgpd', True) and 'privacidade_aceita' not in st.session_state:
         st.session_state.privacidade_aceita = False
     
-    if not st.session_state.privacidade_aceita:
+    if not st.session_state.get('privacidade_aceita', False):
         mostrar_politica_privacidade()
         mostrar_termos_uso()
         return False
     
-    # Após aceitar, restaurar o fundo normal (sem duplicar)
+    # Após aceitar, restaurar o fundo normal
     img_fundo_base64 = ""
     try:
         with open("Frontpage.jpeg", "rb") as f:
@@ -711,7 +1128,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
         </div>
         
         <div class="header">
-            <h1>LUVidarte - Orçamento Virtual</h1>
+            <h1>LUVidarte - Catálogo Interativo Virtual</h1>
         </div>
         
         <div class="section">
@@ -814,17 +1231,15 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
         
         <div class="lgpd-notice">
             🔒 <strong>LGPD - LEI GERAL DE PROTEÇÃO DE DADOS (Lei 13.709/2018)</strong><br><br>
-            • Seus dados são tratados com confidencialidade e utilizados APENAS para este orçamento<br>
+            • Seus dados são tratados com confidencialidade e armazenados conforme consentimento<br>
             • Base legal: Execução de contrato e legítimo interesse (Art. 7º, V e IX)<br>
             • Você pode solicitar a exclusão dos seus dados a qualquer momento<br>
-            • Este documento é de uso exclusivo da LUVidarte e do cliente<br>
-            • Os dados não são armazenados em banco de dados persistente<br><br>
+            • Este documento é de uso exclusivo da LUVidarte e do cliente<br><br>
             <strong>Seus direitos LGPD (Art. 18):</strong><br>
             • Acesso, correção e eliminação de dados<br>
             • Revogação do consentimento<br>
             • Portabilidade de dados<br><br>
-            <strong>Encarregado (DPO):</strong> sac@luvidarte.com.br | (11) 4676-9000<br>
-            <strong>ANPD:</strong> https://www.gov.br/anpd/pt-br
+            <strong>Encarregado (DPO):</strong> sac@luvidarte.com.br | (11) 4676-9000
         </div>
         
         <div class="footer">
@@ -844,59 +1259,6 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     """
     
     return html_content.encode('utf-8')
-
-# ============================================
-# FUNÇÃO PARA VALIDAR CNPJ
-# ============================================
-def validar_cnpj(cnpj):
-    """Valida se o CNPJ é válido"""
-    cnpj = re.sub(r'[^0-9]', '', str(cnpj))
-    if len(cnpj) != 14:
-        return False
-    
-    # Verificar se todos os dígitos são iguais
-    if len(set(cnpj)) == 1:
-        return False
-    
-    # Calcular primeiro dígito verificador
-    peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
-    digito1 = 11 - (soma1 % 11)
-    if digito1 >= 10:
-        digito1 = 0
-    
-    # Calcular segundo dígito verificador
-    peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
-    digito2 = 11 - (soma2 % 11)
-    if digito2 >= 10:
-        digito2 = 0
-    
-    return int(cnpj[12]) == digito1 and int(cnpj[13]) == digito2
-
-# ============================================
-# FUNÇÃO PARA VALIDAR EMAIL
-# ============================================
-def validar_email(email):
-    """Valida se o email tem formato correto"""
-    padrao = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(padrao, email) is not None
-
-# ============================================
-# FUNÇÃO PARA VALIDAR TELEFONE
-# ============================================
-def validar_telefone(telefone):
-    """Valida se o telefone tem formato correto"""
-    telefone = re.sub(r'[^0-9]', '', str(telefone))
-    return len(telefone) >= 10 and len(telefone) <= 11
-
-# ============================================
-# FUNÇÃO PARA VALIDAR CEP
-# ============================================
-def validar_cep(cep):
-    """Valida se o CEP tem formato correto"""
-    cep = re.sub(r'[^0-9]', '', str(cep))
-    return len(cep) == 8
 
 # ============================================
 # FUNÇÃO PARA FORMATAR MENSAGEM WHATSAPP
@@ -960,7 +1322,13 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================
 
-# Verificar consentimento LGPD antes de continuar
+# PRIMEIRO: Verificar tipo de cliente (Pessoa Física vs Jurídica)
+# Isso deve ser executado ANTES de qualquer outra validação
+if 'acesso_autorizado' not in st.session_state:
+    verificar_tipo_cliente_inicial()
+    st.stop()
+
+# Verificar consentimento LGPD depois de validar CNPJ
 if not obter_consentimento_lgpd():
     st.stop()
 
@@ -994,16 +1362,21 @@ def carregar_logo_favicon():
 favicon = carregar_logo_favicon()
 if favicon:
     st.set_page_config(
-        page_title="Luvidarte - Catálogo Virtual",
+        page_title="Luvidarte - Catálogo Interativo Virtual",
         page_icon=favicon,
         layout="wide"
     )
 else:
     st.set_page_config(
-        page_title="Luvidarte - Catálogo Virtual",
+        page_title="Luvidarte - Catálogo Interativo Virtual",
         page_icon="📦",
         layout="wide"
     )
+
+# Mostrar CNPJ validado no topo
+if st.session_state.get('cnpj_validado'):
+    cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
+    st.sidebar.success(f"✅ CNPJ: {cnpj_mascarado}")
 
 # ============================================
 # INICIALIZAR SESSION STATE
@@ -1023,17 +1396,21 @@ if 'dados_cliente' not in st.session_state:
 if 'mostrar_formulario_cliente' not in st.session_state:
     st.session_state.mostrar_formulario_cliente = False
 if 'form_data' not in st.session_state:
-    st.session_state.form_data = {
-        'razao_social': '',
-        'cnpj': '',
-        'inscricao_estadual': '',
-        'email': '',
-        'telefone': '',
-        'endereco': '',
-        'numero': '',
-        'bairro': '',
-        'cep': ''
-    }
+    # Pré-preencher com dados do cadastro se existir
+    if st.session_state.get('cadastro_precarregado'):
+        st.session_state.form_data = st.session_state.cadastro_precarregado
+    else:
+        st.session_state.form_data = {
+            'razao_social': '',
+            'cnpj': st.session_state.get('cnpj_validado', ''),
+            'inscricao_estadual': '',
+            'email': '',
+            'telefone': '',
+            'endereco': '',
+            'numero': '',
+            'bairro': '',
+            'cep': ''
+        }
 if 'mostrar_botoes_envio' not in st.session_state:
     st.session_state.mostrar_botoes_envio = False
 if 'html_bytes' not in st.session_state:
@@ -1044,6 +1421,8 @@ if 'consentimento_data' not in st.session_state:
     st.session_state.consentimento_data = None
 if 'passo_a_passo_visto' not in st.session_state:
     st.session_state.passo_a_passo_visto = False
+if 'cliente_isento' not in st.session_state:
+    st.session_state.cliente_isento = False
 
 # ============================================
 # FUNÇÕES PARA CONTROLAR CARRINHO
@@ -1451,6 +1830,7 @@ def carregar_logo():
     except:
         pass
     return None
+
 # ============================================
 # CSS GLOBAL COMPLETO COM IMAGEM DE FUNDO
 # ============================================
@@ -1674,7 +2054,7 @@ if logo_img:
     <div class='main-banner'>
         <div><img src='data:image/png;base64,{img_b64}' class='logo-img'></div>
         <div class='banner-text'>
-            <h1>Catálogo Virtual</h1>
+            <h1>Catálogo Interativo Virtual</h1>
             <p>Peças exclusivas em vidro e decoração</p>
         </div>
         <div style='width:80px;'></div>
@@ -1684,7 +2064,7 @@ else:
     st.markdown("""
     <div class='main-banner'>
         <div class='banner-text' style='width:100%;'>
-            <h1>Catálogo Virtual</h1>
+            <h1>Catálogo Interativo Virtual</h1>
             <p>Peças exclusivas em vidro e decoração</p>
         </div>
     </div>
@@ -1769,12 +2149,12 @@ uf_selecionada = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📦 Categorias")
+st.sidebar.subheader("📦 Família de Produtos")
 
 grupos = ["Todos"] + sorted(dados['GRUPO'].unique().tolist())
 if "Promoção" not in grupos:
     grupos.insert(1, "Promoção")
-grupo_escolhido = st.sidebar.selectbox("Grupo", grupos)
+grupo_escolhido = st.sidebar.selectbox("Família de Produtos", grupos)
 
 st.sidebar.subheader("🔎 Busca")
 busca_referencia = st.sidebar.text_input("Referência do Produto", placeholder="Ex: 510 P TR")
@@ -1794,7 +2174,8 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("🏷️ Condições Comerciais")
 
-cliente_isento  = st.sidebar.checkbox("Cliente Isento (MEI/Isento)", value=False, help="Marque se for MEI ou Isento de ST")
+cliente_isento  = st.sidebar.checkbox("Cliente Não Contribuinte", value=False, help="Marque se for Não Contribuinte (MEI/Isento)")
+st.session_state.cliente_isento = cliente_isento
 forma_pagamento = st.sidebar.radio("Condição de Pagamento",
                                    options=["PREÇO BASE","VISTA","30","45","60"], index=0)
 
@@ -1868,7 +2249,7 @@ if st.session_state.get('carrinho_aberto', False):
         with c2:
             st.markdown(f"*{item['descricao']}*")
             st.markdown(f"🔖 REF: {item['referencia']}")
-            st.markdown(f"📦 Grupo: {item['grupo']}")
+            st.markdown(f"📦 Família: {item['grupo']}")
             if item.get('medidas'):
                 st.markdown(f"📐 {item['medidas']}")
         with c3:
@@ -2034,17 +2415,17 @@ if st.session_state.get('carrinho_aberto', False):
         with st.form(key="form_cliente"):
             col1, col2 = st.columns(2)
             with col1:
-                razao_social = st.text_input("Razão Social *", value=st.session_state.form_data['razao_social'])
-                cnpj = st.text_input("CNPJ/CPF *", value=st.session_state.form_data['cnpj'], help="Digite apenas números")
-                inscricao_estadual = st.text_input("Inscrição Estadual", value=st.session_state.form_data['inscricao_estadual'])
-                email = st.text_input("E-mail *", value=st.session_state.form_data['email'])
-                telefone = st.text_input("Telefone/Contato *", value=st.session_state.form_data['telefone'], help="Com DDD")
+                razao_social = st.text_input("Razão Social *", value=st.session_state.form_data.get('razao_social', ''))
+                cnpj = st.text_input("CNPJ/CPF *", value=st.session_state.form_data.get('cnpj', st.session_state.get('cnpj_validado', '')), help="Digite apenas números")
+                inscricao_estadual = st.text_input("Inscrição Estadual", value=st.session_state.form_data.get('inscricao_estadual', ''))
+                email = st.text_input("E-mail *", value=st.session_state.form_data.get('email', ''))
+                telefone = st.text_input("Telefone/Contato *", value=st.session_state.form_data.get('telefone', ''), help="Com DDD")
             
             with col2:
-                endereco = st.text_input("Endereço *", value=st.session_state.form_data['endereco'])
-                numero = st.text_input("Número *", value=st.session_state.form_data['numero'])
-                bairro = st.text_input("Bairro *", value=st.session_state.form_data['bairro'])
-                cep = st.text_input("CEP *", value=st.session_state.form_data['cep'], help="Digite apenas números")
+                endereco = st.text_input("Endereço *", value=st.session_state.form_data.get('endereco', ''))
+                numero = st.text_input("Número *", value=st.session_state.form_data.get('numero', ''))
+                bairro = st.text_input("Bairro *", value=st.session_state.form_data.get('bairro', ''))
+                cep = st.text_input("CEP *", value=st.session_state.form_data.get('cep', ''), help="Digite apenas números")
                 # Campo UF do cliente - DESABILITADO e com valor fixo do filtro
                 uf_cliente = st.text_input("UF do Endereço *", value=uf_selecionada, disabled=True, 
                                           help="A UF é definida pelos filtros do sistema e não pode ser alterada aqui")
@@ -2103,12 +2484,15 @@ if st.session_state.get('carrinho_aberto', False):
                         'numero': numero,
                         'bairro': bairro,
                         'cep': cep,
-                        'uf': uf_selecionada  # Usar a UF do filtro
+                        'uf': uf_selecionada
                     }
                     st.session_state.dados_cliente = dados_cliente
                     
-                    tipo_cliente_str = "ISENTO" if cliente_isento else "NORMAL"
-                    # Usar a UF do filtro para o cálculo
+                    # SALVAR CADASTRO NA PLANILHA
+                    with st.spinner("💾 Salvando cadastro..."):
+                        salvar_cadastro_cliente(dados_cliente)
+                    
+                    tipo_cliente_str = "NÃO CONTRIBUINTE" if cliente_isento else "NORMAL"
                     uf_para_calculo = uf_selecionada
                     
                     html_bytes = gerar_html_orcamento(dados_cliente, st.session_state.carrinho, 
@@ -2119,6 +2503,12 @@ if st.session_state.get('carrinho_aberto', False):
                     if html_bytes:
                         st.session_state.html_bytes = html_bytes
                         st.session_state.mostrar_botoes_envio = True
+                        
+                        # SALVAR HISTÓRICO DO ORÇAMENTO
+                        with st.spinner("💾 Salvando histórico..."):
+                            salvar_historico_orcamento(dados_cliente, uf_selecionada, total_final_com_vol, 
+                                                      forma_pagamento, st.session_state.carrinho)
+                        
                         st.rerun()
                     else:
                         st.error("❌ Erro ao gerar o orçamento. Tente novamente.")
@@ -2126,7 +2516,7 @@ if st.session_state.get('carrinho_aberto', False):
         st.markdown('</div>', unsafe_allow_html=True)
     
     if st.session_state.mostrar_botoes_envio and st.session_state.html_bytes:
-        tipo_cliente_str = "ISENTO" if cliente_isento else "NORMAL"
+        tipo_cliente_str = "NÃO CONTRIBUINTE" if cliente_isento else "NORMAL"
         
         msg_whatsapp = formatar_mensagem_whatsapp(st.session_state.dados_cliente, uf_selecionada, 
                                                    tipo_cliente_str, forma_pagamento, total_final_com_vol,
@@ -2137,6 +2527,7 @@ if st.session_state.get('carrinho_aberto', False):
         
         st.markdown("---")
         st.success("✅ Dados validados com sucesso! Orçamento gerado conforme LGPD.")
+        st.info("💾 Cadastro e histórico salvos automaticamente na planilha!")
         
         col_html, col_wpp, col_voltar = st.columns([1, 1, 1])
         with col_html:
@@ -2165,7 +2556,7 @@ if st.session_state.get('carrinho_aberto', False):
                 st.session_state.mostrar_formulario_cliente = False
                 st.rerun()
         
-        st.caption("📎 *O orçamento completo está disponível para download. Conforme LGPD, seus dados não são armazenados em nosso sistema.*")
+        st.caption("📎 *O orçamento completo está disponível para download. Conforme LGPD, seus dados são armazenados apenas para agilizar futuros atendimentos.*")
 
     st.stop()
 
@@ -2174,7 +2565,7 @@ if st.session_state.get('carrinho_aberto', False):
 # ============================================
 icms_uf         = determinar_icms_por_uf(uf_selecionada)
 tabela_desconto = dados_isento if cliente_isento else dados_normal
-tipo_cliente    = "ISENTO" if cliente_isento else "NORMAL"
+tipo_cliente    = "NÃO CONTRIBUINTE" if cliente_isento else "NORMAL"
 
 dados_filtrados = dados.copy()
 if grupo_escolhido == "Promoção":
@@ -2247,9 +2638,9 @@ with ci3:
         st.success(f"💰 *Condição:* {forma_pagamento} dias")
 with ci4:
     if grupo_escolhido == "Promoção":
-        st.success(f"🏷️ *Grupo:* {grupo_escolhido} - Ofertas!")
+        st.success(f"🏷️ *Família:* {grupo_escolhido} - Ofertas!")
     else:
-        st.info(f"📦 *Grupo:* {grupo_escolhido}")
+        st.info(f"📦 *Família:* {grupo_escolhido}")
 
 st.markdown("---")
 
@@ -2376,7 +2767,7 @@ else:
                 st.markdown("🔷 *IPI:* Não aplicável")
             
             if cliente_isento:
-                st.markdown(f"🟣 *ST ({uf_selecionada}):* Cliente Isento — ST não aplicada")
+                st.markdown(f"🟣 *ST ({uf_selecionada}):* Cliente Não Contribuinte — ST não aplicada")
                 if desconto_volume_atual > 0:
                     novo_total_com_desconto = preco_com_desconto_volume + valor_ipi
                     st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(novo_total_com_desconto)}")
@@ -2494,9 +2885,9 @@ st.markdown("""
 
 st.markdown("""
 <div class='footer-bottom'>
-    © 2026 Luvidarte - Catálogo Virtual |
+    © 2026 Luvidarte - Catálogo Interativo Virtual |
     <em>Os valores são estimativos e sujeitos à confirmação</em><br>
-    <small>Conforme LGPD (Lei 13.709/2018), seus dados são tratados com confidencialidade e não são armazenados.</small>
+    <small>Conforme LGPD (Lei 13.709/2018), seus dados são tratados com confidencialidade e armazenados apenas para agilizar futuros atendimentos.</small>
 </div>
 """, unsafe_allow_html=True)
 
