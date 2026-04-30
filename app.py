@@ -484,7 +484,7 @@ def verificar_tipo_cliente_inicial():
             <strong>Este catálogo é exclusivo para PESSOAS JURÍDICAS (CNPJ).</strong>
             </p>
             <p style='color: #555; margin-top: 15px;'>
-            A LUVidarte atende exclusivamente empresas, revendedores e profissionais do setor.
+            A Luvidarte atende exclusivamente empresas, revendedores e profissionais do setor.
             </p>
             <p style='color: #555; margin-top: 15px;'>
             Caso você seja uma pessoa física e tenha interesse em nossos produtos, 
@@ -689,7 +689,7 @@ def mostrar_politica_privacidade():
     
     with st.expander("📋 POLÍTICA DE PRIVACIDADE - LGPD (Lei 13.709/2018)", expanded=True):
         st.markdown("""
-        ### 🔒 POLÍTICA DE PRIVACIDADE LUVidarte
+        ### 🔒 POLÍTICA DE PRIVACIDADE Luvidarte
         
         ---
         
@@ -716,7 +716,7 @@ def mostrar_politica_privacidade():
         - ✅ **Excluir** seus dados (exceto quando lei exigir)
         - ✅ **Revogar** seu consentimento
         
-        **📧 Canal exclusivo:** `lgpd@luvidarte.com.br`
+        **📧 Canal exclusivo:** `sac@luvidarte.com.br`
         **Prazo de resposta:** Até 15 dias úteis
         
         ---
@@ -734,7 +734,7 @@ def mostrar_politica_privacidade():
         #### **4. QUEM PODE VER SEUS DADOS?**
         
         Seus dados são acessíveis APENAS para:
-        - 👥 Equipe comercial da LUVidarte
+        - 👥 Equipe comercial da Luvidarte
         - 👥 Equipe fiscal (para emissão de notas)
         - 🔒 Google (servidor criptografado)
         
@@ -770,7 +770,7 @@ def mostrar_termos_uso():
     """Exibe os termos de uso"""
     with st.expander("📜 Termos de Uso - Orçamento Virtual"):
         st.markdown("""
-        ### TERMOS DE USO - CATÁLOGO INTERATIVO VIRTUAL LUVidarte
+        ### TERMOS DE USO - CATÁLOGO INTERATIVO VIRTUAL Luvidarte
         
         **1. NATUREZA DO ORÇAMENTO**
         - Este é um ORÇAMENTO VIRTUAL, NÃO uma compra finalizada
@@ -787,7 +787,7 @@ def mostrar_termos_uso():
         - Solicite a exclusão dos seus dados via e-mail: sac@luvidarte.com.br
         
         **5. DISPOSIÇÕES GERAIS**
-        - A LUVidarte se reserva o direito de recusar pedidos
+        - A Luvidarte se reserva o direito de recusar pedidos
         
         ---
         📞 **Dúvidas:** (11) 4676-9000 | sac@luvidarte.com.br
@@ -1116,7 +1116,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>Orçamento LUVidarte - Confidencial</title>
+        <title>Orçamento Luvidarte - Confidencial</title>
         <style>
             body {{ font-family: Arial, sans-serif; margin: 40px; }}
             .header {{ text-align: center; margin-bottom: 30px; }}
@@ -1151,7 +1151,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
         </div>
         
         <div class="header">
-            <h1>LUVidarte - Catálogo Interativo Virtual</h1>
+            <h1>Luvidarte - Catálogo Interativo Virtual</h1>
         </div>
         
         <div class="section">
@@ -1257,7 +1257,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             • Seus dados são tratados com confidencialidade e armazenados conforme consentimento<br>
             • Base legal: Execução de contrato e legítimo interesse (Art. 7º, V e IX)<br>
             • Você pode solicitar a exclusão dos seus dados a qualquer momento<br>
-            • Este documento é de uso exclusivo da LUVidarte e do cliente<br><br>
+            • Este documento é de uso exclusivo da Luvidarte e do cliente<br><br>
             <strong>Seus direitos LGPD (Art. 18):</strong><br>
             • Acesso, correção e eliminação de dados<br>
             • Revogação do consentimento<br>
@@ -1266,7 +1266,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
         </div>
         
         <div class="footer">
-            <p><strong>LUVidarte - Peças exclusivas em vidro e decoração</strong></p>
+            <p><strong>Luvidarte - Peças exclusivas em vidro e decoração</strong></p>
             <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP | CEP: 08533-060</p>
             <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | E-mail: sac@luvidarte.com.br</p>
             <p>---</p>
@@ -1275,7 +1275,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p>A venda será formalizada APENAS após contato e confirmação da nossa equipe via WhatsApp.</p>
             <p><strong>Validade do orçamento: 7 (sete) dias corridos.</strong></p>
             <p>---</p>
-            <p>© 2026 LUVidarte - Todos os direitos reservados | Versão 1.0</p>
+            <p>© 2026 Luvidarte - Todos os direitos reservados | Versão 1.0</p>
         </div>
     </body>
     </html>
@@ -1291,7 +1291,7 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
                                 total_ipi, total_st):
     """Formata a mensagem para WhatsApp com resumo do orçamento e aviso LGPD"""
     
-    msg = "🛍️ NOVO ORÇAMENTO LUVidarte 🛍️\n\n"
+    msg = "🛍️ NOVO ORÇAMENTO Luvidarte 🛍️\n\n"
     msg += "━" * 30 + "\n\n"
     msg += "DADOS DO CLIENTE\n"
     msg += f"🏢 Razão Social: {dados_cliente.get('razao_social', '')}\n"
