@@ -646,7 +646,7 @@ def mostrar_passo_a_passo():
             st.rerun()
 
 def mostrar_politica_privacidade():
-    """Exibe a política de privacidade com imagem de fundo"""
+    """Exibe a política de privacidade com imagem de fundo - VERSÃO LGPD COMPLETA"""
     
     # Carregar imagem para fundo da LGPD
     img_fundo_base64 = ""
@@ -687,52 +687,80 @@ def mostrar_politica_privacidade():
         cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
         st.success(f"✅ CNPJ Validado: {cnpj_mascarado} | Data: {st.session_state.cnpj_validado_data}")
     
-    with st.expander("📋 Política de Privacidade - LGPD (Lei 13.709/2018)", expanded=True):
+    with st.expander("📋 POLÍTICA DE PRIVACIDADE - LGPD (Lei 13.709/2018)", expanded=True):
         st.markdown("""
-        ### POLÍTICA DE PRIVACIDADE LUVidarte
-        
-        **1. DADOS COLETADOS E ARMAZENADOS**
-        - Razão Social
-        - CNPJ
-        - Inscrição Estadual
-        - Endereço completo
-        - E-mail
-        - Telefone/WhatsApp
-        - CEP e UF
-        - Histórico de orçamentos solicitados
-        
-        **2. FINALIDADE DO ARMAZENAMENTO (Art. 7º da LGPD)**
-        Os dados são armazenados para:
-        - Agilizar futuros orçamentos
-        - Histórico de cotações
-        - Emissão de notas fiscais
-        - Cumprimento de obrigações legais
-        
-        **3. BASES LEGAIS (Art. 7º e 11º)**
-        - Execução de contrato (Art. 7º, V)
-        - Legítimo interesse (Art. 7º, IX)
-        - Cumprimento de obrigação legal (Art. 7º, II)
-        
-        **4. RETENÇÃO DOS DADOS**
-        - Seus dados são armazenados em planilha protegida
-        - Acesso restrito a funcionários autorizados
-        - Mantidos conforme necessário para finalidades comerciais
-        
-        **5. SEUS DIREITOS (Art. 18º da LGPD)**
-        - Acesso aos dados armazenados
-        - Correção de dados incompletos
-        - Eliminação de dados (exceto quando exigido por lei)
-        - Revogação do consentimento
-        
-        **6. ENCARREGADO (DPO)**
-        - 📧 E-mail: sac@luvidarte.com.br
-        - 📞 Telefone: (11) 4676-9000
+        ### 🔒 POLÍTICA DE PRIVACIDADE LUVidarte
         
         ---
-        ✅ **Ao clicar em "Aceito e Concordo", você autoriza o armazenamento dos seus dados conforme esta política.**
-        """)
         
-        if st.button("✅ Aceito e Concordo com a Política de Privacidade", key="aceitar_privacidade", use_container_width=True):
+        #### **1. QUAIS DADOS COLETAMOS E PARA QUE SERVEM?**
+        
+        | Dado Coletado | Finalidade Específica |
+        |---------------|------------------------|
+        | **Razão Social** | Identificação para emissão do orçamento e nota fiscal |
+        | **CNPJ** | Obrigatório para emissão de nota fiscal (Lei 8.846/94) |
+        | **Inscrição Estadual** | Necessário para cálculo correto de ICMS e ST |
+        | **Endereço completo** | Calcular frete e verificar ICMS por UF |
+        | **E-mail** | Enviar o orçamento e comunicar novidades (se autorizado) |
+        | **Telefone/WhatsApp** | Contato comercial para finalizar o pedido |
+        | **Histórico de orçamentos** | Agilizar futuras cotações e melhorar atendimento |
+        
+        ---
+        
+        #### **2. SEUS DIREITOS (Art. 18º da LGPD)**
+        
+        Você pode solicitar a qualquer momento, SEM CUSTO:
+        - ✅ **Confirmar** se seus dados estão armazenados
+        - ✅ **Acessar** todos os seus dados
+        - ✅ **Corrigir** dados incompletos ou errados
+        - ✅ **Excluir** seus dados (exceto quando lei exigir)
+        - ✅ **Revogar** seu consentimento
+        
+        **📧 Canal exclusivo:** `lgpd@luvidarte.com.br`
+        **Prazo de resposta:** Até 15 dias úteis
+        
+        ---
+        
+        #### **3. POR QUANTO TEMPO GUARDAMOS SEUS DADOS?**
+        
+        | Tipo de Dado | Prazo de Retenção |
+        |--------------|-------------------|
+        | Dados cadastrais | **2 anos** sem novo orçamento |
+        | Histórico de orçamentos | **2 anos** |
+        | Dados fiscais (CNPJ, IE) | **5 anos** (exigido pela Receita Federal) |
+        
+        ---
+        
+        #### **4. QUEM PODE VER SEUS DADOS?**
+        
+        Seus dados são acessíveis APENAS para:
+        - 👥 Equipe comercial da LUVidarte
+        - 👥 Equipe fiscal (para emissão de notas)
+        - 🔒 Google (servidor criptografado)
+        
+        **NUNCA compartilhamos** com empresas de marketing ou terceiros.
+        
+        ---
+        
+        #### **5. ENCARREGADO (DPO)**
+        
+        | Canal | Contato |
+        |-------|---------|
+        | **E-mail** | `dpo@luvidarte.com.br` |
+        | **Telefone** | (11) 4676-9000 |
+        
+        ---
+        
+        <div style='background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin-top: 15px;'>
+        <strong>✅ PARA ACEITAR ESTA POLÍTICA, VOCÊ CONCORDA QUE:</strong><br><br>
+        • Leu e compreendeu todas as cláusulas acima<br>
+        • Autoriza a coleta e armazenamento dos seus dados conforme descrito<br>
+        • Conhece seus direitos de acesso, correção e exclusão<br><br>
+        <small>Data da última atualização: 30/04/2026 - Versão 2.0 (LGPD)</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("✅ ACEITO E CONCORDO COM A POLÍTICA DE PRIVACIDADE", key="aceitar_privacidade", use_container_width=True):
             st.session_state.privacidade_aceita = True
             st.session_state.consentimento_data = formatar_data_brasil()
             st.session_state.mostrar_lgpd = False
@@ -2074,15 +2102,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div class='contato-central'>
-    📍 Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP &nbsp;|&nbsp;
-    📞 (11) 4676-9000 &nbsp;|&nbsp;
-    💬 (11) 93011-9335 &nbsp;|&nbsp;
-    ✉️ sac@luvidarte.com.br &nbsp;|&nbsp;
-    🔒 DPO: sac@luvidarte.com.br
-</div>
-""", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -2875,8 +2894,20 @@ st.markdown("""
 
 st.markdown("""
 <div class='contact-footer'>
-    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br | 🔒 DPO: sac@luvidarte.com.br
+    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br | 🔒 DPO: dpo@luvidarte.com.br | 🔒 LGPD: lgpd@luvidarte.com.br
 </div>""", unsafe_allow_html=True)
+
+# NOVA SEÇÃO DE DIREITOS LGPD
+st.markdown("""
+<div style='text-align: center; padding: 15px; margin-top: 10px; border-top: 1px solid #ddd;'>
+    <p style='font-size: 12px; color: #666;'>
+        🔒 <strong>LGPD - Lei 13.709/2018</strong><br>
+        Seus direitos: <strong>acesso, correção, exclusão e portabilidade</strong> dos dados<br>
+        📧 Solicitações: <strong>lgpd@luvidarte.com.br</strong> | DPO: <strong>dpo@luvidarte.com.br</strong><br>
+        ⏱️ Prazo de resposta: <strong>15 dias úteis</strong>
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown("""
 <div class='footer-bottom'>
@@ -2885,6 +2916,18 @@ st.markdown("""
     <small>Conforme LGPD (Lei 13.709/2018), seus dados são tratados com confidencialidade e armazenados apenas para agilizar futuros atendimentos.</small>
 </div>
 """, unsafe_allow_html=True)
+
+def mostrar_direitos_lgpd_rodape():
+    st.markdown("""
+    <div style='text-align: center; padding: 15px; margin-top: 20px; border-top: 1px solid #ddd;'>
+        <p style='font-size: 12px; color: #666;'>
+            🔒 <strong>LGPD - Lei 13.709/2018</strong><br>
+            Seus direitos: <strong>acesso, correção, exclusão e portabilidade</strong> dos dados<br>
+            📧 Solicitações: <strong>lgpd@luvidarte.com.br</strong> | DPO: <strong>dpo@luvidarte.com.br</strong><br>
+            ⏱️ Prazo de resposta: <strong>15 dias úteis</strong>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ============================================
 # WHATSAPP FLUTUANTE
