@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import pytz
 import re
 import os
+from io import BytesIO
 
 # ============================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -68,6 +69,20 @@ def converter_valor_para_numero(valor_str):
         valor_numero = float(valor_limpo)
     
     return round(valor_numero, 2)
+
+# ============================================
+# FUNÇÃO DE EXPORTAÇÃO
+# ============================================
+def converter_para_excel(df):
+    """Converte DataFrame para Excel em memória"""
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Orçamentos')
+    return output.getvalue()
+
+def converter_para_csv(df):
+    """Converte DataFrame para CSV em memória"""
+    return df.to_csv(index=False).encode('utf-8')
 
 # ============================================
 # CONEXÃO COM GOOGLE SHEETS
@@ -305,35 +320,12 @@ st.markdown("""
         color: #059669;
     }
     
-    /* Orçamentos */
-    .orcamento-item {
-        background: white;
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 10px;
-        border: 1px solid #E2E8F0;
-        transition: all 0.2s;
-    }
-    .orcamento-item:hover {
-        border-color: #CBD5E1;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    }
-    .orcamento-cliente {
-        font-weight: 600;
-        color: #0F172A;
-    }
-    .orcamento-detalhes {
-        font-size: 12px;
-        color: #64748B;
-        margin-top: 4px;
+    /* Export buttons */
+    .export-buttons {
         display: flex;
-        gap: 16px;
-    }
-    .orcamento-valor {
-        font-weight: 700;
-        color: #059669;
-        font-size: 16px;
-        text-align: right;
+        gap: 12px;
+        margin-bottom: 20px;
+        justify-content: flex-end;
     }
     
     /* Footer */
@@ -390,7 +382,6 @@ def criar_mapa_brasil(df):
     
     fig = go.Figure()
     
-    # Calcular tamanho dos marcadores
     valores = [d['valor'] for d in mapa_dados]
     max_valor = max(valores) if valores else 1
     min_size = 15
@@ -602,8 +593,6 @@ def main():
         mapa = criar_mapa_brasil(df_filtrado)
         if mapa:
             st.plotly_chart(mapa, use_container_width=True)
-        else:
-            st.info("Mapa não disponível para os dados atuais")
         
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -611,9 +600,7 @@ def main():
         df_uf = df_filtrado.groupby('UF')['VALOR_NUM'].sum().reset_index()
         df_uf = df_uf.sort_values('VALOR_NUM', ascending=False)
         
-        # Determinar número de colunas (máximo 4 por linha)
         cols = st.columns(4)
-        
         for i, row in df_uf.iterrows():
             percentual = (row['VALOR_NUM'] / valor_total * 100) if valor_total > 0 else 0
             with cols[i % 4]:
@@ -649,31 +636,74 @@ def main():
     
     st.markdown("---")
     
-    # ÚLTIMOS ORÇAMENTOS
-    st.markdown("<div class='section-title'><span></span>📋 Últimos Orçamentos</div>", unsafe_allow_html=True)
+    # TABELA COMPLETA DE ORÇAMENTOS COM EXPORTAÇÃO
+    st.markdown("<div class='section-title'><span></span>📋 Todos os Orçamentos</div>", unsafe_allow_html=True)
     
-    if not df_filtrado.empty:
-        if 'DATA_CONVERTIDA' in df_filtrado.columns:
-            ultimos = df_filtrado.sort_values('DATA_CONVERTIDA', ascending=False).head(5)
-        else:
-            ultimos = df_filtrado.head(5)
-        
-        for _, row in ultimos.iterrows():
-            st.markdown(f"""
-            <div class='orcamento-item'>
-                <div style='display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;'>
-                    <div>
-                        <div class='orcamento-cliente'>{row['RAZÃO SOCIAL']}</div>
-                        <div class='orcamento-detalhes'>
-                            <span>📅 {row['DATA']}</span>
-                            <span>📍 {row['UF'] if 'UF' in row else '-'}</span>
-                            <span>💳 {row['FORMA_PAGAMENTO'] if 'FORMA_PAGAMENTO' in row else '-'}</span>
-                        </div>
-                    </div>
-                    <div class='orcamento-valor'>{row['VALOR_EXIBICAO']}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    # Botões de exportação
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 4])
+    
+    with col_btn1:
+        # Botão para exportar Excel
+        excel_data = converter_para_excel(df_filtrado)
+        st.download_button(
+            label="📊 Exportar Excel",
+            data=excel_data,
+            file_name=f"orcamentos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    
+    with col_btn2:
+        # Botão para exportar CSV
+        csv_data = converter_para_csv(df_filtrado)
+        st.download_button(
+            label="📄 Exportar CSV",
+            data=csv_data,
+            file_name=f"orcamentos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Preparar DataFrame para exibição
+    df_exibicao = df_filtrado.copy()
+    
+    # Selecionar e renomear colunas para exibição
+    colunas_exibicao = {
+        'DATA': 'Data',
+        'RAZÃO SOCIAL': 'Cliente',
+        'CNPJ': 'CNPJ',
+        'UF': 'UF',
+        'VALOR_EXIBICAO': 'Valor',
+        'FORMA_PAGAMENTO': 'Pagamento',
+        'QTD_ITENS': 'Qtd Itens',
+        'TIPO_CLIENTE': 'Tipo Cliente'
+    }
+    
+    # Filtrar apenas colunas que existem
+    colunas_presentes = [col for col in colunas_exibicao.keys() if col in df_exibicao.columns]
+    df_exibicao = df_exibicao[colunas_presentes]
+    df_exibicao = df_exibicao.rename(columns={k: v for k, v in colunas_exibicao.items() if k in colunas_presentes})
+    
+    # Ordenar por data (mais recente primeiro)
+    if 'DATA' in df_exibicao.columns:
+        df_exibicao = df_exibicao.sort_values('DATA', ascending=False)
+    
+    # Mostrar tabela completa com paginação
+    st.dataframe(
+        df_exibicao,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Valor": st.column_config.TextColumn("Valor", width="small"),
+            "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
+            "CNPJ": st.column_config.TextColumn("CNPJ", width="small"),
+        }
+    )
+    
+    # Informação de quantos registros
+    st.caption(f"📊 Total de {len(df_exibicao)} registros encontrados")
     
     # RODAPÉ
     st.markdown("""
