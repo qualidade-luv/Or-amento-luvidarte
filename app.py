@@ -2959,15 +2959,19 @@ st.markdown(gerar_botao_desconto_flutuante(), unsafe_allow_html=True)
 if dados_filtrados.empty:
     st.warning("😕 Nenhum produto encontrado.")
 else:
+    # Inicializar variáveis de desconto
     desconto_volume_atual = 0
-    valor_base_carrinho = 0
-    if st.session_state.carrinho:
-        valor_base_carrinho = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-        desconto_volume_atual = calcular_desconto_volume(valor_base_carrinho)
+    try:
+        if st.session_state.carrinho:
+            valor_base_carrinho = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
+            desconto_volume_atual = calcular_desconto_volume(valor_base_carrinho)
+    except:
+        desconto_volume_atual = 0
     
     colunas = st.columns(3)
 
     for posicao, (indice, produto) in enumerate(dados_pagina.iterrows()):
+        # ... resto do código do grid permanece igual ...
         is_promo    = 'SIM' in str(produto.get('Promo', '')).strip().upper()
         preco_promo = None
         if is_promo and not dados_promo.empty:
