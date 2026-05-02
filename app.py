@@ -17,6 +17,14 @@ import pytz
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+import os
+import traceback
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
@@ -33,6 +41,282 @@ SESSION_TIMEOUT = 1800  # 30 minutos
 
 # Configurar timezone do Brasil
 TIMEZONE_BR = pytz.timezone('America/Sao_Paulo')
+
+# ============================================
+# CONFIGURAÇÃO DE E-MAIL DO ORÇAMENTO
+# ============================================
+
+EMAIL_CONFIG_ORCAMENTO = {
+    "usuario": "erp@luvidarte.com.br",
+    "senha": "Qualidade123#",
+    "destinatario": "qualidade@luvidarte.com.br",  # APENAS este e-mail
+    "smtp_server": "email-ssl.com.br",
+    "smtp_port": 465
+}
+
+def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes, nome_arquivo):
+    """
+    Envia e-mail com o orçamento anexado para qualidade@luvidarte.com.br
+    SEM exibir mensagens de sucesso na interface
+    """
+    try:
+        usuario = EMAIL_CONFIG_ORCAMENTO["usuario"]
+        senha = EMAIL_CONFIG_ORCAMENTO["senha"]
+        destinatario = EMAIL_CONFIG_ORCAMENTO["destinatario"]  # APENAS UM destinatário
+        smtp_server = EMAIL_CONFIG_ORCAMENTO["smtp_server"]
+        smtp_port = EMAIL_CONFIG_ORCAMENTO["smtp_port"]
+        
+        # Criar mensagem
+        msg = MIMEMultipart()
+        msg['From'] = usuario
+        msg['To'] = destinatario  # Único destinatário
+        msg['Subject'] = f"🛍️ NOVO ORÇAMENTO Luvidarte - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        
+        # ... resto da função igual ...
+        
+        # Calcular quantidade total de itens
+        qtd_total = sum(item.get('quantidade', 0) for item in itens_resumo)
+        
+        # Corpo do e-mail (HTML)
+        corpo_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }}
+                .container {{ max-width: 800px; margin: 0 auto; background-color: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                .header {{ background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white; padding: 20px; text-align: center; }}
+                .header h1 {{ margin: 0; font-size: 24px; }}
+                .header p {{ margin: 5px 0 0; opacity: 0.9; }}
+                .content {{ padding: 20px; }}
+                .section {{ margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }}
+                .section-title {{ color: #2E7D32; font-weight: bold; font-size: 18px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }}
+                .info-table {{ width: 100%; border-collapse: collapse; }}
+                .info-table td {{ padding: 8px; border-bottom: 1px solid #f0f0f0; }}
+                .info-table td:first-child {{ font-weight: bold; width: 35%; background-color: #f9f9f9; }}
+                .items-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+                .items-table th {{ background-color: #2E7D32; color: white; padding: 10px; text-align: left; font-size: 13px; }}
+                .items-table td {{ padding: 8px; border-bottom: 1px solid #ddd; font-size: 13px; }}
+                .items-table tr:hover {{ background-color: #f5f5f5; }}
+                .total-box {{ background: linear-gradient(135deg, #FFF9E6, #FFF3E0); padding: 15px; border-radius: 8px; margin: 15px 0; text-align: center; }}
+                .total-value {{ font-size: 28px; font-weight: bold; color: #D32F2F; }}
+                .footer {{ background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 11px; color: #666; }}
+                .badge {{ display: inline-block; background-color: #4CAF50; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; }}
+                .alert {{ background-color: #FFF3E0; border-left: 4px solid #FF9800; padding: 10px; margin: 15px 0; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🛍️ Luvidarte - Novo Orçamento</h1>
+                    <p>Gerado em: {formatar_data_brasil()}</p>
+                </div>
+                
+                <div class="content">
+                    <div class="section">
+                        <div class="section-title">
+                            <span>📋</span> DADOS DO CLIENTE
+                        </div>
+                        <table class="info-table">
+                            <tr><td>Razão Social:</td><td><strong>{dados_cliente.get('razao_social', 'NÃO INFORMADO')}</strong></td></tr>
+                            <tr><td>CNPJ/CPF:</td><td>{dados_cliente.get('cnpj', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>Inscrição Estadual:</td><td>{dados_cliente.get('inscricao_estadual', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>E-mail:</td><td>{dados_cliente.get('email', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>Telefone:</td><td>{dados_cliente.get('telefone', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>Endereço:</td><td>{dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')} - {dados_cliente.get('bairro', '')}</td></tr>
+                            <tr><td>CEP:</td><td>{dados_cliente.get('cep', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>UF:</td><td><span class="badge">{dados_cliente.get('uf', 'NÃO INFORMADO')}</span></td></tr>
+                        </table>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">
+                            <span>💰</span> RESUMO DO ORÇAMENTO
+                        </div>
+                        <div class="total-box">
+                            <div style="font-size: 14px; color: #666;">TOTAL DO ORÇAMENTO</div>
+                            <div class="total-value">{formatar_moeda(valor_total)}</div>
+                            <div style="font-size: 12px; color: #666; margin-top: 5px;">📦 {qtd_total} item(ns) | ✅ Validade: 7 dias</div>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">
+                            <span>🛍️</span> ITENS DO ORÇAMENTO
+                        </div>
+                        <table class="items-table">
+                            <thead>
+                                <tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Valor Unit.</th><th>Subtotal</th></tr>
+                            </thead>
+                            <tbody>
+        """
+        
+        for item in itens_resumo:
+            preco = item.get('preco_final', 0)
+            qtd = item.get('quantidade', 0)
+            subtotal = preco * qtd
+            descricao = item.get('descricao', '')[:60]
+            referencia = item.get('referencia', '')
+            
+            corpo_html += f"""
+                                <tr>
+                                    <td>{referencia}</td>
+                                    <td>{descricao}</td>
+                                    <td style="text-align:center">{qtd}</td>
+                                    <td style="text-align:right">{formatar_moeda(preco)}</td>
+                                    <td style="text-align:right">{formatar_moeda(subtotal)}</td>
+                                </tr>
+            """
+        
+        corpo_html += f"""
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="alert">
+                        <strong>🔒 LGPD - Lei 13.709/2018</strong><br>
+                        Os dados do cliente são tratados com confidencialidade e armazenados apenas para fins comerciais.<br>
+                        O cliente tem direito a acesso, correção e exclusão de seus dados a qualquer momento.<br>
+                        <strong>DPO:</strong> dpo@luvidarte.com.br
+                    </div>
+                    
+                    <div class="alert" style="border-left-color: #D32F2F; background-color: #FFEBEE;">
+                        <strong>⚠️ AVISO IMPORTANTE</strong><br>
+                        Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.<br>
+                        Os valores são estimativas e sujeitos à confirmação de estoque e disponibilidade.<br>
+                        A venda será formalizada APENAS após contato e confirmação da equipe Luvidarte.
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p><strong>Luvidarte - Peças exclusivas em vidro e decoração</strong></p>
+                    <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP | CEP: 08533-060</p>
+                    <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | E-mail: sac@luvidarte.com.br</p>
+                    <p>© 2026 Luvidarte - Todos os direitos reservados</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(corpo_html, 'html'))
+        
+        # Anexar arquivo (se houver)
+        if anexo_bytes and len(anexo_bytes) > 0:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(anexo_bytes)
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
+            msg.attach(part)
+        
+        # Enviar e-mail
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
+            server.login(usuario, senha)
+            server.send_message(msg)
+        
+        return True, ""
+        
+    except Exception as e:
+        return False, str(e)
+
+# ============================================
+# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS - CORRIGIDO
+# ============================================
+
+def carregar_notificacoes_google_sheets():
+    """Carrega notificações da aba NOTIFICACAO do Google Sheets"""
+    try:
+        cliente = conectar_google_sheets()
+        if not cliente:
+            return []
+        
+        # Abrir a planilha
+        planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
+        
+        # Tentar acessar a aba NOTIFICACAO
+        try:
+            aba_notificacao = planilha.worksheet("NOTIFICACAO")
+        except Exception as e:
+            # Se não existir, criar a aba
+            try:
+                aba_notificacao = planilha.add_worksheet(title="NOTIFICACAO", rows="100", cols="4")
+                cabecalho = ["MENSAGEM", "DATA_CRIACAO", "ATIVA", "TIPO"]
+                aba_notificacao.append_row(cabecalho)
+                return []
+            except:
+                return []
+        
+        # Buscar todas as linhas
+        todas_linhas = aba_notificacao.get_all_values()
+        
+        notificacoes = []
+        for i, linha in enumerate(todas_linhas):
+            if i == 0:  # Pular cabeçalho
+                continue
+            
+            # Verificar se tem mensagem na coluna A
+            if len(linha) >= 1 and linha[0] and str(linha[0]).strip():
+                mensagem = str(linha[0]).strip()
+                
+                # Verificar se está ativa (Coluna C - índice 2)
+                ativa = False
+                if len(linha) >= 3 and linha[2]:
+                    valor_ativa = str(linha[2]).strip().lower()
+                    # Aceitar: sim, true, ativa, 1, s, yes
+                    ativa = valor_ativa in ['sim', 'true', 'ativa', '1', 's', 'yes']
+                
+                # Se não estiver ativa, pular
+                if not ativa:
+                    continue
+                
+                # Tipo da notificação (Coluna D - índice 3) - caso não tenha, padrão 'info'
+                tipo = "info"
+                if len(linha) >= 4 and linha[3]:
+                    tipo = str(linha[3]).strip().lower()
+                    # Mapear "alerta" para "warning"
+                    if tipo == "alerta":
+                        tipo = "warning"
+                    elif tipo == "sucesso":
+                        tipo = "success"
+                
+                notificacoes.append({
+                    'mensagem': mensagem,
+                    'tipo': tipo
+                })
+        
+        return notificacoes
+        
+    except Exception as e:
+        return []
+
+def exibir_notificacoes():
+    """Exibe as notificações como pop-ups na tela principal"""
+    try:
+        notificacoes = carregar_notificacoes_google_sheets()
+        
+        if not notificacoes:
+            return
+        
+        # Gerar hash das notificações
+        hash_notificacoes = hashlib.md5(str(notificacoes).encode()).hexdigest()
+        
+        # Verificar se já exibimos
+        if st.session_state.get('ultimo_hash_notificacoes') != hash_notificacoes:
+            st.session_state.ultimo_hash_notificacoes = hash_notificacoes
+            
+            for notif in notificacoes:
+                if notif['tipo'] == 'success':
+                    st.success(f"🎉 {notif['mensagem']}")
+                elif notif['tipo'] == 'error':
+                    st.error(f"❌ {notif['mensagem']}")
+                elif notif['tipo'] == 'warning':
+                    st.warning(f"⚠️ {notif['mensagem']}")  # Alerta em laranja
+                else:
+                    st.info(f"ℹ️ {notif['mensagem']}")
+    except Exception as e:
+        pass
 
 # ============================================
 # CONFIGURAÇÃO DO GOOGLE SHEETS
@@ -68,8 +352,6 @@ def conectar_google_sheets():
                     "client_x509_cert_url": st.secrets["google"].get("client_x509_cert_url", "")
                 }
                 credenciais_dict = {k: v for k, v in credenciais_dict.items() if v}
-                if credenciais_dict.get('private_key'):
-                    st.info("🔐 Usando credenciais do Streamlit Secrets")
         except Exception as e:
             pass
         
@@ -78,19 +360,13 @@ def conectar_google_sheets():
             try:
                 with open('credentials.json', 'r') as f:
                     credenciais_dict = json.load(f)
-                st.info("📁 Usando credenciais do arquivo credentials.json")
             except FileNotFoundError:
                 pass
             except Exception as e:
-                st.warning(f"⚠️ Erro ao ler credentials.json: {str(e)[:100]}")
+                pass
         
         # 3. VERIFICAR SE TEM CREDENCIAIS
         if not credenciais_dict or not credenciais_dict.get('private_key'):
-            st.error("❌ Credenciais não encontradas!")
-            st.info("""
-            **Para resolver:**
-            - Coloque o arquivo `credentials.json` na mesma pasta do app.py
-            """)
             return None
         
         # 4. CONECTAR
@@ -100,24 +376,18 @@ def conectar_google_sheets():
         # 5. TESTAR CONEXÃO
         try:
             test_planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
-            st.success(f"✅ Conectado à planilha: {test_planilha.title}")
             return cliente
         except Exception as e:
-            st.error(f"❌ Erro ao acessar planilha: {str(e)}")
-            st.info("Verifique se a planilha foi compartilhada com o e-mail da service account")
             return None
         
     except Exception as e:
-        st.error(f"❌ Erro na conexão: {str(e)}")
         return None
-
 
 def salvar_cadastro_cliente(dados_cliente):
     """Salva os dados do cliente na planilha Cadastro_Virtual (aba Cadastro)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
-            st.warning("⚠️ Não foi possível conectar. Cadastro NÃO salvo.")
             return False
         
         # Abrir a planilha
@@ -141,18 +411,17 @@ def salvar_cadastro_cliente(dados_cliente):
         linha_encontrada = None
         
         for i, linha in enumerate(todas_linhas):
-            if i == 0:  # Pular cabeçalho
+            if i == 0:
                 continue
             if len(linha) > 1:
                 cnpj_linha = re.sub(r'[^0-9]', '', str(linha[1]))
                 if cnpj_linha == cnpj_limpo:
-                    linha_encontrada = i + 1  # +1 porque o índice 0 é linha 1
+                    linha_encontrada = i + 1
                     break
         
         data_atual = formatar_data_brasil().split()[0]
         hora_atual = formatar_data_brasil().split()[1]
         
-        # Preparar dados para salvar
         nova_linha = [
             dados_cliente.get('razao_social', ''),
             dados_cliente.get('cnpj', ''),
@@ -169,43 +438,31 @@ def salvar_cadastro_cliente(dados_cliente):
         ]
         
         if linha_encontrada:
-            # Atualizar linha existente
             for col, valor in enumerate(nova_linha, start=1):
                 try:
                     aba_cadastro.update_cell(linha_encontrada, col, valor)
                 except:
                     pass
-            st.success(f"✅ Cadastro ATUALIZADO: {dados_cliente.get('razao_social', '')}")
         else:
-            # Adicionar nova linha
             aba_cadastro.append_row(nova_linha)
-            st.success(f"✅ Novo CADASTRO salvo: {dados_cliente.get('razao_social', '')}")
         
         return True
         
     except Exception as e:
-        st.error(f"❌ Erro ao salvar cadastro: {str(e)}")
-        import traceback
-        st.error(f"Detalhes: {traceback.format_exc()}")
         return False
-
 
 def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, itens_resumo):
     """Salva o histórico do orçamento na planilha (aba Historico)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
-            st.warning("⚠️ Não foi possível conectar. Histórico NÃO salvo.")
             return False
         
-        # Abrir a planilha
         planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
         
-        # Selecionar a aba Historico
         try:
             aba_historico = planilha.worksheet("Historico")
         except:
-            # Se a aba não existir, criar
             aba_historico = planilha.add_worksheet(title="Historico", rows="10000", cols="20")
             cabecalho = ["DATA", "HORA", "CNPJ", "RAZÃO SOCIAL", "UF", "E-MAIL", "VALOR", 
                         "FORMA_PAGAMENTO", "QTD_ITENS", "TIPO_CLIENTE", "DATA_HORA_COMPLETA"]
@@ -215,9 +472,7 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
         hora_atual = formatar_data_brasil().split()[1]
         data_hora_completa = formatar_data_brasil()
         
-        # Contar quantidade de itens no carrinho
         qtd_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
-        
         tipo_cliente_str = "NÃO CONTRIBUINTE" if st.session_state.get('cliente_isento', False) else "NORMAL"
         
         nova_linha = [
@@ -235,15 +490,10 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
         ]
         
         aba_historico.append_row(nova_linha)
-        st.success(f"✅ Histórico salvo! Orçamento registrado em {data_hora_completa}")
         return True
         
     except Exception as e:
-        st.error(f"❌ Erro ao salvar histórico: {str(e)}")
-        import traceback
-        st.error(f"Detalhes: {traceback.format_exc()}")
         return False
-
 
 def buscar_cadastro_por_cnpj(cnpj):
     """Busca cadastro do cliente pelo CNPJ na planilha"""
@@ -259,14 +509,11 @@ def buscar_cadastro_por_cnpj(cnpj):
         except:
             return None
         
-        # Limpar CNPJ para busca
         cnpj_limpo = re.sub(r'[^0-9]', '', cnpj)
-        
-        # Buscar em todas as linhas
         todas_linhas = aba_cadastro.get_all_values()
         
         for i, linha in enumerate(todas_linhas):
-            if i == 0:  # Pular cabeçalho
+            if i == 0:
                 continue
             if len(linha) > 1:
                 cnpj_linha = re.sub(r'[^0-9]', '', str(linha[1]))
@@ -285,7 +532,6 @@ def buscar_cadastro_por_cnpj(cnpj):
                     }
         return None
     except Exception as e:
-        st.warning(f"⚠️ Erro ao buscar cadastro: {str(e)}")
         return None
 
 # ============================================
@@ -293,11 +539,9 @@ def buscar_cadastro_por_cnpj(cnpj):
 # ============================================
 
 def gerar_id_sessao() -> str:
-    """Gera um ID de sessão único e seguro"""
     return secrets.token_hex(16)
 
 def mascarar_dados_sensiveis(texto: str, tipo: str = 'email') -> str:
-    """Mascara dados sensíveis para logs"""
     if not texto:
         return ''
     if tipo == 'email':
@@ -313,11 +557,9 @@ def mascarar_dados_sensiveis(texto: str, tipo: str = 'email') -> str:
     return '***'
 
 def limpar_dados_sensiveis():
-    """Limpa dados sensíveis do session_state após timeout"""
     if 'ultimo_acesso' in st.session_state:
         tempo_decorrido = (datetime.now() - st.session_state.ultimo_acesso).total_seconds()
         if tempo_decorrido > SESSION_TIMEOUT:
-            # Limpar dados do cliente
             st.session_state.dados_cliente = {}
             st.session_state.form_data = {
                 'razao_social': '',
@@ -331,7 +573,6 @@ def limpar_dados_sensiveis():
                 'cep': ''
             }
             st.session_state.carrinho = []
-            st.warning("🔒 Sessão expirada por segurança. Seus dados foram removidos.")
             return True
     st.session_state.ultimo_acesso = datetime.now()
     return False
@@ -340,11 +581,9 @@ def limpar_dados_sensiveis():
 # FUNÇÃO PARA OBTER HORÁRIO LOCAL DO BRASIL
 # ============================================
 def get_horario_brasil():
-    """Retorna a data e hora atual no fuso horário do Brasil"""
     return datetime.now(TIMEZONE_BR)
 
 def formatar_data_brasil():
-    """Formata a data e hora atual no padrão brasileiro"""
     agora = get_horario_brasil()
     return agora.strftime('%d/%m/%Y %H:%M:%S')
 
@@ -352,36 +591,27 @@ def formatar_data_brasil():
 # FUNÇÃO PARA VALIDAR CNPJ
 # ============================================
 def validar_cnpj(cnpj):
-    """Valida se o CNPJ é válido"""
     cnpj = re.sub(r'[^0-9]', '', str(cnpj))
     if len(cnpj) != 14:
         return False
-    
-    # Verificar se todos os dígitos são iguais
     if len(set(cnpj)) == 1:
         return False
-    
-    # Calcular primeiro dígito verificador
     peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
     digito1 = 11 - (soma1 % 11)
     if digito1 >= 10:
         digito1 = 0
-    
-    # Calcular segundo dígito verificador
     peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
     digito2 = 11 - (soma2 % 11)
     if digito2 >= 10:
         digito2 = 0
-    
     return int(cnpj[12]) == digito1 and int(cnpj[13]) == digito2
 
 # ============================================
 # FUNÇÃO PARA VALIDAR EMAIL
 # ============================================
 def validar_email(email):
-    """Valida se o email tem formato correto"""
     padrao = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(padrao, email) is not None
 
@@ -389,7 +619,6 @@ def validar_email(email):
 # FUNÇÃO PARA VALIDAR TELEFONE
 # ============================================
 def validar_telefone(telefone):
-    """Valida se o telefone tem formato correto"""
     telefone = re.sub(r'[^0-9]', '', str(telefone))
     return len(telefone) >= 10 and len(telefone) <= 11
 
@@ -397,7 +626,6 @@ def validar_telefone(telefone):
 # FUNÇÃO PARA VALIDAR CEP
 # ============================================
 def validar_cep(cep):
-    """Valida se o CEP tem formato correto"""
     cep = re.sub(r'[^0-9]', '', str(cep))
     return len(cep) == 8
 
@@ -405,9 +633,6 @@ def validar_cep(cep):
 # TELA DE VALIDAÇÃO INICIAL (PESSOA FÍSICA vs JURÍDICA)
 # ============================================
 def verificar_tipo_cliente_inicial():
-    """Verifica se o usuário já selecionou o tipo de cliente"""
-    
-    # Carregar imagem de fundo
     img_fundo_base64 = ""
     try:
         with open("Frontpage.jpeg", "rb") as f:
@@ -473,7 +698,6 @@ def verificar_tipo_cliente_inicial():
             st.session_state.aguardando_cnpj = True
             st.rerun()
     
-    # Se for Pessoa Física, mostrar mensagem de bloqueio
     if st.session_state.get('pessoa_fisica_recusada', False):
         st.markdown("---")
         st.markdown("""
@@ -508,7 +732,6 @@ def verificar_tipo_cliente_inicial():
         
         st.stop()
     
-    # Se estiver aguardando CNPJ
     if st.session_state.get('aguardando_cnpj', False):
         st.markdown("---")
         st.markdown("""
@@ -534,7 +757,6 @@ def verificar_tipo_cliente_inicial():
             st.caption("• Você pode solicitar a exclusão dos seus dados a qualquer momento")
             st.caption("• DPO para questões LGPD: sac@luvidarte.com.br")
             
-            # Botão para buscar cadastro existente
             if cnpj_input:
                 cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_input)
                 if len(cnpj_limpo) == 14:
@@ -561,7 +783,6 @@ def verificar_tipo_cliente_inicial():
                     st.session_state.acesso_autorizado = True
                     st.session_state.mostrar_lgpd = True
                     
-                    # Buscar cadastro existente para pré-preencher
                     cadastro = buscar_cadastro_por_cnpj(cnpj_limpo)
                     if cadastro:
                         st.session_state.cadastro_precarregado = cadastro
@@ -574,7 +795,6 @@ def verificar_tipo_cliente_inicial():
         
         st.stop()
     
-    # Primeira vez, apenas mostrar tela inicial
     if 'acesso_autorizado' not in st.session_state:
         st.stop()
     
@@ -584,7 +804,6 @@ def verificar_tipo_cliente_inicial():
 # PASSOS DO SISTEMA
 # ============================================
 def mostrar_passo_a_passo():
-    """Exibe um tutorial passo a passo do sistema"""
     with st.sidebar.expander("📖 PASSO A PASSO - Como usar", expanded=False):
         st.markdown("""
         ### 🎯 Guia Rápido do Sistema - Catálogo Interativo Virtual
@@ -646,9 +865,6 @@ def mostrar_passo_a_passo():
             st.rerun()
 
 def mostrar_politica_privacidade():
-    """Exibe a política de privacidade com imagem de fundo - VERSÃO LGPD COMPLETA"""
-    
-    # Carregar imagem para fundo da LGPD
     img_fundo_base64 = ""
     try:
         with open("Frontpage.jpeg", "rb") as f:
@@ -656,7 +872,6 @@ def mostrar_politica_privacidade():
     except:
         pass
     
-    # Adicionar fundo na tela LGPD
     if img_fundo_base64:
         st.markdown(f"""
         <style>
@@ -682,7 +897,6 @@ def mostrar_politica_privacidade():
         </style>
         """, unsafe_allow_html=True)
     
-    # Mostrar CNPJ validado
     if st.session_state.get('cnpj_validado'):
         cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
         st.success(f"✅ CNPJ Validado: {cnpj_mascarado} | Data: {st.session_state.cnpj_validado_data}")
@@ -767,7 +981,6 @@ def mostrar_politica_privacidade():
             st.rerun()
 
 def mostrar_termos_uso():
-    """Exibe os termos de uso"""
     with st.expander("📜 Termos de Uso - Orçamento Virtual"):
         st.markdown("""
         ### TERMOS DE USO - CATÁLOGO INTERATIVO VIRTUAL Luvidarte
@@ -798,8 +1011,6 @@ def mostrar_termos_uso():
 # ============================================
 
 def obter_consentimento_lgpd() -> bool:
-    """Verifica se o usuário já consentiu com a LGPD"""
-    
     if st.session_state.get('mostrar_lgpd', True) and 'privacidade_aceita' not in st.session_state:
         st.session_state.privacidade_aceita = False
     
@@ -808,7 +1019,6 @@ def obter_consentimento_lgpd() -> bool:
         mostrar_termos_uso()
         return False
     
-    # Após aceitar, restaurar o fundo normal
     img_fundo_base64 = ""
     try:
         with open("Frontpage.jpeg", "rb") as f:
@@ -843,7 +1053,6 @@ def obter_consentimento_lgpd() -> bool:
 # FUNÇÃO PARA FORMATAR MOEDA (PADRÃO BRASILEIRO)
 # ============================================
 def formatar_moeda(valor):
-    """Formata valor para moeda brasileira: R$ 49.984,56"""
     if valor is None or valor == 0:
         return "R$ 0,00"
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -852,7 +1061,6 @@ def formatar_moeda(valor):
 # FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME
 # ============================================
 def calcular_desconto_volume(valor_base):
-    """Calcula o percentual de desconto por volume baseado no valor base"""
     if valor_base >= 4000:
         return 0.15
     elif valor_base >= 2500:
@@ -861,7 +1069,6 @@ def calcular_desconto_volume(valor_base):
         return 0.0
 
 def calcular_faltante_para_desconto(valor_base):
-    """Calcula o valor faltante para o próximo desconto"""
     if valor_base < 2500:
         return 2500 - valor_base, 10
     elif valor_base < 4000:
@@ -870,9 +1077,6 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 def gerar_botao_desconto_flutuante():
-    """Gera o HTML/CSS para o botão flutuante de desconto"""
-    
-    # Calcular valores atuais do carrinho
     if st.session_state.carrinho:
         valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
         desconto_percentual = calcular_desconto_volume(valor_base_total)
@@ -897,7 +1101,6 @@ def gerar_botao_desconto_flutuante():
             icone = "📈"
             texto_desconto = "0% OFF"
         
-        # Calcular barra de progresso
         if valor_base_total >= 4000:
             progresso = 100
         elif valor_base_total >= 2500:
@@ -906,7 +1109,6 @@ def gerar_botao_desconto_flutuante():
             progresso = (valor_base_total / 2500) * 75
         
         progresso = min(100, max(0, progresso))
-        
     else:
         mensagem = "💰 Adicione produtos para ganhar desconto por volume!"
         faltante = 2500
@@ -916,7 +1118,6 @@ def gerar_botao_desconto_flutuante():
         texto_desconto = "0% OFF"
         progresso = 0
     
-    # HTML do botão flutuante
     html = f"""
     <style>
     @keyframes slideInRight {{
@@ -1069,19 +1270,10 @@ def gerar_botao_desconto_flutuante():
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
 def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
-    """Aplica o desconto por volume no item e recalcula IPI e ST proporcionalmente"""
-    # Valor base do item (preço final com desconto da condição de pagamento)
     valor_base_item = item['preco_final']
-    
-    # Aplicar desconto por volume no valor base
     valor_com_desconto_volume = valor_base_item * (1 - desconto_volume_percentual)
-    
-    # Recalcular IPI e ST proporcionalmente ao novo valor base
-    # Manter a mesma alíquota efetiva
     novo_valor_ipi = valor_com_desconto_volume * item['ipi_percentual']
     novo_valor_st = valor_com_desconto_volume * item['st_aliquota']
-    
-    # Novo total do item
     novo_total_geral = valor_com_desconto_volume + novo_valor_ipi + novo_valor_st
     
     return {
@@ -1097,18 +1289,15 @@ def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
 def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_pagamento, 
                          desconto_volume_percentual, valor_base_total, valor_desconto_volume,
                          total_final, total_ipi, total_st):
-    """Gera um HTML com o orçamento detalhado"""
     
     novo_valor_base = valor_base_total - valor_desconto_volume
     
-    # Calcular fator de proporcionalidade para IPI e ST
     if valor_base_total > 0:
         fator_ipi_st = novo_valor_base / valor_base_total
     else:
         fator_ipi_st = 0
     
-    # Adicionar aviso de confidencialidade
-    data_geracao = formatar_data_brasil()  # USAR HORÁRIO LOCAL BRASIL
+    data_geracao = formatar_data_brasil()
     id_documento = hashlib.sha256(f"{dados_cliente.get('cnpj', '')}{data_geracao}".encode()).hexdigest()[:8]
     
     html_content = f"""
@@ -1199,27 +1388,19 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     total_geral_exibido = 0
     
     for item in itens_carrinho:
-        # Valor base do item (já com desconto da condição de pagamento)
         valor_base_item = item['preco_final']
-        
-        # Aplicar desconto por volume no valor base do item
         valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
-        
-        # Recalcular IPI e ST de cada item proporcionalmente
         aliquota_ipi_item = item['valor_ipi'] / valor_base_item if valor_base_item > 0 else 0
         aliquota_st_item = item['valor_st'] / valor_base_item if valor_base_item > 0 else 0
         
-        # Aplicar as alíquotas sobre o novo valor base
         novo_ipi_unitario = valor_com_desconto_item * aliquota_ipi_item
         novo_st_unitario = valor_com_desconto_item * aliquota_st_item
         
-        # Totais do item
         subtotal_item = valor_com_desconto_item * item['quantidade']
         ipi_total_item = novo_ipi_unitario * item['quantidade']
         st_total_item = novo_st_unitario * item['quantidade']
         total_item = (valor_com_desconto_item + novo_ipi_unitario + novo_st_unitario) * item['quantidade']
         
-        # Acumular para verificação
         total_ipi_exibido += ipi_total_item
         total_st_exibido += st_total_item
         total_geral_exibido += total_item
@@ -1262,7 +1443,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             • Acesso, correção e eliminação de dados<br>
             • Revogação do consentimento<br>
             • Portabilidade de dados<br><br>
-            <strong>Encarregado (DPO):</strong> sac@luvidarte.com.br | (11) 4676-9000
+            <strong>Encarregado (DPO):</strong> dpo@luvidarte.com.br | (11) 4676-9000
         </div>
         
         <div class="footer">
@@ -1275,7 +1456,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p>A venda será formalizada APENAS após contato e confirmação da nossa equipe via WhatsApp.</p>
             <p><strong>Validade do orçamento: 7 (sete) dias corridos.</strong></p>
             <p>---</p>
-            <p>© 2026 Luvidarte - Todos os direitos reservados | Versão 1.0</p>
+            <p>© 2026 Luvidarte - Todos os direitos reservados | Versão 2.0</p>
         </div>
     </body>
     </html>
@@ -1289,7 +1470,6 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
 def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento, total_final,
                                 desconto_volume_percentual, valor_desconto_volume, valor_base_total,
                                 total_ipi, total_st):
-    """Formata a mensagem para WhatsApp com resumo do orçamento e aviso LGPD"""
     
     msg = "🛍️ NOVO ORÇAMENTO Luvidarte 🛍️\n\n"
     msg += "━" * 30 + "\n\n"
@@ -1320,10 +1500,8 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     else:
         msg += "\n"
     
-    # Lista resumida dos itens
     msg += "ITENS SOLICITADOS\n"
     for item in st.session_state.carrinho:
-        # Mostrar preço com desconto por volume se aplicável
         valor_base_item = item['preco_final']
         valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
         msg += f"• {item['quantidade']}x {item['descricao'][:50]}\n"
@@ -1336,7 +1514,7 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     msg += "2️⃣ Confirmaremos disponibilidade dos produtos\n"
     msg += "3️⃣ Enviaremos as condições de pagamento e frete\n\n"
     msg += "🔒 LGPD: Seus dados são tratados com confidencialidade conforme Lei 13.709/2018\n"
-    msg += "📧 DPO: sac@luvidarte.com.br\n\n"
+    msg += "📧 DPO: dpo@luvidarte.com.br\n\n"
     msg += "✨ Agradecemos a preferência! ✨"
     
     return msg
@@ -1346,10 +1524,12 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
 # ============================================
 
 # PRIMEIRO: Verificar tipo de cliente (Pessoa Física vs Jurídica)
-# Isso deve ser executado ANTES de qualquer outra validação
 if 'acesso_autorizado' not in st.session_state:
     verificar_tipo_cliente_inicial()
     st.stop()
+
+# EXIBIR NOTIFICAÇÕES DO GOOGLE SHEETS
+exibir_notificacoes()
 
 # Verificar consentimento LGPD depois de validar CNPJ
 if not obter_consentimento_lgpd():
@@ -1396,7 +1576,6 @@ else:
         layout="wide"
     )
 
-# Mostrar CNPJ validado no topo
 if st.session_state.get('cnpj_validado'):
     cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
     st.sidebar.success(f"✅ CNPJ: {cnpj_mascarado}")
@@ -1419,7 +1598,6 @@ if 'dados_cliente' not in st.session_state:
 if 'mostrar_formulario_cliente' not in st.session_state:
     st.session_state.mostrar_formulario_cliente = False
 if 'form_data' not in st.session_state:
-    # Pré-preencher com dados do cadastro se existir
     if st.session_state.get('cadastro_precarregado'):
         st.session_state.form_data = st.session_state.cadastro_precarregado
     else:
@@ -1446,6 +1624,8 @@ if 'passo_a_passo_visto' not in st.session_state:
     st.session_state.passo_a_passo_visto = False
 if 'cliente_isento' not in st.session_state:
     st.session_state.cliente_isento = False
+if 'ultimo_hash_notificacoes' not in st.session_state:
+    st.session_state.ultimo_hash_notificacoes = None
 
 # ============================================
 # FUNÇÕES PARA CONTROLAR CARRINHO
@@ -1472,7 +1652,6 @@ def cancelar_formulario():
 # FUNÇÃO PARA ATUALIZAR QUANTIDADE NO CARRINHO
 # ============================================
 def atualizar_quantidade_carrinho(indice, nova_quantidade):
-    """Atualiza a quantidade de um item no carrinho e recalcula os totais"""
     if 0 <= indice < len(st.session_state.carrinho):
         item = st.session_state.carrinho[indice]
         item['quantidade'] = nova_quantidade
@@ -1637,7 +1816,6 @@ def calcular_resumo_carrinho():
         return {'total_itens': 0, 'total_geral': 0.0, 'total_ipi': 0.0,
                 'total_st': 0.0, 'total_desconto': 0.0, 'total_bruto': 0.0}
     
-    # Calcular valor base total para desconto volume
     valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
     desconto_vol = calcular_desconto_volume(valor_base_total)
     
@@ -1648,8 +1826,8 @@ def calcular_resumo_carrinho():
     for item in st.session_state.carrinho:
         item_com_desconto = recalcular_item_com_desconto_volume(item, desconto_vol)
         total_com_desconto += item_com_desconto['total_geral'] * item['quantidade']
-        total_ipi += item['valor_ipi'] * item['quantidade']  # IPI original
-        total_st += item['valor_st'] * item['quantidade']    # ST original
+        total_ipi += item['valor_ipi'] * item['quantidade']
+        total_st += item['valor_st'] * item['quantidade']
     
     return {
         'total_itens': sum(i['quantidade'] for i in st.session_state.carrinho),
@@ -1858,9 +2036,7 @@ def carregar_logo():
 # CSS GLOBAL COMPLETO COM IMAGEM DE FUNDO
 # ============================================
 
-# Função para carregar imagem de fundo
 def carregar_imagem_fundo_base64():
-    """Carrega a imagem Frontpage.jpeg e retorna em base64"""
     try:
         with open("Frontpage.jpeg", "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -1874,10 +2050,8 @@ def carregar_imagem_fundo_base64():
         except:
             return None
 
-# Carregar imagem
 img_fundo_base64 = carregar_imagem_fundo_base64()
 
-# CSS Base (comum para ambos os casos)
 css_base = """
 * { margin: 0; padding: 0; box-sizing: border-box; }
 .stDecoration { display: none; }
@@ -2033,16 +2207,12 @@ css_base = """
 }
 """
 
-# Aplicar CSS com ou sem imagem de fundo
 if img_fundo_base64:
     css_fundo = f"""
-    /* Imagem de fundo */
     .stApp {{
         background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
         background-size: cover;
     }}
-    
-    /* Overlay para legibilidade */
     .stApp::before {{
         content: '';
         position: fixed;
@@ -2054,7 +2224,6 @@ if img_fundo_base64:
         z-index: 0;
         pointer-events: none;
     }}
-    
     .main {{
         position: relative;
         z-index: 1;
@@ -2102,7 +2271,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
 st.markdown("---")
 
 # ============================================
@@ -2110,7 +2278,6 @@ st.markdown("---")
 # ============================================
 st.sidebar.markdown('<div class="filtro-sidebar">🔍 FILTROS</div>', unsafe_allow_html=True)
 
-# Adicionar botão "Passo a Passo" no topo do sidebar
 if st.sidebar.button("📖 Ver Passo a Passo do Sistema", use_container_width=True):
     mostrar_passo_a_passo()
 
@@ -2193,7 +2360,6 @@ st.session_state.cliente_isento = cliente_isento
 forma_pagamento = st.sidebar.radio("Condição de Pagamento",
                                    options=["PREÇO BASE","VISTA","30","45","60"], index=0)
 
-# Monitorar mudanças nos filtros
 filtros_atual = (uf_selecionada, cliente_isento, forma_pagamento)
 if st.session_state.filtros_anteriores != filtros_atual:
     st.session_state.filtros_anteriores = filtros_atual
@@ -2217,15 +2383,11 @@ if st.session_state.get('carrinho_aberto', False):
         st.info("Seu orçamento está vazio. Adicione produtos para continuar.")
         st.stop()
 
-    # Calcular valor base total (soma dos preços finais sem IPI/ST)
     valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-    
-    # Calcular desconto por volume sobre o valor base
     desconto_volume_percentual = calcular_desconto_volume(valor_base_total)
     valor_desconto_volume = valor_base_total * desconto_volume_percentual
     novo_valor_base = valor_base_total - valor_desconto_volume
 
-    # Variáveis para totais
     total_ipi_recalculado = 0
     total_st_recalculado = 0
     total_geral_recalculado = 0
@@ -2233,7 +2395,6 @@ if st.session_state.get('carrinho_aberto', False):
     total_bruto_geral = 0
 
     for idx, item in enumerate(st.session_state.carrinho):
-        # Recalcular IPI e ST proporcionalmente ao novo valor base
         ipi_aliquota_efetiva = item['valor_ipi'] / item['preco_final'] if item['preco_final'] > 0 else 0
         st_aliquota_efetiva = item['valor_st'] / item['preco_final'] if item['preco_final'] > 0 else 0
         
@@ -2417,7 +2578,6 @@ if st.session_state.get('carrinho_aberto', False):
         st.markdown('<div class="formulario-titulo">📝 Dados do Cliente</div>', unsafe_allow_html=True)
         st.markdown('<p style="color:#D32F2F; font-size:12px; margin-bottom:15px;">* Campos obrigatórios</p>', unsafe_allow_html=True)
         
-        # INFORMAÇÃO DA UF BLOQUEADA
         st.markdown(f"""
         <div class='uf-bloqueada-info'>
             🔒 <strong>UF Bloqueada para Edição:</strong> A UF foi definida como <strong>{uf_selecionada}</strong> no filtro do sistema.<br>
@@ -2440,7 +2600,6 @@ if st.session_state.get('carrinho_aberto', False):
                 numero = st.text_input("Número *", value=st.session_state.form_data.get('numero', ''))
                 bairro = st.text_input("Bairro *", value=st.session_state.form_data.get('bairro', ''))
                 cep = st.text_input("CEP *", value=st.session_state.form_data.get('cep', ''), help="Digite apenas números")
-                # Campo UF do cliente - DESABILITADO e com valor fixo do filtro
                 uf_cliente = st.text_input("UF do Endereço *", value=uf_selecionada, disabled=True, 
                                           help="A UF é definida pelos filtros do sistema e não pode ser alterada aqui")
             
@@ -2502,7 +2661,6 @@ if st.session_state.get('carrinho_aberto', False):
                     }
                     st.session_state.dados_cliente = dados_cliente
                     
-                    # SALVAR CADASTRO NA PLANILHA
                     with st.spinner("💾 Salvando cadastro..."):
                         salvar_cadastro_cliente(dados_cliente)
                     
@@ -2518,10 +2676,22 @@ if st.session_state.get('carrinho_aberto', False):
                         st.session_state.html_bytes = html_bytes
                         st.session_state.mostrar_botoes_envio = True
                         
-                        # SALVAR HISTÓRICO DO ORÇAMENTO
                         with st.spinner("💾 Salvando histórico..."):
                             salvar_historico_orcamento(dados_cliente, uf_selecionada, total_final_com_vol, 
                                                       forma_pagamento, st.session_state.carrinho)
+                        
+                        # ENVIO DE E-MAIL - SEM MENSAGEM DE SUCESSO VISÍVEL
+                        with st.spinner("📧 Processando..."):
+                            sucesso_email, msg_email = enviar_email_orcamento(
+                                dados_cliente, 
+                                total_final_com_vol, 
+                                st.session_state.carrinho, 
+                                html_bytes, 
+                                f"orcamento_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+                            )
+                            # Não exibe mensagem de sucesso, apenas erro se falhar
+                            if not sucesso_email:
+                                st.error(f"❌ Erro no envio do e-mail: {msg_email}")
                         
                         st.rerun()
                     else:
@@ -2892,12 +3062,22 @@ st.markdown("""
     </div>
 </div>""", unsafe_allow_html=True)
 
+# CONTATOS PRINCIPAIS
 st.markdown("""
 <div class='contact-footer'>
-    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br | 🔒 DPO: dpo@luvidarte.com.br | 🔒 LGPD: lgpd@luvidarte.com.br
+    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br
 </div>""", unsafe_allow_html=True)
 
-# NOVA SEÇÃO DE DIREITOS LGPD
+# NOVA LINHA COM E-MAILS DE VENDAS E SUPORTE
+st.markdown("""
+<div style='text-align: center; padding: 10px; font-size: 13px; color: #555; background-color: #f9f9f9; border-radius: 8px; margin: 10px 0;'>
+    <strong>📧 E-mails para contato comercial:</strong><br>
+    🛍️ <strong>Vendas:</strong> <a href='mailto:vendaspresente@luvidarte.com.br' style='color: #2E7D32; text-decoration: none;'>vendaspresente@luvidarte.com.br</a> &nbsp;|&nbsp;
+    🛠️ <strong>Suporte:</strong> <a href='mailto:suportevendas@luvidarte.com.br' style='color: #2E7D32; text-decoration: none;'>suportevendas@luvidarte.com.br</a>
+</div>
+""", unsafe_allow_html=True)
+
+# LGPD
 st.markdown("""
 <div style='text-align: center; padding: 15px; margin-top: 10px; border-top: 1px solid #ddd;'>
     <p style='font-size: 12px; color: #666;'>
@@ -2917,21 +3097,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-def mostrar_direitos_lgpd_rodape():
-    st.markdown("""
-    <div style='text-align: center; padding: 15px; margin-top: 20px; border-top: 1px solid #ddd;'>
-        <p style='font-size: 12px; color: #666;'>
-            🔒 <strong>LGPD - Lei 13.709/2018</strong><br>
-            Seus direitos: <strong>acesso, correção, exclusão e portabilidade</strong> dos dados<br>
-            📧 Solicitações: <strong>lgpd@luvidarte.com.br</strong> | DPO: <strong>dpo@luvidarte.com.br</strong><br>
-            ⏱️ Prazo de resposta: <strong>15 dias úteis</strong>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ============================================
-# WHATSAPP FLUTUANTE
-# ============================================
 st.markdown("""
 <div class="whatsapp-float-fixed">
     <a href="https://wa.me/5511930119335?text=Olá! Gostaria de informações sobre os produtos Luvidarte"
