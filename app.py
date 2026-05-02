@@ -49,35 +49,27 @@ TIMEZONE_BR = pytz.timezone('America/Sao_Paulo')
 EMAIL_CONFIG_ORCAMENTO = {
     "usuario": "erp@luvidarte.com.br",
     "senha": "Qualidade123#",
-    "destinatario": "qualidade@luvidarte.com.br",  # APENAS este e-mail
+    "destinatario": "qualidade@luvidarte.com.br",
     "smtp_server": "email-ssl.com.br",
     "smtp_port": 465
 }
 
 def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes, nome_arquivo):
-    """
-    Envia e-mail com o orçamento anexado para qualidade@luvidarte.com.br
-    SEM exibir mensagens de sucesso na interface
-    """
+    """Envia e-mail com o orçamento anexado para qualidade@luvidarte.com.br"""
     try:
         usuario = EMAIL_CONFIG_ORCAMENTO["usuario"]
         senha = EMAIL_CONFIG_ORCAMENTO["senha"]
-        destinatario = EMAIL_CONFIG_ORCAMENTO["destinatario"]  # APENAS UM destinatário
+        destinatario = EMAIL_CONFIG_ORCAMENTO["destinatario"]
         smtp_server = EMAIL_CONFIG_ORCAMENTO["smtp_server"]
         smtp_port = EMAIL_CONFIG_ORCAMENTO["smtp_port"]
         
-        # Criar mensagem
         msg = MIMEMultipart()
         msg['From'] = usuario
-        msg['To'] = destinatario  # Único destinatário
+        msg['To'] = destinatario
         msg['Subject'] = f"🛍️ NOVO ORÇAMENTO Luvidarte - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         
-        # ... resto da função igual ...
-        
-        # Calcular quantidade total de itens
         qtd_total = sum(item.get('quantidade', 0) for item in itens_resumo)
         
-        # Corpo do e-mail (HTML)
         corpo_html = f"""
         <!DOCTYPE html>
         <html>
@@ -112,12 +104,9 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                     <h1>🛍️ Luvidarte - Novo Orçamento</h1>
                     <p>Gerado em: {formatar_data_brasil()}</p>
                 </div>
-                
                 <div class="content">
                     <div class="section">
-                        <div class="section-title">
-                            <span>📋</span> DADOS DO CLIENTE
-                        </div>
+                        <div class="section-title">📋 DADOS DO CLIENTE</div>
                         <table class="info-table">
                             <tr><td>Razão Social:</td><td><strong>{dados_cliente.get('razao_social', 'NÃO INFORMADO')}</strong></td></tr>
                             <tr><td>CNPJ/CPF:</td><td>{dados_cliente.get('cnpj', 'NÃO INFORMADO')}</td></tr>
@@ -129,71 +118,28 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                             <tr><td>UF:</td><td><span class="badge">{dados_cliente.get('uf', 'NÃO INFORMADO')}</span></td></tr>
                         </table>
                     </div>
-                    
                     <div class="section">
-                        <div class="section-title">
-                            <span>💰</span> RESUMO DO ORÇAMENTO
-                        </div>
+                        <div class="section-title">💰 TOTAL DO ORÇAMENTO</div>
                         <div class="total-box">
                             <div style="font-size: 14px; color: #666;">TOTAL DO ORÇAMENTO</div>
                             <div class="total-value">{formatar_moeda(valor_total)}</div>
                             <div style="font-size: 12px; color: #666; margin-top: 5px;">📦 {qtd_total} item(ns) | ✅ Validade: 7 dias</div>
                         </div>
                     </div>
-                    
-                    <div class="section">
-                        <div class="section-title">
-                            <span>🛍️</span> ITENS DO ORÇAMENTO
-                        </div>
-                        <table class="items-table">
-                            <thead>
-                                <tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Valor Unit.</th><th>Subtotal</th></tr>
-                            </thead>
-                            <tbody>
-        """
-        
-        for item in itens_resumo:
-            preco = item.get('preco_final', 0)
-            qtd = item.get('quantidade', 0)
-            subtotal = preco * qtd
-            descricao = item.get('descricao', '')[:60]
-            referencia = item.get('referencia', '')
-            
-            corpo_html += f"""
-                                <tr>
-                                    <td>{referencia}</td>
-                                    <td>{descricao}</td>
-                                    <td style="text-align:center">{qtd}</td>
-                                    <td style="text-align:right">{formatar_moeda(preco)}</td>
-                                    <td style="text-align:right">{formatar_moeda(subtotal)}</td>
-                                </tr>
-            """
-        
-        corpo_html += f"""
-                            </tbody>
-                        </table>
-                    </div>
-                    
                     <div class="alert">
                         <strong>🔒 LGPD - Lei 13.709/2018</strong><br>
                         Os dados do cliente são tratados com confidencialidade e armazenados apenas para fins comerciais.<br>
-                        O cliente tem direito a acesso, correção e exclusão de seus dados a qualquer momento.<br>
                         <strong>DPO:</strong> dpo@luvidarte.com.br
                     </div>
-                    
                     <div class="alert" style="border-left-color: #D32F2F; background-color: #FFEBEE;">
                         <strong>⚠️ AVISO IMPORTANTE</strong><br>
-                        Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.<br>
-                        Os valores são estimativas e sujeitos à confirmação de estoque e disponibilidade.<br>
-                        A venda será formalizada APENAS após contato e confirmação da equipe Luvidarte.
+                        Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada. A venda será formalizada APENAS após contato da equipe Luvidarte.
                     </div>
                 </div>
-                
                 <div class="footer">
                     <p><strong>Luvidarte - Peças exclusivas em vidro e decoração</strong></p>
                     <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP | CEP: 08533-060</p>
                     <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | E-mail: sac@luvidarte.com.br</p>
-                    <p>© 2026 Luvidarte - Todos os direitos reservados</p>
                 </div>
             </div>
         </body>
@@ -202,7 +148,6 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         
         msg.attach(MIMEText(corpo_html, 'html'))
         
-        # Anexar arquivo (se houver)
         if anexo_bytes and len(anexo_bytes) > 0:
             part = MIMEBase('application', 'octet-stream')
             part.set_payload(anexo_bytes)
@@ -210,7 +155,6 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
             part.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
             msg.attach(part)
         
-        # Enviar e-mail
         context = ssl.create_default_context()
         with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
             server.login(usuario, senha)
@@ -222,8 +166,145 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         return False, str(e)
 
 # ============================================
-# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS - CORRIGIDO
+# SISTEMA DE NOTIFICAÇÕES COM CSS ESTILIZADO
 # ============================================
+
+# CSS para as notificações
+NOTIFICACAO_CSS = """
+<style>
+@keyframes notificacaoSlideIn {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes notificacaoPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
+}
+
+.notificacao-container {
+    margin: 15px 0;
+    animation: notificacaoSlideIn 0.5s ease-out;
+}
+
+.notificacao-card {
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.notificacao-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.notificacao-tipo-sucesso {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    border-left: 5px solid #2E7D32;
+}
+
+.notificacao-tipo-alerta {
+    background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+    border-left: 5px solid #E65100;
+}
+
+.notificacao-tipo-erro {
+    background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
+    border-left: 5px solid #B71C1C;
+}
+
+.notificacao-tipo-info {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    border-left: 5px solid #0D47A1;
+}
+
+.notificacao-conteudo {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex: 1;
+}
+
+.notificacao-icone {
+    font-size: 28px;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.notificacao-texto {
+    color: white;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.4;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.1);
+}
+
+.notificacao-titulo {
+    font-size: 12px;
+    opacity: 0.9;
+    margin-bottom: 4px;
+    font-weight: normal;
+}
+
+.notificacao-mensagem {
+    font-size: 15px;
+    font-weight: bold;
+}
+
+.notificacao-fechar {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.notificacao-fechar:hover {
+    background: rgba(255,255,255,0.3);
+    transform: scale(1.1);
+}
+
+.notificacao-progresso {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 0 0 12px 12px;
+    transition: width 0.1s linear;
+}
+
+@media (max-width: 768px) {
+    .notificacao-card {
+        padding: 12px 16px;
+    }
+    .notificacao-icone {
+        font-size: 22px;
+    }
+    .notificacao-mensagem {
+        font-size: 13px;
+    }
+}
+</style>
+"""
 
 def carregar_notificacoes_google_sheets():
     """Carrega notificações da aba NOTIFICACAO do Google Sheets"""
@@ -232,14 +313,11 @@ def carregar_notificacoes_google_sheets():
         if not cliente:
             return []
         
-        # Abrir a planilha
         planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
         
-        # Tentar acessar a aba NOTIFICACAO
         try:
             aba_notificacao = planilha.worksheet("NOTIFICACAO")
-        except Exception as e:
-            # Se não existir, criar a aba
+        except:
             try:
                 aba_notificacao = planilha.add_worksheet(title="NOTIFICACAO", rows="100", cols="4")
                 cabecalho = ["MENSAGEM", "DATA_CRIACAO", "ATIVA", "TIPO"]
@@ -248,42 +326,42 @@ def carregar_notificacoes_google_sheets():
             except:
                 return []
         
-        # Buscar todas as linhas
         todas_linhas = aba_notificacao.get_all_values()
-        
         notificacoes = []
+        
         for i, linha in enumerate(todas_linhas):
-            if i == 0:  # Pular cabeçalho
+            if i == 0:
                 continue
             
-            # Verificar se tem mensagem na coluna A
             if len(linha) >= 1 and linha[0] and str(linha[0]).strip():
                 mensagem = str(linha[0]).strip()
-                
-                # Verificar se está ativa (Coluna C - índice 2)
                 ativa = False
+                
                 if len(linha) >= 3 and linha[2]:
                     valor_ativa = str(linha[2]).strip().lower()
-                    # Aceitar: sim, true, ativa, 1, s, yes
                     ativa = valor_ativa in ['sim', 'true', 'ativa', '1', 's', 'yes']
                 
-                # Se não estiver ativa, pular
                 if not ativa:
                     continue
                 
-                # Tipo da notificação (Coluna D - índice 3) - caso não tenha, padrão 'info'
                 tipo = "info"
                 if len(linha) >= 4 and linha[3]:
                     tipo = str(linha[3]).strip().lower()
-                    # Mapear "alerta" para "warning"
                     if tipo == "alerta":
-                        tipo = "warning"
+                        tipo = "alerta"
                     elif tipo == "sucesso":
-                        tipo = "success"
+                        tipo = "sucesso"
+                    elif tipo == "erro":
+                        tipo = "erro"
+                
+                notif_id = hashlib.md5(f"{mensagem}{i}{linha[1] if len(linha) > 1 else ''}".encode()).hexdigest()[:12]
                 
                 notificacoes.append({
+                    'id': notif_id,
                     'mensagem': mensagem,
-                    'tipo': tipo
+                    'data': linha[1] if len(linha) > 1 else '',
+                    'tipo': tipo,
+                    'ativa': ativa
                 })
         
         return notificacoes
@@ -291,30 +369,84 @@ def carregar_notificacoes_google_sheets():
     except Exception as e:
         return []
 
-def exibir_notificacoes():
-    """Exibe as notificações como pop-ups na tela principal"""
+def exibir_notificacoes_css():
+    """Exibe notificações estilizadas com CSS"""
     try:
         notificacoes = carregar_notificacoes_google_sheets()
         
         if not notificacoes:
             return
         
-        # Gerar hash das notificações
-        hash_notificacoes = hashlib.md5(str(notificacoes).encode()).hexdigest()
+        # Inicializar controle de notificações fechadas
+        if 'notificacoes_fechadas' not in st.session_state:
+            st.session_state.notificacoes_fechadas = []
         
-        # Verificar se já exibimos
-        if st.session_state.get('ultimo_hash_notificacoes') != hash_notificacoes:
-            st.session_state.ultimo_hash_notificacoes = hash_notificacoes
+        # Filtrar apenas notificações não fechadas
+        notificacoes_ativas = [n for n in notificacoes if n['id'] not in st.session_state.notificacoes_fechadas]
+        
+        if not notificacoes_ativas:
+            return
+        
+        # Adicionar CSS
+        st.markdown(NOTIFICACAO_CSS, unsafe_allow_html=True)
+        
+        # Exibir cada notificação
+        for notif in notificacoes_ativas:
+            # Definir ícone e classe baseada no tipo
+            if notif['tipo'] == 'sucesso':
+                icone = "🎉"
+                classe = "notificacao-tipo-sucesso"
+                titulo = "SUCESSO!"
+            elif notif['tipo'] == 'alerta':
+                icone = "⚠️"
+                classe = "notificacao-tipo-alerta"
+                titulo = "ATENÇÃO!"
+            elif notif['tipo'] == 'erro':
+                icone = "❌"
+                classe = "notificacao-tipo-erro"
+                titulo = "ERRO!"
+            else:
+                icone = "ℹ️"
+                classe = "notificacao-tipo-info"
+                titulo = "INFORMAÇÃO"
             
-            for notif in notificacoes:
-                if notif['tipo'] == 'success':
-                    st.success(f"🎉 {notif['mensagem']}")
-                elif notif['tipo'] == 'error':
-                    st.error(f"❌ {notif['mensagem']}")
-                elif notif['tipo'] == 'warning':
-                    st.warning(f"⚠️ {notif['mensagem']}")  # Alerta em laranja
-                else:
-                    st.info(f"ℹ️ {notif['mensagem']}")
+            # HTML da notificação
+            notificacao_html = f"""
+            <div class="notificacao-container" id="notif_{notif['id']}">
+                <div class="notificacao-card {classe}">
+                    <div class="notificacao-conteudo">
+                        <div class="notificacao-icone">{icone}</div>
+                        <div class="notificacao-texto">
+                            <div class="notificacao-titulo">{titulo}</div>
+                            <div class="notificacao-mensagem">{notif['mensagem']}</div>
+                        </div>
+                    </div>
+                    <button class="notificacao-fechar" onclick="fecharNotificacao('{notif['id']}')">✕</button>
+                </div>
+            </div>
+            
+            <script>
+            function fecharNotificacao(id) {{
+                var elemento = document.getElementById('notif_' + id);
+                if (elemento) {{
+                    elemento.style.animation = 'notificacaoSlideIn 0.3s reverse';
+                    setTimeout(function() {{
+                        elemento.style.display = 'none';
+                    }}, 300);
+                }}
+            }}
+            </script>
+            """
+            
+            st.markdown(notificacao_html, unsafe_allow_html=True)
+            
+            # Botão de fechar via Streamlit (fallback)
+            col1, col2, col3 = st.columns([10, 1, 1])
+            with col2:
+                if st.button(f"✕", key=f"fechar_{notif['id']}", help="Fechar notificação"):
+                    st.session_state.notificacoes_fechadas.append(notif['id'])
+                    st.rerun()
+        
     except Exception as e:
         pass
 
@@ -322,21 +454,19 @@ def exibir_notificacoes():
 # CONFIGURAÇÃO DO GOOGLE SHEETS
 # ============================================
 
-# ID da planilha de cadastro
 ID_PLANILHA_CADASTRO = "1_s01QhZJni2dYoJwkWflEtdrKzSZ5yt7mpZvASPlFxk"
 
-# Escopos necessários para o Google Sheets API
 ESCOPOS = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
 
 def conectar_google_sheets():
-    """Conecta ao Google Sheets usando credenciais (local ou secrets)"""
+    """Conecta ao Google Sheets usando credenciais (prioriza Streamlit Secrets)"""
     try:
         credenciais_dict = None
         
-        # 1. TENTAR STREAMLIT SECRETS (para produção/nuvem)
+        # PRIORIDADE 1: Streamlit Secrets (produção/nuvem)
         try:
             if hasattr(st, 'secrets') and 'google' in st.secrets:
                 credenciais_dict = {
@@ -352,10 +482,12 @@ def conectar_google_sheets():
                     "client_x509_cert_url": st.secrets["google"].get("client_x509_cert_url", "")
                 }
                 credenciais_dict = {k: v for k, v in credenciais_dict.items() if v}
+                if credenciais_dict.get('private_key'):
+                    credenciais_dict['private_key'] = credenciais_dict['private_key'].replace('\\n', '\n')
         except Exception as e:
             pass
         
-        # 2. TENTAR ARQUIVO LOCAL (para desenvolvimento)
+        # PRIORIDADE 2: Arquivo local (desenvolvimento)
         if not credenciais_dict or not credenciais_dict.get('private_key'):
             try:
                 with open('credentials.json', 'r') as f:
@@ -365,15 +497,12 @@ def conectar_google_sheets():
             except Exception as e:
                 pass
         
-        # 3. VERIFICAR SE TEM CREDENCIAIS
         if not credenciais_dict or not credenciais_dict.get('private_key'):
             return None
         
-        # 4. CONECTAR
         creds = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, ESCOPOS)
         cliente = gspread.authorize(creds)
         
-        # 5. TESTAR CONEXÃO
         try:
             test_planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
             return cliente
@@ -384,29 +513,22 @@ def conectar_google_sheets():
         return None
 
 def salvar_cadastro_cliente(dados_cliente):
-    """Salva os dados do cliente na planilha Cadastro_Virtual (aba Cadastro)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
             return False
         
-        # Abrir a planilha
         planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
         
-        # Selecionar a aba Cadastro
         try:
             aba_cadastro = planilha.worksheet("Cadastro")
         except:
-            # Se a aba não existir, criar
             aba_cadastro = planilha.add_worksheet(title="Cadastro", rows="1000", cols="20")
             cabecalho = ["RAZÃO SOCIAL", "CNPJ", "INSCRIÇÃO ESTADUAL", "ENDEREÇO", "E-MAIL", 
                         "NÚMERO", "BAIRRO", "CEP", "TEL/CONTATO", "UF", "DATA_CADASTRO", "HORA_CADASTRO"]
             aba_cadastro.append_row(cabecalho)
         
-        # Limpar o CNPJ para busca (apenas números)
         cnpj_limpo = re.sub(r'[^0-9]', '', dados_cliente.get('cnpj', ''))
-        
-        # Buscar se CNPJ já existe
         todas_linhas = aba_cadastro.get_all_values()
         linha_encontrada = None
         
@@ -452,7 +574,6 @@ def salvar_cadastro_cliente(dados_cliente):
         return False
 
 def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, itens_resumo):
-    """Salva o histórico do orçamento na planilha (aba Historico)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
@@ -496,7 +617,6 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
         return False
 
 def buscar_cadastro_por_cnpj(cnpj):
-    """Busca cadastro do cliente pelo CNPJ na planilha"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
@@ -1523,15 +1643,15 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================
 
-# PRIMEIRO: Verificar tipo de cliente (Pessoa Física vs Jurídica)
+# PRIMEIRO: Verificar tipo de cliente
 if 'acesso_autorizado' not in st.session_state:
     verificar_tipo_cliente_inicial()
     st.stop()
 
-# EXIBIR NOTIFICAÇÕES DO GOOGLE SHEETS
-exibir_notificacoes()
+# EXIBIR NOTIFICAÇÕES ESTILIZADAS
+exibir_notificacoes_css()
 
-# Verificar consentimento LGPD depois de validar CNPJ
+# Verificar consentimento LGPD
 if not obter_consentimento_lgpd():
     st.stop()
 
@@ -1624,8 +1744,8 @@ if 'passo_a_passo_visto' not in st.session_state:
     st.session_state.passo_a_passo_visto = False
 if 'cliente_isento' not in st.session_state:
     st.session_state.cliente_isento = False
-if 'ultimo_hash_notificacoes' not in st.session_state:
-    st.session_state.ultimo_hash_notificacoes = None
+if 'notificacoes_fechadas' not in st.session_state:
+    st.session_state.notificacoes_fechadas = []
 
 # ============================================
 # FUNÇÕES PARA CONTROLAR CARRINHO
@@ -2383,7 +2503,7 @@ if st.session_state.get('carrinho_aberto', False):
         st.info("Seu orçamento está vazio. Adicione produtos para continuar.")
         st.stop()
 
-    valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
+        valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
     desconto_volume_percentual = calcular_desconto_volume(valor_base_total)
     valor_desconto_volume = valor_base_total * desconto_volume_percentual
     novo_valor_base = valor_base_total - valor_desconto_volume
@@ -3068,7 +3188,7 @@ st.markdown("""
     📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br
 </div>""", unsafe_allow_html=True)
 
-# NOVA LINHA COM E-MAILS DE VENDAS E SUPORTE
+# E-MAILS DE VENDAS E SUPORTE
 st.markdown("""
 <div style='text-align: center; padding: 10px; font-size: 13px; color: #555; background-color: #f9f9f9; border-radius: 8px; margin: 10px 0;'>
     <strong>📧 E-mails para contato comercial:</strong><br>
