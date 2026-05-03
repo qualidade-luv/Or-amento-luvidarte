@@ -72,6 +72,8 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         msg['To'] = destinatario  # Único destinatário
         msg['Subject'] = f"🛍️ NOVO ORÇAMENTO Luvidarte - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         
+        # ... resto da função igual ...
+        
         # Calcular quantidade total de itens
         qtd_total = sum(item.get('quantidade', 0) for item in itens_resumo)
         
@@ -117,38 +119,14 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                             <span>📋</span> DADOS DO CLIENTE
                         </div>
                         <table class="info-table">
-                            <tr>
-                                <td>Razão Social:</td>
-                                <td><strong>{dados_cliente.get('razao_social', 'NÃO INFORMADO')}</strong></td>
-                            </tr>
-                            <tr>
-                                <td>CNPJ/CPF:</td>
-                                <td>{dados_cliente.get('cnpj', 'NÃO INFORMADO')}</td>
-                            </tr>
-                            <tr>
-                                <td>Inscrição Estadual:</td>
-                                <td>{dados_cliente.get('inscricao_estadual', 'NÃO INFORMADO')}</td>
-                            </tr>
-                            <tr>
-                                <td>E-mail:</td>
-                                <td>{dados_cliente.get('email', 'NÃO INFORMADO')}</td>
-                            </tr>
-                            <tr>
-                                <td>Telefone:</td>
-                                <td>{dados_cliente.get('telefone', 'NÃO INFORMADO')}</td>
-                            </tr>
-                            <tr>
-                                <td>Endereço:</td>
-                                <td>{dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')} - {dados_cliente.get('bairro', '')}</td>
-                            </tr>
-                            <tr>
-                                <td>CEP:</td>
-                                <td>{dados_cliente.get('cep', 'NÃO INFORMADO')}</td>
-                            </tr>
-                            <tr>
-                                <td>UF:</td>
-                                <td><span class="badge">{dados_cliente.get('uf', 'NÃO INFORMADO')}</span></td>
-                            </tr>
+                            <tr><td>Razão Social:</td><td><strong>{dados_cliente.get('razao_social', 'NÃO INFORMADO')}</strong></td></tr>
+                            <tr><td>CNPJ/CPF:</td><td>{dados_cliente.get('cnpj', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>Inscrição Estadual:</td><td>{dados_cliente.get('inscricao_estadual', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>E-mail:</td><td>{dados_cliente.get('email', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>Telefone:</td><td>{dados_cliente.get('telefone', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>Endereço:</td><td>{dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')} - {dados_cliente.get('bairro', '')}</td></tr>
+                            <tr><td>CEP:</td><td>{dados_cliente.get('cep', 'NÃO INFORMADO')}</td></tr>
+                            <tr><td>UF:</td><td><span class="badge">{dados_cliente.get('uf', 'NÃO INFORMADO')}</span></td></tr>
                         </table>
                     </div>
                     
@@ -169,13 +147,7 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                         </div>
                         <table class="items-table">
                             <thead>
-                                <tr>
-                                    <th>Código</th>
-                                    <th>Descrição</th>
-                                    <th>Qtd</th>
-                                    <th>Valor Unit.</th>
-                                    <th>Subtotal</th>
-                                </tr>
+                                <tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Valor Unit.</th><th>Subtotal</th></tr>
                             </thead>
                             <tbody>
         """
@@ -250,7 +222,7 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         return False, str(e)
 
 # ============================================
-# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS
+# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS - CORRIGIDO
 # ============================================
 
 def carregar_notificacoes_google_sheets():
@@ -1548,46 +1520,15 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     return msg
 
 # ============================================
-# CONFIGURAÇÃO DA PÁGINA - DEVE SER O PRIMEIRO COMANDO STREAMLIT!
+# CONFIGURAÇÃO DA PÁGINA
 # ============================================
 
-def carregar_logo_favicon():
-    url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
-    try:
-        response = requests.get(url_drive, timeout=10)
-        if response.status_code == 200:
-            img = Image.open(BytesIO(response.content))
-            img = img.resize((32, 32))
-            return img
-    except:
-        pass
-    return None
-
-# PRIMEIRO E MAIS IMPORTANTE: Configurar a página ANTES de qualquer outro comando Streamlit
-favicon = carregar_logo_favicon()
-if favicon:
-    st.set_page_config(
-        page_title="Luvidarte - Catálogo Interativo Virtual",
-        page_icon=favicon,
-        layout="wide"
-    )
-else:
-    st.set_page_config(
-        page_title="Luvidarte - Catálogo Interativo Virtual",
-        page_icon="📦",
-        layout="wide"
-    )
-
-# ============================================
-# SÓ AGORA PODEMOS EXECUTAR OS OUTROS COMANDOS STREAMLIT
-# ============================================
-
-# Verificar tipo de cliente (Pessoa Física vs Jurídica)
+# PRIMEIRO: Verificar tipo de cliente (Pessoa Física vs Jurídica)
 if 'acesso_autorizado' not in st.session_state:
     verificar_tipo_cliente_inicial()
     st.stop()
 
-# EXIBIR NOTIFICAÇÕES DO GOOGLE SHEETS - AGORA sim, depois do set_page_config!
+# EXIBIR NOTIFICAÇÕES DO GOOGLE SHEETS
 exibir_notificacoes()
 
 # Verificar consentimento LGPD depois de validar CNPJ
@@ -1608,6 +1549,32 @@ st.markdown("""
 
 # Verificar timeout da sessão
 limpar_dados_sensiveis()
+
+def carregar_logo_favicon():
+    url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
+    try:
+        response = requests.get(url_drive, timeout=10)
+        if response.status_code == 200:
+            img = Image.open(BytesIO(response.content))
+            img = img.resize((32, 32))
+            return img
+    except:
+        pass
+    return None
+
+favicon = carregar_logo_favicon()
+if favicon:
+    st.set_page_config(
+        page_title="Luvidarte - Catálogo Interativo Virtual",
+        page_icon=favicon,
+        layout="wide"
+    )
+else:
+    st.set_page_config(
+        page_title="Luvidarte - Catálogo Interativo Virtual",
+        page_icon="📦",
+        layout="wide"
+    )
 
 if st.session_state.get('cnpj_validado'):
     cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
@@ -2402,7 +2369,7 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO (continua...)
+# TELA DO CARRINHO
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
 
