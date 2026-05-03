@@ -25,6 +25,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 import os
 import traceback
+import random
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
@@ -54,114 +55,207 @@ EMAIL_CONFIG_ORCAMENTO = {
     "smtp_port": 465
 }
 
-# ============================================
-# FUNÇÕES DE UTILIDADE
-# ============================================
-
-def get_horario_brasil():
-    return datetime.now(TIMEZONE_BR)
-
-def formatar_data_brasil():
-    agora = get_horario_brasil()
-    return agora.strftime('%d/%m/%Y %H:%M:%S')
-
-def formatar_moeda(valor):
-    if valor is None or valor == 0:
-        return "R$ 0,00"
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def validar_cnpj(cnpj):
-    cnpj = re.sub(r'[^0-9]', '', str(cnpj))
-    if len(cnpj) != 14:
-        return False
-    if len(set(cnpj)) == 1:
-        return False
-    peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
-    digito1 = 11 - (soma1 % 11)
-    if digito1 >= 10:
-        digito1 = 0
-    peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
-    digito2 = 11 - (soma2 % 11)
-    if digito2 >= 10:
-        digito2 = 0
-    return int(cnpj[12]) == digito1 and int(cnpj[13]) == digito2
-
-def validar_email(email):
-    padrao = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(padrao, email) is not None
-
-def validar_telefone(telefone):
-    telefone = re.sub(r'[^0-9]', '', str(telefone))
-    return len(telefone) >= 10 and len(telefone) <= 11
-
-def validar_cep(cep):
-    cep = re.sub(r'[^0-9]', '', str(cep))
-    return len(cep) == 8
-
-# ============================================
-# FUNÇÃO DE CONEXÃO COM GOOGLE SHEETS
-# ============================================
-
-def conectar_google_sheets():
-    """Conecta ao Google Sheets usando credenciais (local ou secrets)"""
+def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes, nome_arquivo):
+    """
+    Envia e-mail com o orçamento anexado para qualidade@luvidarte.com.br
+    SEM exibir mensagens de sucesso na interface
+    """
     try:
-        credenciais_dict = None
+        usuario = EMAIL_CONFIG_ORCAMENTO["usuario"]
+        senha = EMAIL_CONFIG_ORCAMENTO["senha"]
+        destinatario = EMAIL_CONFIG_ORCAMENTO["destinatario"]  # APENAS UM destinatário
+        smtp_server = EMAIL_CONFIG_ORCAMENTO["smtp_server"]
+        smtp_port = EMAIL_CONFIG_ORCAMENTO["smtp_port"]
         
-        # 1. TENTAR STREAMLIT SECRETS (para produção/nuvem)
-        try:
-            if hasattr(st, 'secrets') and 'google' in st.secrets:
-                credenciais_dict = {
-                    "type": st.secrets["google"].get("type", "service_account"),
-                    "project_id": st.secrets["google"].get("project_id", ""),
-                    "private_key_id": st.secrets["google"].get("private_key_id", ""),
-                    "private_key": st.secrets["google"].get("private_key", ""),
-                    "client_email": st.secrets["google"].get("client_email", ""),
-                    "client_id": st.secrets["google"].get("client_id", ""),
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_x509_cert_url": st.secrets["google"].get("client_x509_cert_url", "")
-                }
-                credenciais_dict = {k: v for k, v in credenciais_dict.items() if v}
-        except Exception as e:
-            pass
+        # Criar mensagem
+        msg = MIMEMultipart()
+        msg['From'] = usuario
+        msg['To'] = destinatario  # Único destinatário
+        msg['Subject'] = f"🛍️ NOVO ORÇAMENTO Luvidarte - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         
-        # 2. TENTAR ARQUIVO LOCAL (para desenvolvimento)
-        if not credenciais_dict or not credenciais_dict.get('private_key'):
-            try:
-                with open('credentials.json', 'r') as f:
-                    credenciais_dict = json.load(f)
-            except FileNotFoundError:
-                pass
-            except Exception as e:
-                pass
+        # Calcular quantidade total de itens
+        qtd_total = sum(item.get('quantidade', 0) for item in itens_resumo)
         
-        # 3. VERIFICAR SE TEM CREDENCIAIS
-        if not credenciais_dict or not credenciais_dict.get('private_key'):
-            return None
+        # Corpo do e-mail (HTML)
+        corpo_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }}
+                .container {{ max-width: 800px; margin: 0 auto; background-color: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                .header {{ background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white; padding: 20px; text-align: center; }}
+                .header h1 {{ margin: 0; font-size: 24px; }}
+                .header p {{ margin: 5px 0 0; opacity: 0.9; }}
+                .content {{ padding: 20px; }}
+                .section {{ margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }}
+                .section-title {{ color: #2E7D32; font-weight: bold; font-size: 18px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }}
+                .info-table {{ width: 100%; border-collapse: collapse; }}
+                .info-table td {{ padding: 8px; border-bottom: 1px solid #f0f0f0; }}
+                .info-table td:first-child {{ font-weight: bold; width: 35%; background-color: #f9f9f9; }}
+                .items-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+                .items-table th {{ background-color: #2E7D32; color: white; padding: 10px; text-align: left; font-size: 13px; }}
+                .items-table td {{ padding: 8px; border-bottom: 1px solid #ddd; font-size: 13px; }}
+                .items-table tr:hover {{ background-color: #f5f5f5; }}
+                .total-box {{ background: linear-gradient(135deg, #FFF9E6, #FFF3E0); padding: 15px; border-radius: 8px; margin: 15px 0; text-align: center; }}
+                .total-value {{ font-size: 28px; font-weight: bold; color: #D32F2F; }}
+                .footer {{ background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 11px; color: #666; }}
+                .badge {{ display: inline-block; background-color: #4CAF50; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; }}
+                .alert {{ background-color: #FFF3E0; border-left: 4px solid #FF9800; padding: 10px; margin: 15px 0; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🛍️ Luvidarte - Novo Orçamento</h1>
+                    <p>Gerado em: {formatar_data_brasil()}</p>
+                </div>
+                
+                <div class="content">
+                    <div class="section">
+                        <div class="section-title">
+                            <span>📋</span> DADOS DO CLIENTE
+                        </div>
+                        <table class="info-table">
+                            <tr>
+                                <td>Razão Social:</td>
+                                <td><strong>{dados_cliente.get('razao_social', 'NÃO INFORMADO')}</strong></td>
+                            </tr>
+                            <tr>
+                                <td>CNPJ/CPF:</td>
+                                <td>{dados_cliente.get('cnpj', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>Inscrição Estadual:</td>
+                                <td>{dados_cliente.get('inscricao_estadual', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>E-mail:</td>
+                                <td>{dados_cliente.get('email', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>Telefone:</td>
+                                <td>{dados_cliente.get('telefone', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>Endereço:</td>
+                                <td>{dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')} - {dados_cliente.get('bairro', '')}</td>
+                            </tr>
+                            <tr>
+                                <td>CEP:</td>
+                                <td>{dados_cliente.get('cep', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>UF:</td>
+                                <td><span class="badge">{dados_cliente.get('uf', 'NÃO INFORMADO')}</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">
+                            <span>💰</span> RESUMO DO ORÇAMENTO
+                        </div>
+                        <div class="total-box">
+                            <div style="font-size: 14px; color: #666;">TOTAL DO ORÇAMENTO</div>
+                            <div class="total-value">{formatar_moeda(valor_total)}</div>
+                            <div style="font-size: 12px; color: #666; margin-top: 5px;">📦 {qtd_total} item(ns) | ✅ Validade: 7 dias</div>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">
+                            <span>🛍️</span> ITENS DO ORÇAMENTO
+                        </div>
+                        <table class="items-table">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Descrição</th>
+                                    <th>Qtd</th>
+                                    <th>Valor Unit.</th>
+                                    <th>Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        """
         
-        # 4. CONECTAR
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, ESCOPOS)
-        cliente = gspread.authorize(creds)
+        for item in itens_resumo:
+            preco = item.get('preco_final', 0)
+            qtd = item.get('quantidade', 0)
+            subtotal = preco * qtd
+            descricao = item.get('descricao', '')[:60]
+            referencia = item.get('referencia', '')
+            
+            corpo_html += f"""
+                                <tr>
+                                    <td>{referencia}</td>
+                                    <td>{descricao}</td>
+                                    <td style="text-align:center">{qtd}</td>
+                                    <td style="text-align:right">{formatar_moeda(preco)}</td>
+                                    <td style="text-align:right">{formatar_moeda(subtotal)}</td>
+                                </tr>
+            """
         
-        # 5. TESTAR CONEXÃO
-        try:
-            test_planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
-            return cliente
-        except Exception as e:
-            return None
+        corpo_html += f"""
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="alert">
+                        <strong>🔒 LGPD - Lei 13.709/2018</strong><br>
+                        Os dados do cliente são tratados com confidencialidade e armazenados apenas para fins comerciais.<br>
+                        O cliente tem direito a acesso, correção e exclusão de seus dados a qualquer momento.<br>
+                        <strong>DPO:</strong> sac@luvidarte.com.br
+                    </div>
+                    
+                    <div class="alert" style="border-left-color: #D32F2F; background-color: #FFEBEE;">
+                        <strong>⚠️ AVISO IMPORTANTE</strong><br>
+                        Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.<br>
+                        Os valores são estimativas e sujeitos à confirmação de estoque e disponibilidade.<br>
+                        A venda será formalizada APENAS após contato e confirmação da equipe Luvidarte.
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p><strong>Luvidarte - Peças exclusivas em vidro e decoração</strong></p>
+                    <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP | CEP: 08533-060</p>
+                    <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | E-mail: sac@luvidarte.com.br</p>
+                    <p>© 2026 Luvidarte - Todos os direitos reservados</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(corpo_html, 'html'))
+        
+        # Anexar arquivo (se houver)
+        if anexo_bytes and len(anexo_bytes) > 0:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(anexo_bytes)
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
+            msg.attach(part)
+        
+        # Enviar e-mail
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
+            server.login(usuario, senha)
+            server.send_message(msg)
+        
+        return True, ""
         
     except Exception as e:
-        return None
+        return False, str(e)
 
 # ============================================
-# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS
+# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS - COM CSS, ANIMAÇÃO E BALÕES
 # ============================================
 
 def carregar_notificacoes_google_sheets():
-    """Carrega notificações da aba NOTIFICACAO do Google Sheets"""
+    """Carrega notificações da aba NOTIFICACAO do Google Sheets (linhas 2 a 7 apenas)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
@@ -187,8 +281,13 @@ def carregar_notificacoes_google_sheets():
         todas_linhas = aba_notificacao.get_all_values()
         
         notificacoes = []
+        # Limitar apenas às linhas 2 a 7 (índices 1 a 6)
         for i, linha in enumerate(todas_linhas):
             if i == 0:  # Pular cabeçalho
+                continue
+            
+            # Verificar se está dentro do range de linhas 2 a 7 (índices 1 a 6)
+            if i < 1 or i > 6:  # Linha 2 a 7 apenas
                 continue
             
             # Verificar se tem mensagem na coluna A
@@ -218,7 +317,8 @@ def carregar_notificacoes_google_sheets():
                 
                 notificacoes.append({
                     'mensagem': mensagem,
-                    'tipo': tipo
+                    'tipo': tipo,
+                    'linha': i + 1
                 })
         
         return notificacoes
@@ -227,31 +327,294 @@ def carregar_notificacoes_google_sheets():
         return []
 
 def exibir_notificacoes():
-    """Exibe as notificações como pop-ups na tela principal"""
+    """
+    Exibe as notificações como pop-ups na tela principal.
+    SEMPRE exibe quando há notificações ativas (apenas linhas 2 a 7).
+    Com CSS, animação de balões e fonte maior.
+    """
     try:
         notificacoes = carregar_notificacoes_google_sheets()
         
         if not notificacoes:
             return
         
-        # Gerar hash das notificações
-        hash_notificacoes = hashlib.md5(str(notificacoes).encode()).hexdigest()
+        # CSS para animação das notificações com balões
+        st.markdown("""
+        <style>
+        @keyframes slideInDown {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
         
-        # Verificar se já exibimos
-        if st.session_state.get('ultimo_hash_notificacoes') != hash_notificacoes:
-            st.session_state.ultimo_hash_notificacoes = hash_notificacoes
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes shine {
+            0% { background-position: -100% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        @keyframes floatBalloon {
+            0% {
+                transform: translateY(0) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-200px) translateX(30px);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes floatBalloon2 {
+            0% {
+                transform: translateY(0) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-180px) translateX(-40px);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes floatBalloon3 {
+            0% {
+                transform: translateY(0) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-220px) translateX(50px);
+                opacity: 0;
+            }
+        }
+        
+        .balloon {
+            position: fixed;
+            bottom: 100px;
+            font-size: 30px;
+            pointer-events: none;
+            z-index: 99998;
+            animation-duration: 3s;
+            animation-iteration-count: 1;
+            animation-fill-mode: forwards;
+        }
+        
+        .notification-container {
+            animation: slideInDown 0.5s ease-out;
+            margin-bottom: 15px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 99999;
+        }
+        
+        .notification-container:hover {
+            animation: pulse 0.3s ease-in-out;
+        }
+        
+        .notification-success {
+            background: linear-gradient(135deg, #4CAF50, #2E7D32);
+            border-left: 5px solid #1B5E20;
+        }
+        
+        .notification-warning {
+            background: linear-gradient(135deg, #FF9800, #F57C00);
+            border-left: 5px solid #E65100;
+        }
+        
+        .notification-error {
+            background: linear-gradient(135deg, #F44336, #D32F2F);
+            border-left: 5px solid #B71C1C;
+        }
+        
+        .notification-info {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            border-left: 5px solid #0D47A1;
+        }
+        
+        .notification-content {
+            padding: 15px 22px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: white;
+        }
+        
+        .notification-icon {
+            font-size: 28px;
+            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2));
+        }
+        
+        .notification-text {
+            flex: 1;
+            font-size: 18px;
+            font-weight: 600;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.1);
+            letter-spacing: 0.3px;
+        }
+        
+        .notification-close {
+            cursor: pointer;
+            font-size: 22px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+            font-weight: bold;
+        }
+        
+        .notification-close:hover {
+            opacity: 1;
+        }
+        
+        /* Badge de novidade */
+        .new-badge {
+            background-color: #FF6B6B;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-left: 12px;
+            animation: pulse 1s infinite;
+            display: inline-block;
+        }
+        
+        /* Efeito de brilho nas notificações */
+        .notification-container {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .notification-container::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transform: translateX(-100%);
+        }
+        
+        .notification-container:hover::after {
+            animation: shine 0.8s ease-out;
+        }
+        
+        /* Contador de notificações */
+        .notif-counter {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: #D32F2F;
+            color: white;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 99999;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            animation: pulse 1s infinite;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Mostrar contador de notificações
+        st.markdown(f"""
+        <div class="notif-counter">
+            {len(notificacoes)}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Gerar balões animados para cada notificação (efeito de novidade)
+        balao_emojis = ["🎈", "🎉", "✨", "⭐", "🌟", "💫", "🎊", "🏆", "🔥", "💎"]
+        
+        for idx, notif in enumerate(notificacoes):
+            # Balão 1
+            balao1 = random.choice(balao_emojis)
+            balao2 = random.choice(balao_emojis)
+            balao3 = random.choice(balao_emojis)
             
-            for notif in notificacoes:
-                if notif['tipo'] == 'success':
-                    st.success(f"🎉 {notif['mensagem']}")
-                elif notif['tipo'] == 'error':
-                    st.error(f"❌ {notif['mensagem']}")
-                elif notif['tipo'] == 'warning':
-                    st.warning(f"⚠️ {notif['mensagem']}")  # Alerta em laranja
-                else:
-                    st.info(f"ℹ️ {notif['mensagem']}")
+            st.markdown(f"""
+            <div class="balloon" style="left: {10 + idx * 15}%; animation-name: floatBalloon; animation-delay: {idx * 0.2}s;">
+                {balao1}
+            </div>
+            <div class="balloon" style="left: {20 + idx * 12}%; animation-name: floatBalloon2; animation-delay: {idx * 0.3 + 0.1}s;">
+                {balao2}
+            </div>
+            <div class="balloon" style="left: {30 + idx * 18}%; animation-name: floatBalloon3; animation-delay: {idx * 0.25 + 0.2}s;">
+                {balao3}
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Exibir cada notificação com CSS customizado
+        for idx, notif in enumerate(notificacoes):
+            if notif['tipo'] == 'success':
+                icon = "🎉"
+                css_class = "notification-success"
+            elif notif['tipo'] == 'error':
+                icon = "❌"
+                css_class = "notification-error"
+            elif notif['tipo'] == 'warning':
+                icon = "⚠️"
+                css_class = "notification-warning"
+            else:
+                icon = "ℹ️"
+                css_class = "notification-info"
+            
+            # Gerar ID único para cada notificação
+            notification_id = f"notif_{random.randint(10000, 99999)}_{idx}"
+            
+            # HTML da notificação com animação e fonte maior
+            notification_html = f"""
+            <div id="{notification_id}" class="notification-container {css_class}">
+                <div class="notification-content">
+                    <div class="notification-icon">{icon}</div>
+                    <div class="notification-text">
+                        <strong>{notif['mensagem']}</strong>
+                        <span class="new-badge">NOVO</span>
+                    </div>
+                    <div class="notification-close" onclick="document.getElementById('{notification_id}').style.display='none'">✕</div>
+                </div>
+            </div>
+            """
+            
+            st.markdown(notification_html, unsafe_allow_html=True)
+        
+        # Pequena pausa para garantir que as animações sejam renderizadas
+        time.sleep(0.1)
+                
     except Exception as e:
-        pass
+        pass  # Silencioso para não quebrar o sistema
 
 # ============================================
 # CONFIGURAÇÃO DO GOOGLE SHEETS
@@ -265,6 +628,65 @@ ESCOPOS = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
+
+def conectar_google_sheets():
+    """Conecta ao Google Sheets usando credenciais (local ou secrets)"""
+    try:
+        credenciais_dict = None
+        
+        # 1. TENTAR STREAMLIT SECRETS (para produção/nuvem)
+        try:
+            if hasattr(st, 'secrets') and 'google' in st.secrets:
+                credenciais_dict = {
+                    "type": st.secrets["google"].get("type", "service_account"),
+                    "project_id": st.secrets["google"].get("project_id", ""),
+                    "private_key_id": st.secrets["google"].get("private_key_id", ""),
+                    "private_key": st.secrets["google"].get("private_key", ""),
+                    "client_email": st.secrets["google"].get("client_email", ""),
+                    "client_id": st.secrets["google"].get("client_id", ""),
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "client_x509_cert_url": st.secrets["google"].get("client_x509_cert_url", "")
+                }
+                credenciais_dict = {k: v for k, v in credenciais_dict.items() if v}
+        except Exception as e:
+            pass
+        
+        # 2. TENTAR ARQUIVO LOCAL (para desenvolvimento)
+        if not credenciais_dict or not credenciais_dict.get('private_key'):
+            possiveis_caminhos = [
+                'credentials.json',
+                './credentials.json',
+                '../credentials.json',
+                r'C:\Users\elton\OneDrive\Documentos\dashboard-gerencial-492613-042470f98e27.json'
+            ]
+            for caminho in possiveis_caminhos:
+                try:
+                    if os.path.exists(caminho):
+                        with open(caminho, 'r') as f:
+                            credenciais_dict = json.load(f)
+                        break
+                except:
+                    pass
+        
+        # 3. VERIFICAR SE TEM CREDENCIAIS
+        if not credenciais_dict or not credenciais_dict.get('private_key'):
+            return None
+        
+        # 4. CONECTAR
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, ESCOPOS)
+        cliente = gspread.authorize(creds)
+        
+        # 5. TESTAR CONEXÃO
+        try:
+            test_planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
+            return cliente
+        except Exception as e:
+            return None
+        
+    except Exception as e:
+        return None
 
 def salvar_cadastro_cliente(dados_cliente):
     """Salva os dados do cliente na planilha Cadastro_Virtual (aba Cadastro)"""
@@ -461,532 +883,56 @@ def limpar_dados_sensiveis():
     return False
 
 # ============================================
-# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME
+# FUNÇÃO PARA OBTER HORÁRIO LOCAL DO BRASIL
 # ============================================
-def calcular_desconto_volume(valor_base):
-    if valor_base >= 4000:
-        return 0.15
-    elif valor_base >= 2500:
-        return 0.10
-    else:
-        return 0.0
+def get_horario_brasil():
+    return datetime.now(TIMEZONE_BR)
 
-def calcular_faltante_para_desconto(valor_base):
-    if valor_base < 2500:
-        return 2500 - valor_base, 10
-    elif valor_base < 4000:
-        return 4000 - valor_base, 15
-    else:
-        return 0, 0
-
-def gerar_botao_desconto_flutuante():
-    if st.session_state.carrinho:
-        valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-        desconto_percentual = calcular_desconto_volume(valor_base_total)
-        faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_total)
-        
-        if desconto_percentual == 0.15:
-            mensagem = f"🏆 PARABÉNS! Você atingiu 15% de desconto máximo!"
-            cor = "#FF9800"
-            icone = "🏆"
-            texto_desconto = "15% OFF"
-        elif desconto_percentual == 0.10:
-            mensagem = f"✅ Você já tem 10% de desconto! Faltam {formatar_moeda(faltante)} para 15%"
-            cor = "#4CAF50"
-            icone = "🎯"
-            texto_desconto = "10% OFF"
-        else:
-            if faltante > 0:
-                mensagem = f"📈 Adicione mais {formatar_moeda(faltante)} e ganhe {prox_desconto}% de desconto!"
-            else:
-                mensagem = f"💰 Adicione produtos para ganhar desconto por volume!"
-            cor = "#2196F3"
-            icone = "📈"
-            texto_desconto = "0% OFF"
-        
-        if valor_base_total >= 4000:
-            progresso = 100
-        elif valor_base_total >= 2500:
-            progresso = 75 + ((valor_base_total - 2500) / 1500) * 25
-        else:
-            progresso = (valor_base_total / 2500) * 75
-        
-        progresso = min(100, max(0, progresso))
-    else:
-        mensagem = "💰 Adicione produtos para ganhar desconto por volume!"
-        faltante = 2500
-        prox_desconto = 10
-        cor = "#9E9E9E"
-        icone = "💰"
-        texto_desconto = "0% OFF"
-        progresso = 0
-    
-    html = f"""
-    <style>
-    @keyframes slideInRight {{
-        from {{ transform: translateX(100%); opacity: 0; }}
-        to {{ transform: translateX(0); opacity: 1; }}
-    }}
-    
-    @keyframes pulse {{
-        0% {{ transform: scale(1); }}
-        50% {{ transform: scale(1.05); }}
-        100% {{ transform: scale(1); }}
-    }}
-    
-    .desconto-float {{
-        position: fixed;
-        bottom: 100px;
-        right: 20px;
-        z-index: 99999;
-        animation: slideInRight 0.5s ease-out;
-        cursor: pointer;
-    }}
-    
-    .desconto-card {{
-        background: linear-gradient(135deg, #FFF, #F5F5F5);
-        border-radius: 16px;
-        padding: 12px 18px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        border-left: 4px solid {cor};
-        min-width: 280px;
-        max-width: 320px;
-        transition: all 0.3s ease;
-    }}
-    
-    .desconto-card:hover {{
-        transform: translateY(-5px);
-        box-shadow: 0 12px 28px rgba(0,0,0,0.2);
-    }}
-    
-    .desconto-header {{
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 10px;
-    }}
-    
-    .desconto-icon {{
-        font-size: 28px;
-        animation: pulse 2s infinite;
-    }}
-    
-    .desconto-title {{
-        font-size: 14px;
-        font-weight: bold;
-        color: #333;
-        margin: 0;
-    }}
-    
-    .desconto-message {{
-        font-size: 12px;
-        color: #555;
-        margin: 8px 0;
-        line-height: 1.4;
-    }}
-    
-    .desconto-value {{
-        font-size: 18px;
-        font-weight: bold;
-        color: {cor};
-        margin: 5px 0;
-    }}
-    
-    .progress-bar-container {{
-        background-color: #E0E0E0;
-        border-radius: 10px;
-        height: 8px;
-        margin: 10px 0;
-        overflow: hidden;
-    }}
-    
-    .progress-bar-fill {{
-        background: linear-gradient(90deg, {cor}, #FF9800);
-        width: {progresso}%;
-        height: 100%;
-        border-radius: 10px;
-        transition: width 0.5s ease;
-    }}
-    
-    .progress-labels {{
-        display: flex;
-        justify-content: space-between;
-        font-size: 9px;
-        color: #666;
-        margin-top: 5px;
-    }}
-    
-    .close-btn {{
-        position: absolute;
-        top: 5px;
-        right: 10px;
-        background: none;
-        border: none;
-        font-size: 16px;
-        cursor: pointer;
-        color: #999;
-        transition: color 0.2s;
-    }}
-    
-    .close-btn:hover {{
-        color: #333;
-    }}
-    
-    @media (max-width: 768px) {{
-        .desconto-card {{
-            min-width: 260px;
-            padding: 10px 15px;
-        }}
-        .desconto-float {{
-            bottom: 90px;
-            right: 10px;
-        }}
-    }}
-    </style>
-    
-    <div class="desconto-float" id="descontoFloat">
-        <div class="desconto-card">
-            <button class="close-btn" onclick="document.getElementById('descontoFloat').style.display='none'">✕</button>
-            <div class="desconto-header">
-                <div class="desconto-icon">{icone}</div>
-                <div>
-                    <div class="desconto-title">💎 DESCONTO POR VOLUME</div>
-                    <div class="desconto-value">{texto_desconto}</div>
-                </div>
-            </div>
-            <div class="desconto-message">{mensagem}</div>
-            <div class="progress-bar-container">
-                <div class="progress-bar-fill"></div>
-            </div>
-            <div class="progress-labels">
-                <span>💰 R$ 0</span>
-                <span>🎯 10% (R$ 2.500)</span>
-                <span>🏆 15% (R$ 4.000)</span>
-            </div>
-        </div>
-    </div>
-    """
-    
-    return html
+def formatar_data_brasil():
+    agora = get_horario_brasil()
+    return agora.strftime('%d/%m/%Y %H:%M:%S')
 
 # ============================================
-# FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
+# FUNÇÃO PARA VALIDAR CNPJ
 # ============================================
-def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
-    valor_base_item = item['preco_final']
-    valor_com_desconto_volume = valor_base_item * (1 - desconto_volume_percentual)
-    novo_valor_ipi = valor_com_desconto_volume * item['ipi_percentual']
-    novo_valor_st = valor_com_desconto_volume * item['st_aliquota']
-    novo_total_geral = valor_com_desconto_volume + novo_valor_ipi + novo_valor_st
-    
-    return {
-        'preco_final_com_desconto': valor_com_desconto_volume,
-        'valor_ipi': novo_valor_ipi,
-        'valor_st': novo_valor_st,
-        'total_geral': novo_total_geral
-    }
+def validar_cnpj(cnpj):
+    cnpj = re.sub(r'[^0-9]', '', str(cnpj))
+    if len(cnpj) != 14:
+        return False
+    if len(set(cnpj)) == 1:
+        return False
+    peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
+    digito1 = 11 - (soma1 % 11)
+    if digito1 >= 10:
+        digito1 = 0
+    peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
+    digito2 = 11 - (soma2 % 11)
+    if digito2 >= 10:
+        digito2 = 0
+    return int(cnpj[12]) == digito1 and int(cnpj[13]) == digito2
 
 # ============================================
-# FUNÇÃO PARA GERAR HTML DO ORÇAMENTO
+# FUNÇÃO PARA VALIDAR EMAIL
 # ============================================
-def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_pagamento, 
-                         desconto_volume_percentual, valor_base_total, valor_desconto_volume,
-                         total_final, total_ipi, total_st):
-    
-    novo_valor_base = valor_base_total - valor_desconto_volume
-    
-    if valor_base_total > 0:
-        fator_ipi_st = novo_valor_base / valor_base_total
-    else:
-        fator_ipi_st = 0
-    
-    data_geracao = formatar_data_brasil()
-    id_documento = hashlib.sha256(f"{dados_cliente.get('cnpj', '')}{data_geracao}".encode()).hexdigest()[:8]
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Orçamento Luvidarte - Confidencial</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 40px; }}
-            .header {{ text-align: center; margin-bottom: 30px; }}
-            .header h1 {{ color: #2E7D32; }}
-            .section {{ margin-bottom: 20px; }}
-            .section-title {{ color: #2E7D32; border-bottom: 2px solid #C9A03D; padding-bottom: 5px; }}
-            table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-            th {{ background-color: #2E7D32; color: white; }}
-            .total {{ font-weight: bold; font-size: 18px; color: #D32F2F; text-align: right; }}
-            .footer {{ margin-top: 30px; font-size: 12px; text-align: center; color: #666; }}
-            .lgpd-notice {{ background-color: #FFF9E6; border-left: 4px solid #C9A03D; 
-                           padding: 10px; margin: 20px 0; font-size: 11px; }}
-            .confidencial {{ background-color: #FFEBEE; border-left: 4px solid #D32F2F;
-                           padding: 10px; margin: 20px 0; font-size: 11px; }}
-            .alert-uf {{ background-color: #FFE0B2; border-left: 4px solid #FF9800;
-                        padding: 10px; margin: 20px 0; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="confidencial">
-            🔒 <strong>DOCUMENTO CONFIDENCIAL</strong> - ID: {id_documento}<br>
-            Gerado em: {data_geracao}<br>
-            Este orçamento contém informações comerciais privilegiadas. 
-            O compartilhamento não autorizado é proibido nos termos da LGPD.
-        </div>
-        
-        <div class="alert-uf">
-            ⚠️ <strong>CONFIRMAÇÃO DE LOCALIDADE:</strong><br>
-            Este orçamento foi calculado com base na UF <strong>{uf}</strong> (ICMS conforme legislação).<br>
-            O endereço de entrega informado está de acordo com esta localidade.
-        </div>
-        
-        <div class="header">
-            <h1>Luvidarte - Catálogo Interativo Virtual</h1>
-        </div>
-        
-        <div class="section">
-            <h2 class="section-title">DADOS DO CLIENTE</h2>
-            <p><strong>Razão Social:</strong> {dados_cliente.get('razao_social', '')}</p>
-            <p><strong>CNPJ/CPF:</strong> {dados_cliente.get('cnpj', '')}</p>
-            <p><strong>Inscrição Estadual:</strong> {dados_cliente.get('inscricao_estadual', '')}</p>
-            <p><strong>E-mail:</strong> {dados_cliente.get('email', '')}</p>
-            <p><strong>Telefone:</strong> {dados_cliente.get('telefone', '')}</p>
-            <p><strong>Endereço:</strong> {dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')}</p>
-            <p><strong>Bairro:</strong> {dados_cliente.get('bairro', '')}</p>
-            <p><strong>CEP:</strong> {dados_cliente.get('cep', '')}</p>
-            <p><strong>UF (ICMS calculado):</strong> {uf}</p>
-        </div>
-        
-        <div class="section">
-            <h2 class="section-title">INFORMAÇÕES DO ORÇAMENTO</h2>
-            <p><strong>Data de Geração:</strong> {data_geracao}</p>
-            <p><strong>ID do Documento:</strong> {id_documento}</p>
-            <p><strong>Tipo de Cliente:</strong> {tipo_cliente}</p>
-            <p><strong>Condição de Pagamento:</strong> {forma_pagamento}</p>
-            <p><strong>Validade do Orçamento:</strong> 7 dias corridos</p>
-        </div>
-        
-        <div class="section">
-            <h2 class="section-title">ITENS DO ORÇAMENTO</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Código</th>
-                        <th>Descrição</th>
-                        <th>Qtd</th>
-                        <th>Valor Unit.</th>
-                        <th>Subtotal</th>
-                        <th>IPI</th>
-                        <th>ST</th>
-                        <th>Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-    """
-    
-    total_ipi_exibido = 0
-    total_st_exibido = 0
-    total_geral_exibido = 0
-    
-    for item in itens_carrinho:
-        valor_base_item = item['preco_final']
-        valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
-        aliquota_ipi_item = item['valor_ipi'] / valor_base_item if valor_base_item > 0 else 0
-        aliquota_st_item = item['valor_st'] / valor_base_item if valor_base_item > 0 else 0
-        
-        novo_ipi_unitario = valor_com_desconto_item * aliquota_ipi_item
-        novo_st_unitario = valor_com_desconto_item * aliquota_st_item
-        
-        subtotal_item = valor_com_desconto_item * item['quantidade']
-        ipi_total_item = novo_ipi_unitario * item['quantidade']
-        st_total_item = novo_st_unitario * item['quantidade']
-        total_item = (valor_com_desconto_item + novo_ipi_unitario + novo_st_unitario) * item['quantidade']
-        
-        total_ipi_exibido += ipi_total_item
-        total_st_exibido += st_total_item
-        total_geral_exibido += total_item
-        
-        html_content += f"""
-                    <tr>
-                        <td>{item['referencia']}</td>                        <td>{item['descricao'][:50]}</td>
-                        <td style="text-align:center">{item['quantidade']}</td>
-                        <td style="text-align:right">{formatar_moeda(valor_com_desconto_item)}</td>
-                        <td style="text-align:right">{formatar_moeda(subtotal_item)}</td>
-                        <td style="text-align:right">{formatar_moeda(ipi_total_item) if ipi_total_item > 0 else '-'}</td>
-                        <td style="text-align:right">{formatar_moeda(st_total_item) if st_total_item > 0 else '-'}</td>
-                        <td style="text-align:right">{formatar_moeda(total_item)}</td>
-                    </tr>
-        """
-    
-    html_content += f"""
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="section">
-            <h2 class="section-title">RESUMO FINAL</h2>
-            <p><strong>Valor Base Original:</strong> {formatar_moeda(valor_base_total)}</p>
-            <p><strong>Desconto por Volume ({int(desconto_volume_percentual*100)}%):</strong> -{formatar_moeda(valor_desconto_volume)}</p>
-            <p><strong>Novo Valor Base:</strong> {formatar_moeda(novo_valor_base)}</p>
-            <p><strong>IPI Total:</strong> {formatar_moeda(total_ipi_exibido)}</p>
-            <p><strong>ST Total:</strong> {formatar_moeda(total_st_exibido)}</p>
-            <p class="total"><strong>TOTAL GERAL DO ORÇAMENTO:</strong> {formatar_moeda(total_geral_exibido)}</p>
-        </div>
-        
-        <div class="lgpd-notice">
-            🔒 <strong>LGPD - LEI GERAL DE PROTEÇÃO DE DADOS (Lei 13.709/2018)</strong><br><br>
-            • Seus dados são tratados com confidencialidade e armazenados conforme consentimento<br>
-            • Base legal: Execução de contrato e legítimo interesse (Art. 7º, V e IX)<br>
-            • Você pode solicitar a exclusão dos seus dados a qualquer momento<br>
-            • Este documento é de uso exclusivo da Luvidarte e do cliente<br><br>
-            <strong>Seus direitos LGPD (Art. 18):</strong><br>
-            • Acesso, correção e eliminação de dados<br>
-            • Revogação do consentimento<br>
-            • Portabilidade de dados<br><br>
-            <strong>Encarregado (DPO):</strong> dpo@luvidarte.com.br | (11) 4676-9000
-        </div>
-        
-        <div class="footer">
-            <p><strong>Luvidarte - Peças exclusivas em vidro e decoração</strong></p>
-            <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP | CEP: 08533-060</p>
-            <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | E-mail: sac@luvidarte.com.br</p>
-            <p>---</p>
-            <p>⚠️ <strong>AVISO IMPORTANTE:</strong> Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.</p>
-            <p>Os valores são estimativas e sujeitos à confirmação de estoque e disponibilidade.</p>
-            <p>A venda será formalizada APENAS após contato e confirmação da nossa equipe via WhatsApp.</p>
-            <p><strong>Validade do orçamento: 7 (sete) dias corridos.</strong></p>
-            <p>---</p>
-            <p>© 2026 Luvidarte - Todos os direitos reservados | Versão 2.0</p>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return html_content.encode('utf-8')
+def validar_email(email):
+    padrao = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(padrao, email) is not None
 
 # ============================================
-# FUNÇÃO PARA FORMATAR MENSAGEM WHATSAPP
+# FUNÇÃO PARA VALIDAR TELEFONE
 # ============================================
-def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento, total_final,
-                                desconto_volume_percentual, valor_desconto_volume, valor_base_total,
-                                total_ipi, total_st):
-    
-    msg = "🛍️ NOVO ORÇAMENTO Luvidarte 🛍️\n\n"
-    msg += "━" * 30 + "\n\n"
-    msg += "DADOS DO CLIENTE\n"
-    msg += f"🏢 Razão Social: {dados_cliente.get('razao_social', '')}\n"
-    msg += f"📄 CNPJ/CPF: {dados_cliente.get('cnpj', '')}\n"
-    msg += f"🔢 IE: {dados_cliente.get('inscricao_estadual', '')}\n"
-    msg += f"📧 E-mail: {dados_cliente.get('email', '')}\n"
-    msg += f"📞 Telefone: {dados_cliente.get('telefone', '')}\n"
-    msg += f"📍 Endereço: {dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')}\n"
-    msg += f"🏘️ Bairro: {dados_cliente.get('bairro', '')}\n"
-    msg += f"📮 CEP: {dados_cliente.get('cep', '')}\n"
-    msg += f"🗺️ UF (ICMS calculado): {uf}\n\n"
-    msg += "━" * 30 + "\n\n"
-    msg += "RESUMO DO ORÇAMENTO\n"
-    msg += f"📅 Data: {formatar_data_brasil()}\n"
-    msg += f"👤 Tipo Cliente: {tipo_cliente}\n"
-    msg += f"💳 Pagamento: {forma_pagamento}\n"
-    
-    if desconto_volume_percentual > 0:
-        novo_valor_base = valor_base_total - valor_desconto_volume
-        msg += f"🎉 DESCONTO POR VOLUME: {int(desconto_volume_percentual*100)}%\n"
-        msg += f"💰 Valor Base Original: {formatar_moeda(valor_base_total)}\n"
-        msg += f"💰 Desconto: {formatar_moeda(valor_desconto_volume)}\n"
-        msg += f"💰 Novo Valor Base: {formatar_moeda(novo_valor_base)}\n"
-        msg += f"🔷 IPI Total: {formatar_moeda(total_ipi)}\n"
-        msg += f"🟣 ST Total: {formatar_moeda(total_st)}\n\n"
-    else:
-        msg += "\n"
-    
-    msg += "ITENS SOLICITADOS\n"
-    for item in st.session_state.carrinho:
-        valor_base_item = item['preco_final']
-        valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
-        msg += f"• {item['quantidade']}x {item['descricao'][:50]}\n"
-        msg += f"  REF: {item['referencia']} - Valor unit: {formatar_moeda(valor_com_desconto)}\n"
-    
-    msg += "\n━" * 30 + "\n\n"
-    msg += f"💰 TOTAL DO ORÇAMENTO: {formatar_moeda(total_final)}\n\n"
-    msg += "📋 Próximos passos:\n"
-    msg += "1️⃣ Aguarde o contato da nossa equipe\n"
-    msg += "2️⃣ Confirmaremos disponibilidade dos produtos\n"
-    msg += "3️⃣ Enviaremos as condições de pagamento e frete\n\n"
-    msg += "🔒 LGPD: Seus dados são tratados com confidencialidade conforme Lei 13.709/2018\n"
-    msg += "📧 DPO: dpo@luvidarte.com.br\n\n"
-    msg += "✨ Agradecemos a preferência! ✨"
-    
-    return msg
+def validar_telefone(telefone):
+    telefone = re.sub(r'[^0-9]', '', str(telefone))
+    return len(telefone) >= 10 and len(telefone) <= 11
 
 # ============================================
-# FUNÇÃO PARA ENVIAR E-MAIL DO ORÇAMENTO
+# FUNÇÃO PARA VALIDAR CEP
 # ============================================
-
-def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes, nome_arquivo):
-    """
-    Envia e-mail com o orçamento anexado para qualidade@luvidarte.com.br
-    SEM exibir mensagens de sucesso na interface
-    """
-    try:
-        usuario = EMAIL_CONFIG_ORCAMENTO["usuario"]
-        senha = EMAIL_CONFIG_ORCAMENTO["senha"]
-        destinatario = EMAIL_CONFIG_ORCAMENTO["destinatario"]
-        smtp_server = EMAIL_CONFIG_ORCAMENTO["smtp_server"]
-        smtp_port = EMAIL_CONFIG_ORCAMENTO["smtp_port"]
-        
-        # Criar mensagem
-        msg = MIMEMultipart()
-        msg['From'] = usuario
-        msg['To'] = destinatario
-        msg['Subject'] = f"🛍️ NOVO ORÇAMENTO Luvidarte - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        
-        # Calcular quantidade total de itens
-        qtd_total = sum(item.get('quantidade', 0) for item in itens_resumo)
-        
-        # Corpo do e-mail (HTML)
-        corpo_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Orçamento Luvidarte</title>
-        </head>
-        <body>
-            <h2>🛍️ NOVO ORÇAMENTO Luvidarte</h2>
-            <p><strong>Cliente:</strong> {dados_cliente.get('razao_social', 'NÃO INFORMADO')}</p>
-            <p><strong>CNPJ:</strong> {dados_cliente.get('cnpj', 'NÃO INFORMADO')}</p>
-            <p><strong>Total:</strong> {formatar_moeda(valor_total)}</p>
-            <p><strong>Quantidade de Itens:</strong> {qtd_total}</p>
-            <hr>
-            <p><small>Orçamento gerado em: {formatar_data_brasil()}</small></p>
-            <p><small>Este é um orçamento virtual, sujeito à confirmação de estoque.</small></p>
-        </body>
-        </html>
-        """
-        
-        msg.attach(MIMEText(corpo_html, 'html'))
-        
-        # Anexar arquivo (se houver)
-        if anexo_bytes and len(anexo_bytes) > 0:
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(anexo_bytes)
-            encoders.encode_base64(part)
-            part.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
-            msg.attach(part)
-        
-        # Enviar e-mail
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
-            server.login(usuario, senha)
-            server.send_message(msg)
-        
-        return True, ""
-        
-    except Exception as e:
-        return False, str(e)
+def validar_cep(cep):
+    cep = re.sub(r'[^0-9]', '', str(cep))
+    return len(cep) == 8
 
 # ============================================
 # TELA DE VALIDAÇÃO INICIAL (PESSOA FÍSICA vs JURÍDICA)
@@ -1319,7 +1265,7 @@ def mostrar_politica_privacidade():
         
         | Canal | Contato |
         |-------|---------|
-        | **E-mail** | `dpo@luvidarte.com.br` |
+        | **E-mail** | `sac@luvidarte.com.br` |
         | **Telefone** | (11) 4676-9000 |
         
         ---
@@ -1329,7 +1275,7 @@ def mostrar_politica_privacidade():
         • Leu e compreendeu todas as cláusulas acima<br>
         • Autoriza a coleta e armazenamento dos seus dados conforme descrito<br>
         • Conhece seus direitos de acesso, correção e exclusão<br><br>
-        <small>Data da última atualização: 30/04/2026 - Versão 2.0 (LGPD)</small>
+        <small>Data da última atualização: 03/05/2026 - Versão 2.1 (LGPD)</small>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1409,218 +1355,478 @@ def obter_consentimento_lgpd() -> bool:
     return True
 
 # ============================================
-# CARREGAMENTO DE DADOS (FUNÇÕES DE CACHE)
+# FUNÇÃO PARA FORMATAR MOEDA (PADRÃO BRASILEIRO)
 # ============================================
-
-def converter_moeda_para_numero(valor):
-    if pd.isna(valor) or valor == '' or valor is None:
-        return np.nan
-    s = str(valor).replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
-    s = re.sub(r'[^0-9.]', '', s)
-    try:
-        return float(s)
-    except:
-        return np.nan
-
-def converter_percentual_para_numero(valor):
-    if pd.isna(valor) or valor == '' or valor is None:
-        return 0.0
-    s = str(valor).strip().replace('%', '').replace(',', '.')
-    try:
-        p = float(s)
-        if p > 1 and p <= 100:
-            p = p / 100
-        return p
-    except:
-        return 0.0
-
-def formatar_ml(valor):
-    if pd.isna(valor) or valor == 0 or valor is None or valor == '':
-        return None
-    try:
-        v = float(valor)
-        if v >= 1000:
-            return f"{v/1000:.3f} L"
-        return f"{int(v)} ml" if v == int(v) else f"{v:.3f}".rstrip('0').rstrip('.') + " ml"
-    except:
-        return None
-
-@st.cache_data(ttl=600)
-def carregar_planilha(id_planilha, nome_aba="base"):
-    try:
-        url = f"https://docs.google.com/spreadsheets/d/{id_planilha}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        if 'Codigo SISTEMA' in df.columns:
-            df = df.rename(columns={'Codigo SISTEMA': 'Promo'})
-        if 'Preço Bruto' in df.columns:
-            df['Preço'] = df['Preço Bruto'].apply(converter_moeda_para_numero)
-        df['GRUPO'] = df['GRUPO'].fillna('Outros')
-        df['Descrição'] = df['Descrição'].fillna('Produto sem descrição')
-        df['Referência'] = df['Referência'].fillna('').astype(str)
-        if 'Promo' not in df.columns:
-            df['Promo'] = ''
-        if 'ml' in df.columns:
-            df['ml'] = pd.to_numeric(df['ml'], errors='coerce')
-        return df
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar a planilha: {e}")
-        return pd.DataFrame()
-
-@st.cache_data(ttl=600)
-def carregar_planilha_promo(id_planilha, nome_aba="PROMO"):
-    try:
-        url = f"https://docs.google.com/spreadsheets/d/{id_planilha}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        return df
-    except:
-        return pd.DataFrame()
-
-@st.cache_data(ttl=600)
-def carregar_base_st(id_planilha_st, nome_aba_st="BASE_ST"):
-    try:
-        url = f"https://docs.google.com/spreadsheets/d/{id_planilha_st}/gviz/tq?tqx=out:csv&sheet={nome_aba_st}"
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        return df
-    except:
-        return pd.DataFrame()
-
-@st.cache_data(ttl=600)
-def carregar_descontos_normal(id_planilha, nome_aba="NORMAL"):
-    try:
-        url = f"https://docs.google.com/spreadsheets/d/{id_planilha}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        return df
-    except:
-        return pd.DataFrame()
-
-@st.cache_data(ttl=600)
-def carregar_descontos_isento(id_planilha, nome_aba="ISENTO"):
-    try:
-        url = f"https://docs.google.com/spreadsheets/d/{id_planilha}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        return df
-    except:
-        return pd.DataFrame()
+def formatar_moeda(valor):
+    if valor is None or valor == 0:
+        return "R$ 0,00"
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ============================================
-# FUNÇÕES DE CÁLCULO
+# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME
 # ============================================
-
-def buscar_preco_promo(referencia: str, uf: str, df_promo: pd.DataFrame) -> float:
-    if df_promo.empty or not referencia:
-        return None
-    ref_limpa = str(referencia).strip()
-    coluna_ref = df_promo.columns[0]
-    df_promo[coluna_ref] = df_promo[coluna_ref].astype(str).str.strip()
-    linha = df_promo[df_promo[coluna_ref] == ref_limpa]
-    if linha.empty:
-        linha = df_promo[df_promo[coluna_ref].str.contains(ref_limpa, case=False, na=False)]
-        if linha.empty:
-            return None
-    uf_upper = uf.upper()
-    if uf_upper == "SP":
-        col_icms = "18%"
-    elif uf_upper in ["MG", "RS", "SE", "PR", "RJ", "SC"]:
-        col_icms = "12%"
+def calcular_desconto_volume(valor_base):
+    if valor_base >= 4000:
+        return 0.15
+    elif valor_base >= 2500:
+        return 0.10
     else:
-        col_icms = "7%"
-    col_preco = next((c for c in df_promo.columns if str(c).strip() == col_icms), None)
-    if col_preco is None:
-        return None
-    valor = linha.iloc[0][col_preco]
-    if pd.isna(valor):
-        return None
-    if isinstance(valor, str):
-        valor = valor.strip().replace('.', '').replace(',', '.')
-        try:
-            valor = float(valor)
-        except:
-            return None
-    return float(valor) if not pd.isna(valor) else None
-
-def buscar_ipi(ncm: str, df_st: pd.DataFrame) -> float:
-    if df_st.empty or not ncm:
-        return 0.0
-    ncm_limpo = str(ncm).replace(".", "").strip()
-    df_st['NCM_LIMPO'] = df_st.iloc[:, 1].astype(str).str.replace(".", "").str.strip()
-    linha = df_st[df_st['NCM_LIMPO'] == ncm_limpo]
-    if linha.empty:
-        return 0.0
-    v = linha.iloc[0, 0]
-    if pd.isna(v):
-        return 0.0
-    if isinstance(v, str):
-        v = v.replace("%", "").replace(",", ".").strip()
-    try:
-        ipi = float(v)
-        if ipi > 1 and ipi <= 100:
-            ipi = ipi / 100
-        return ipi
-    except:
         return 0.0
 
-def determinar_icms_por_uf(uf: str) -> float:
-    u = uf.upper()
-    if u == "SP":
-        return 18.0
-    elif u in ["MG", "RS", "SE", "PR", "RJ", "SC"]:
-        return 12.0
-    return 7.0
+def calcular_faltante_para_desconto(valor_base):
+    if valor_base < 2500:
+        return 2500 - valor_base, 10
+    elif valor_base < 4000:
+        return 4000 - valor_base, 15
+    else:
+        return 0, 0
 
-def buscar_desconto(icms: float, forma_pagamento: str, df_desconto: pd.DataFrame) -> float:
-    if df_desconto.empty or forma_pagamento == "PREÇO BASE":
-        return 0.0
-    df_temp = df_desconto.copy()
-    df_temp['ICMS_LIMPO'] = pd.to_numeric(
-        df_temp['ICMS'].astype(str).str.replace('%', '').str.replace(',', '.').str.strip(),
-        errors='coerce'
-    )
-    df_temp['FORMA_LIMPO'] = df_temp['FORMA'].apply(lambda x: str(x).strip() if pd.notna(x) else "")
-    forma_para_buscar = "" if forma_pagamento == "VISTA" else f"{float(forma_pagamento):.1f}"
-    df_f = df_temp[(df_temp['ICMS_LIMPO'] == float(icms)) & (df_temp['FORMA_LIMPO'] == forma_para_buscar)]
-    if not df_f.empty:
-        return converter_percentual_para_numero(df_f.iloc[0]['DESCONTO'])
-    return 0.0
-
-def buscar_aliquota_st(ncm: str, uf: str, df_st: pd.DataFrame) -> float:
-    if df_st.empty or not ncm or not uf:
-        return 0.0
-    ncm_limpo = str(ncm).replace(".", "").strip()
-    df_st['NCM_LIMPO'] = df_st.iloc[:, 1].astype(str).str.replace(".", "").str.strip()
-    linha_ncm = df_st[df_st['NCM_LIMPO'] == ncm_limpo]
-    if linha_ncm.empty:
-        return 0.0
-    uf_upper = uf.upper().strip()
-    colunas_uf = {}
-    for col in df_st.columns[2:]:
-        col_clean = str(col).strip().upper()
-        colunas_uf[col_clean] = col
-    if uf_upper not in colunas_uf:
-        for col_key in colunas_uf.keys():
-            if uf_upper in col_key or col_key in uf_upper:
-                nome_coluna = colunas_uf[col_key]
-                break
+def gerar_botao_desconto_flutuante():
+    if st.session_state.carrinho:
+        valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
+        desconto_percentual = calcular_desconto_volume(valor_base_total)
+        faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_total)
+        
+        if desconto_percentual == 0.15:
+            mensagem = f"🏆 PARABÉNS! Você atingiu 15% de desconto máximo!"
+            cor = "#FF9800"
+            icone = "🏆"
+            texto_desconto = "15% OFF"
+        elif desconto_percentual == 0.10:
+            mensagem = f"✅ Você já tem 10% de desconto! Faltam {formatar_moeda(faltante)} para 15%"
+            cor = "#4CAF50"
+            icone = "🎯"
+            texto_desconto = "10% OFF"
         else:
-            return 0.0
+            if faltante > 0:
+                mensagem = f"📈 Adicione mais {formatar_moeda(faltante)} e ganhe {prox_desconto}% de desconto!"
+            else:
+                mensagem = f"💰 Adicione produtos para ganhar desconto por volume!"
+            cor = "#2196F3"
+            icone = "📈"
+            texto_desconto = "0% OFF"
+        
+        if valor_base_total >= 4000:
+            progresso = 100
+        elif valor_base_total >= 2500:
+            progresso = 75 + ((valor_base_total - 2500) / 1500) * 25
+        else:
+            progresso = (valor_base_total / 2500) * 75
+        
+        progresso = min(100, max(0, progresso))
     else:
-        nome_coluna = colunas_uf[uf_upper]
-    valor = linha_ncm.iloc[0][nome_coluna]
-    if pd.isna(valor):
-        return 0.0
-    if isinstance(valor, str):
-        valor = valor.replace("%", "").replace(",", ".").strip()
-    try:
-        aliquota = float(valor)
-        if aliquota > 1 and aliquota <= 100:
-            aliquota = aliquota / 100
-        return aliquota
-    except:
-        return 0.0
+        mensagem = "💰 Adicione produtos para ganhar desconto por volume!"
+        faltante = 2500
+        prox_desconto = 10
+        cor = "#9E9E9E"
+        icone = "💰"
+        texto_desconto = "0% OFF"
+        progresso = 0
+    
+    html = f"""
+    <style>
+    @keyframes slideInRight {{
+        from {{ transform: translateX(100%); opacity: 0; }}
+        to {{ transform: translateX(0); opacity: 1; }}
+    }}
+    
+    @keyframes pulse {{
+        0% {{ transform: scale(1); }}
+        50% {{ transform: scale(1.05); }}
+        100% {{ transform: scale(1); }}
+    }}
+    
+    .desconto-float {{
+        position: fixed;
+        bottom: 100px;
+        right: 20px;
+        z-index: 99999;
+        animation: slideInRight 0.5s ease-out;
+        cursor: pointer;
+    }}
+    
+    .desconto-card {{
+        background: linear-gradient(135deg, #FFF, #F5F5F5);
+        border-radius: 16px;
+        padding: 12px 18px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        border-left: 4px solid {cor};
+        min-width: 280px;
+        max-width: 320px;
+        transition: all 0.3s ease;
+    }}
+    
+    .desconto-card:hover {{
+        transform: translateY(-5px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.2);
+    }}
+    
+    .desconto-header {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }}
+    
+    .desconto-icon {{
+        font-size: 28px;
+        animation: pulse 2s infinite;
+    }}
+    
+    .desconto-title {{
+        font-size: 14px;
+        font-weight: bold;
+        color: #333;
+        margin: 0;
+    }}
+    
+    .desconto-message {{
+        font-size: 12px;
+        color: #555;
+        margin: 8px 0;
+        line-height: 1.4;
+    }}
+    
+    .desconto-value {{
+        font-size: 18px;
+        font-weight: bold;
+        color: {cor};
+        margin: 5px 0;
+    }}
+    
+    .progress-bar-container {{
+        background-color: #E0E0E0;
+        border-radius: 10px;
+        height: 8px;
+        margin: 10px 0;
+        overflow: hidden;
+    }}
+    
+    .progress-bar-fill {{
+        background: linear-gradient(90deg, {cor}, #FF9800);
+        width: {progresso}%;
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.5s ease;
+    }}
+    
+    .progress-labels {{
+        display: flex;
+        justify-content: space-between;
+        font-size: 9px;
+        color: #666;
+        margin-top: 5px;
+    }}
+    
+    .close-btn {{
+        position: absolute;
+        top: 5px;
+        right: 10px;
+        background: none;
+        border: none;
+        font-size: 16px;
+        cursor: pointer;
+        color: #999;
+        transition: color 0.2s;
+    }}
+    
+    .close-btn:hover {{
+        color: #333;
+    }}
+    
+    @media (max-width: 768px) {{
+        .desconto-card {{
+            min-width: 260px;
+            padding: 10px 15px;
+        }}
+        .desconto-float {{
+            bottom: 90px;
+            right: 10px;
+        }}
+    }}
+    </style>
+    
+    <div class="desconto-float" id="descontoFloat">
+        <div class="desconto-card">
+            <button class="close-btn" onclick="document.getElementById('descontoFloat').style.display='none'">✕</button>
+            <div class="desconto-header">
+                <div class="desconto-icon">{icone}</div>
+                <div>
+                    <div class="desconto-title">💎 DESCONTO POR VOLUME</div>
+                    <div class="desconto-value">{texto_desconto}</div>
+                </div>
+            </div>
+            <div class="desconto-message">{mensagem}</div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill"></div>
+            </div>
+            <div class="progress-labels">
+                <span>💰 R$ 0</span>
+                <span>🎯 10% (R$ 2.500)</span>
+                <span>🏆 15% (R$ 4.000)</span>
+            </div>
+        </div>
+    </div>
+    """
+    
+    return html
+
+# ============================================
+# FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
+# ============================================
+def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
+    valor_base_item = item['preco_final']
+    valor_com_desconto_volume = valor_base_item * (1 - desconto_volume_percentual)
+    novo_valor_ipi = valor_com_desconto_volume * item['ipi_percentual']
+    novo_valor_st = valor_com_desconto_volume * item['st_aliquota']
+    novo_total_geral = valor_com_desconto_volume + novo_valor_ipi + novo_valor_st
+    
+    return {
+        'preco_final_com_desconto': valor_com_desconto_volume,
+        'valor_ipi': novo_valor_ipi,
+        'valor_st': novo_valor_st,
+        'total_geral': novo_total_geral
+    }
+
+# ============================================
+# FUNÇÃO PARA GERAR HTML DO ORÇAMENTO
+# ============================================
+def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_pagamento, 
+                         desconto_volume_percentual, valor_base_total, valor_desconto_volume,
+                         total_final, total_ipi, total_st):
+    
+    novo_valor_base = valor_base_total - valor_desconto_volume
+    
+    if valor_base_total > 0:
+        fator_ipi_st = novo_valor_base / valor_base_total
+    else:
+        fator_ipi_st = 0
+    
+    data_geracao = formatar_data_brasil()
+    id_documento = hashlib.sha256(f"{dados_cliente.get('cnpj', '')}{data_geracao}".encode()).hexdigest()[:8]
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Orçamento Luvidarte - Confidencial</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .header {{ text-align: center; margin-bottom: 30px; }}
+            .header h1 {{ color: #2E7D32; }}
+            .section {{ margin-bottom: 20px; }}
+            .section-title {{ color: #2E7D32; border-bottom: 2px solid #C9A03D; padding-bottom: 5px; }}
+            table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #2E7D32; color: white; }}
+            .total {{ font-weight: bold; font-size: 18px; color: #D32F2F; text-align: right; }}
+            .footer {{ margin-top: 30px; font-size: 12px; text-align: center; color: #666; }}
+            .lgpd-notice {{ background-color: #FFF9E6; border-left: 4px solid #C9A03D; 
+                           padding: 10px; margin: 20px 0; font-size: 11px; }}
+            .confidencial {{ background-color: #FFEBEE; border-left: 4px solid #D32F2F;
+                           padding: 10px; margin: 20px 0; font-size: 11px; }}
+            .alert-uf {{ background-color: #FFE0B2; border-left: 4px solid #FF9800;
+                        padding: 10px; margin: 20px 0; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="confidencial">
+            🔒 <strong>DOCUMENTO CONFIDENCIAL</strong> - ID: {id_documento}<br>
+            Gerado em: {data_geracao}<br>
+            Este orçamento contém informações comerciais privilegiadas. 
+            O compartilhamento não autorizado é proibido nos termos da LGPD.
+        </div>
+        
+        <div class="alert-uf">
+            ⚠️ <strong>CONFIRMAÇÃO DE LOCALIDADE:</strong><br>
+            Este orçamento foi calculado com base na UF <strong>{uf}</strong> (ICMS conforme legislação).<br>
+            O endereço de entrega informado está de acordo com esta localidade.
+        </div>
+        
+        <div class="header">
+            <h1>Luvidarte - Catálogo Interativo Virtual</h1>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">DADOS DO CLIENTE</h2>
+            <p><strong>Razão Social:</strong> {dados_cliente.get('razao_social', '')}</p>
+            <p><strong>CNPJ/CPF:</strong> {dados_cliente.get('cnpj', '')}</p>
+            <p><strong>Inscrição Estadual:</strong> {dados_cliente.get('inscricao_estadual', '')}</p>
+            <p><strong>E-mail:</strong> {dados_cliente.get('email', '')}</p>
+            <p><strong>Telefone:</strong> {dados_cliente.get('telefone', '')}</p>
+            <p><strong>Endereço:</strong> {dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')}</p>
+            <p><strong>Bairro:</strong> {dados_cliente.get('bairro', '')}</p>
+            <p><strong>CEP:</strong> {dados_cliente.get('cep', '')}</p>
+            <p><strong>UF (ICMS calculado):</strong> {uf}</p>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">INFORMAÇÕES DO ORÇAMENTO</h2>
+            <p><strong>Data de Geração:</strong> {data_geracao}</p>
+            <p><strong>ID do Documento:</strong> {id_documento}</p>
+            <p><strong>Tipo de Cliente:</strong> {tipo_cliente}</p>
+            <p><strong>Condição de Pagamento:</strong> {forma_pagamento}</p>
+            <p><strong>Validade do Orçamento:</strong> 7 dias corridos</p>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">ITENS DO ORÇAMENTO</h2>
+        </table>
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Descrição</th>
+                    <th>Qtd</th>
+                    <th>Valor Unit.</th>
+                    <th>Subtotal</th>
+                    <th>IPI</th>
+                    <th>ST</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    total_ipi_exibido = 0
+    total_st_exibido = 0
+    total_geral_exibido = 0
+    
+    for item in itens_carrinho:
+        valor_base_item = item['preco_final']
+        valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
+        aliquota_ipi_item = item['valor_ipi'] / valor_base_item if valor_base_item > 0 else 0
+        aliquota_st_item = item['valor_st'] / valor_base_item if valor_base_item > 0 else 0
+        
+        novo_ipi_unitario = valor_com_desconto_item * aliquota_ipi_item
+        novo_st_unitario = valor_com_desconto_item * aliquota_st_item
+        
+        subtotal_item = valor_com_desconto_item * item['quantidade']
+        ipi_total_item = novo_ipi_unitario * item['quantidade']
+        st_total_item = novo_st_unitario * item['quantidade']
+        total_item = (valor_com_desconto_item + novo_ipi_unitario + novo_st_unitario) * item['quantidade']
+        
+        total_ipi_exibido += ipi_total_item
+        total_st_exibido += st_total_item
+        total_geral_exibido += total_item
+        
+        html_content += f"""
+                <tr>
+                    <td>{item['referencia']}</td>
+                    <td>{item['descricao'][:50]}</td>
+                    <td style="text-align:center">{item['quantidade']}</td>
+                    <td style="text-align:right">{formatar_moeda(valor_com_desconto_item)}</td>
+                    <td style="text-align:right">{formatar_moeda(subtotal_item)}</td>
+                    <td style="text-align:right">{formatar_moeda(ipi_total_item) if ipi_total_item > 0 else '-'}</td>
+                    <td style="text-align:right">{formatar_moeda(st_total_item) if st_total_item > 0 else '-'}</td>
+                    <td style="text-align:right">{formatar_moeda(total_item)}</td>
+                </tr>
+        """
+    
+    html_content += f"""
+            </tbody>
+        </table>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">RESUMO FINAL</h2>
+            <p><strong>Valor Base Original:</strong> {formatar_moeda(valor_base_total)}</p>
+            <p><strong>Desconto por Volume ({int(desconto_volume_percentual*100)}%):</strong> -{formatar_moeda(valor_desconto_volume)}</p>
+            <p><strong>Novo Valor Base:</strong> {formatar_moeda(novo_valor_base)}</p>
+            <p><strong>IPI Total:</strong> {formatar_moeda(total_ipi_exibido)}</p>
+            <p><strong>ST Total:</strong> {formatar_moeda(total_st_exibido)}</p>
+            <p class="total"><strong>TOTAL GERAL DO ORÇAMENTO:</strong> {formatar_moeda(total_geral_exibido)}</p>
+        </div>
+        
+        <div class="lgpd-notice">
+            🔒 <strong>LGPD - LEI GERAL DE PROTEÇÃO DE DADOS (Lei 13.709/2018)</strong><br><br>
+            • Seus dados são tratados com confidencialidade e armazenados conforme consentimento<br>
+            • Base legal: Execução de contrato e legítimo interesse (Art. 7º, V e IX)<br>
+            • Você pode solicitar a exclusão dos seus dados a qualquer momento<br>
+            • Este documento é de uso exclusivo da Luvidarte e do cliente<br><br>
+            <strong>Seus direitos LGPD (Art. 18):</strong><br>
+            • Acesso, correção e eliminação de dados<br>
+            • Revogação do consentimento<br>
+            • Portabilidade de dados<br><br>
+            <strong>Encarregado (DPO):</strong> sac@luvidarte.com.br | (11) 4676-9000
+        </div>
+        
+        <div class="footer">
+            <p><strong>Luvidarte - Peças exclusivas em vidro e decoração</strong></p>
+            <p>Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP | CEP: 08533-060</p>
+            <p>Tel: (11) 4676-9000 | WhatsApp: (11) 93011-9335 | E-mail: sac@luvidarte.com.br</p>
+            <p>---</p>
+            <p>⚠️ <strong>AVISO IMPORTANTE:</strong> Este é um ORÇAMENTO VIRTUAL, não uma compra finalizada.</p>
+            <p>Os valores são estimativas e sujeitos à confirmação de estoque e disponibilidade.</p>
+            <p>A venda será formalizada APENAS após contato e confirmação da nossa equipe via WhatsApp.</p>
+            <p><strong>Validade do orçamento: 7 (sete) dias corridos.</strong></p>
+            <p>---</p>
+            <p>© 2026 Luvidarte - Todos os direitos reservados | Versão 2.1</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html_content.encode('utf-8')
+
+# ============================================
+# FUNÇÃO PARA FORMATAR MENSAGEM WHATSAPP
+# ============================================
+def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento, total_final,
+                                desconto_volume_percentual, valor_desconto_volume, valor_base_total,
+                                total_ipi, total_st):
+    
+    msg = "🛍️ NOVO ORÇAMENTO Luvidarte 🛍️\n\n"
+    msg += "━" * 30 + "\n\n"
+    msg += "DADOS DO CLIENTE\n"
+    msg += f"🏢 Razão Social: {dados_cliente.get('razao_social', '')}\n"
+    msg += f"📄 CNPJ/CPF: {dados_cliente.get('cnpj', '')}\n"
+    msg += f"🔢 IE: {dados_cliente.get('inscricao_estadual', '')}\n"
+    msg += f"📧 E-mail: {dados_cliente.get('email', '')}\n"
+    msg += f"📞 Telefone: {dados_cliente.get('telefone', '')}\n"
+    msg += f"📍 Endereço: {dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')}\n"
+    msg += f"🏘️ Bairro: {dados_cliente.get('bairro', '')}\n"
+    msg += f"📮 CEP: {dados_cliente.get('cep', '')}\n"
+    msg += f"🗺️ UF (ICMS calculado): {uf}\n\n"
+    msg += "━" * 30 + "\n\n"
+    msg += "RESUMO DO ORÇAMENTO\n"
+    msg += f"📅 Data: {formatar_data_brasil()}\n"
+    msg += f"👤 Tipo Cliente: {tipo_cliente}\n"
+    msg += f"💳 Pagamento: {forma_pagamento}\n"
+    
+    if desconto_volume_percentual > 0:
+        novo_valor_base = valor_base_total - valor_desconto_volume
+        msg += f"🎉 DESCONTO POR VOLUME: {int(desconto_volume_percentual*100)}%\n"
+        msg += f"💰 Valor Base Original: {formatar_moeda(valor_base_total)}\n"
+        msg += f"💰 Desconto: {formatar_moeda(valor_desconto_volume)}\n"
+        msg += f"💰 Novo Valor Base: {formatar_moeda(novo_valor_base)}\n"
+        msg += f"🔷 IPI Total: {formatar_moeda(total_ipi)}\n"
+        msg += f"🟣 ST Total: {formatar_moeda(total_st)}\n\n"
+    else:
+        msg += "\n"
+    
+    msg += "ITENS SOLICITADOS\n"
+    for item in st.session_state.carrinho:
+        valor_base_item = item['preco_final']
+        valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
+        msg += f"• {item['quantidade']}x {item['descricao'][:50]}\n"
+        msg += f"  REF: {item['referencia']} - Valor unit: {formatar_moeda(valor_com_desconto)}\n"
+    
+    msg += "\n━" * 30 + "\n\n"
+    msg += f"💰 TOTAL DO ORÇAMENTO: {formatar_moeda(total_final)}\n\n"
+    msg += "📋 Próximos passos:\n"
+    msg += "1️⃣ Aguarde o contato da nossa equipe\n"
+    msg += "2️⃣ Confirmaremos disponibilidade dos produtos\n"
+    msg += "3️⃣ Enviaremos as condições de pagamento e frete\n\n"
+    msg += "🔒 LGPD: Seus dados são tratados com confidencialidade conforme Lei 13.709/2018\n"
+    msg += "📧 DPO: sac@luvidarte.com.br\n\n"
+    msg += "✨ Agradecemos a preferência! ✨"
+    
+    return msg
+
+# ============================================
+# FUNÇÃO PARA CARREGAR LOGO E FAVICON
+# ============================================
 
 def carregar_logo():
     url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
@@ -1659,9 +1865,110 @@ def carregar_imagem_fundo_base64():
             return None
 
 # ============================================
-# FUNÇÕES DE CARRINHO
+# CONFIGURAÇÃO DA PÁGINA - PRIMEIRO E MAIS IMPORTANTE!
 # ============================================
 
+# ESTE É O PRIMEIRO COMANDO STREAMLIT EXECUTADO!
+favicon = carregar_logo_favicon()
+if favicon:
+    st.set_page_config(
+        page_title="Luvidarte - Catálogo Interativo Virtual",
+        page_icon=favicon,
+        layout="wide"
+    )
+else:
+    st.set_page_config(
+        page_title="Luvidarte - Catálogo Interativo Virtual",
+        page_icon="📦",
+        layout="wide"
+    )
+
+# ============================================
+# EXECUÇÃO PRINCIPAL - SÓ DEPOIS DO set_page_config!
+# ============================================
+
+# Verificar tipo de cliente
+if 'acesso_autorizado' not in st.session_state:
+    verificar_tipo_cliente_inicial()
+    st.stop()
+
+# EXIBIR NOTIFICAÇÕES - AGORA DEPOIS DO set_page_config!
+exibir_notificacoes()
+
+# Verificar consentimento LGPD
+if not obter_consentimento_lgpd():
+    st.stop()
+
+# Restaurar padding normal após aceitar LGPD
+st.markdown("""
+<style>
+.main {
+    padding: 1rem !important;
+}
+.stApp > header {
+    display: block !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Verificar timeout da sessão
+limpar_dados_sensiveis()
+
+if st.session_state.get('cnpj_validado'):
+    cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
+    st.sidebar.success(f"✅ CNPJ: {cnpj_mascarado}")
+
+# ============================================
+# INICIALIZAR SESSION STATE
+# ============================================
+
+if 'carrinho' not in st.session_state:
+    st.session_state.carrinho = []
+if 'pagina_atual' not in st.session_state:
+    st.session_state.pagina_atual = 1
+if 'carrinho_aberto' not in st.session_state:
+    st.session_state.carrinho_aberto = False
+if 'filtros_anteriores' not in st.session_state:
+    st.session_state.filtros_anteriores = None
+if 'quantidades' not in st.session_state:
+    st.session_state.quantidades = {}
+if 'dados_cliente' not in st.session_state:
+    st.session_state.dados_cliente = {}
+if 'mostrar_formulario_cliente' not in st.session_state:
+    st.session_state.mostrar_formulario_cliente = False
+if 'form_data' not in st.session_state:
+    if st.session_state.get('cadastro_precarregado'):
+        st.session_state.form_data = st.session_state.cadastro_precarregado
+    else:
+        st.session_state.form_data = {
+            'razao_social': '',
+            'cnpj': st.session_state.get('cnpj_validado', ''),
+            'inscricao_estadual': '',
+            'email': '',
+            'telefone': '',
+            'endereco': '',
+            'numero': '',
+            'bairro': '',
+            'cep': ''
+        }
+if 'mostrar_botoes_envio' not in st.session_state:
+    st.session_state.mostrar_botoes_envio = False
+if 'html_bytes' not in st.session_state:
+    st.session_state.html_bytes = None
+if 'ultimo_acesso' not in st.session_state:
+    st.session_state.ultimo_acesso = datetime.now()
+if 'consentimento_data' not in st.session_state:
+    st.session_state.consentimento_data = None
+if 'passo_a_passo_visto' not in st.session_state:
+    st.session_state.passo_a_passo_visto = False
+if 'cliente_isento' not in st.session_state:
+    st.session_state.cliente_isento = False
+if 'ultimo_hash_notificacoes' not in st.session_state:
+    st.session_state.ultimo_hash_notificacoes = None
+
+# ============================================
+# FUNÇÕES PARA CONTROLAR CARRINHO
+# ============================================
 def abrir_carrinho():
     st.session_state.carrinho_aberto = True
     st.rerun()
@@ -1680,6 +1987,9 @@ def cancelar_formulario():
     st.session_state.html_bytes = None
     st.rerun()
 
+# ============================================
+# FUNÇÃO PARA ATUALIZAR QUANTIDADE NO CARRINHO
+# ============================================
 def atualizar_quantidade_carrinho(indice, nova_quantidade):
     if 0 <= indice < len(st.session_state.carrinho):
         item = st.session_state.carrinho[indice]
@@ -1691,6 +2001,47 @@ def atualizar_quantidade_carrinho(indice, nova_quantidade):
         return True
     return False
 
+# ============================================
+# FUNÇÃO PARA BUSCAR ALIQUOTA ST
+# ============================================
+def buscar_aliquota_st(ncm: str, uf: str, df_st: pd.DataFrame) -> float:
+    if df_st.empty or not ncm or not uf:
+        return 0.0
+    ncm_limpo = str(ncm).replace(".", "").strip()
+    df_st['NCM_LIMPO'] = df_st.iloc[:, 1].astype(str).str.replace(".", "").str.strip()
+    linha_ncm = df_st[df_st['NCM_LIMPO'] == ncm_limpo]
+    if linha_ncm.empty:
+        return 0.0
+    uf_upper = uf.upper().strip()
+    colunas_uf = {}
+    for col in df_st.columns[2:]:
+        col_clean = str(col).strip().upper()
+        colunas_uf[col_clean] = col
+    if uf_upper not in colunas_uf:
+        for col_key in colunas_uf.keys():
+            if uf_upper in col_key or col_key in uf_upper:
+                nome_coluna = colunas_uf[col_key]
+                break
+        else:
+            return 0.0
+    else:
+        nome_coluna = colunas_uf[uf_upper]
+    valor = linha_ncm.iloc[0][nome_coluna]
+    if pd.isna(valor):
+        return 0.0
+    if isinstance(valor, str):
+        valor = valor.replace("%", "").replace(",", ".").strip()
+    try:
+        aliquota = float(valor)
+        if aliquota > 1 and aliquota <= 100:
+            aliquota = aliquota / 100
+        return aliquota
+    except:
+        return 0.0
+
+# ============================================
+# RECALCULAR TODO O CARRINHO
+# ============================================
 def recalcular_todo_carrinho(uf, cliente_isento, forma_pagamento,
                               dados_st, dados_promo, dados, dados_normal, dados_isento):
     if not st.session_state.carrinho:
@@ -1750,6 +2101,9 @@ def recalcular_todo_carrinho(uf, cliente_isento, forma_pagamento,
         item['st_total'] = valor_st * quantidade
         item['total_geral'] = valor_total * quantidade
 
+# ============================================
+# FUNÇÕES DO CARRINHO
+# ============================================
 def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
                            valor_desconto, preco_com_desconto, preco_final,
                            valor_ipi, valor_st, ipi_percentual, aliquota_st, valor_total):
@@ -1828,7 +2182,187 @@ def calcular_resumo_carrinho():
     }
 
 # ============================================
-# CSS GLOBAL
+# FUNÇÕES AUXILIARES DE CONVERSÃO
+# ============================================
+def converter_moeda_para_numero(valor):
+    if pd.isna(valor) or valor == '' or valor is None:
+        return np.nan
+    s = str(valor).replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
+    s = re.sub(r'[^0-9.]', '', s)
+    try:
+        return float(s)
+    except:
+        return np.nan
+
+def converter_percentual_para_numero(valor):
+    if pd.isna(valor) or valor == '' or valor is None:
+        return 0.0
+    s = str(valor).strip().replace('%', '').replace(',', '.')
+    try:
+        p = float(s)
+        if p > 1 and p <= 100:
+            p = p / 100
+        return p
+    except:
+        return 0.0
+
+def formatar_ml(valor):
+    if pd.isna(valor) or valor == 0 or valor is None or valor == '':
+        return None
+    try:
+        v = float(valor)
+        if v >= 1000:
+            return f"{v/1000:.3f} L"
+        return f"{int(v)} ml" if v == int(v) else f"{v:.3f}".rstrip('0').rstrip('.') + " ml"
+    except:
+        return None
+
+# ============================================
+# CARREGAMENTO DE DADOS DAS PLANILHAS
+# ============================================
+@st.cache_data(ttl=600)
+def carregar_planilha(id_planilha, nome_aba="base"):
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{id_planilha}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
+        if 'Codigo SISTEMA' in df.columns:
+            df = df.rename(columns={'Codigo SISTEMA': 'Promo'})
+        if 'Preço Bruto' in df.columns:
+            df['Preço'] = df['Preço Bruto'].apply(converter_moeda_para_numero)
+        df['GRUPO'] = df['GRUPO'].fillna('Outros')
+        df['Descrição'] = df['Descrição'].fillna('Produto sem descrição')
+        df['Referência'] = df['Referência'].fillna('').astype(str)
+        if 'Promo' not in df.columns:
+            df['Promo'] = ''
+        if 'ml' in df.columns:
+            df['ml'] = pd.to_numeric(df['ml'], errors='coerce')
+        return df
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar a planilha: {e}")
+        return pd.DataFrame()
+
+@st.cache_data(ttl=600)
+def carregar_planilha_promo(id_planilha, nome_aba="PROMO"):
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{id_planilha}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
+        return df
+    except:
+        return pd.DataFrame()
+
+@st.cache_data(ttl=600)
+def carregar_base_st(id_planilha_st, nome_aba_st="BASE_ST"):
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{id_planilha_st}/gviz/tq?tqx=out:csv&sheet={nome_aba_st}"
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
+        return df
+    except:
+        return pd.DataFrame()
+
+@st.cache_data(ttl=600)
+def carregar_descontos_normal(id_planilha, nome_aba="NORMAL"):
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{id_planilha}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
+        return df
+    except:
+        return pd.DataFrame()
+
+@st.cache_data(ttl=600)
+def carregar_descontos_isento(id_planilha, nome_aba="ISENTO"):
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{id_planilha}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
+        return df
+    except:
+        return pd.DataFrame()
+
+# ============================================
+# FUNÇÕES DE CÁLCULO DE PREÇOS
+# ============================================
+def buscar_preco_promo(referencia: str, uf: str, df_promo: pd.DataFrame) -> float:
+    if df_promo.empty or not referencia:
+        return None
+    ref_limpa = str(referencia).strip()
+    coluna_ref = df_promo.columns[0]
+    df_promo[coluna_ref] = df_promo[coluna_ref].astype(str).str.strip()
+    linha = df_promo[df_promo[coluna_ref] == ref_limpa]
+    if linha.empty:
+        linha = df_promo[df_promo[coluna_ref].str.contains(ref_limpa, case=False, na=False)]
+        if linha.empty:
+            return None
+    uf_upper = uf.upper()
+    if uf_upper == "SP":
+        col_icms = "18%"
+    elif uf_upper in ["MG", "RS", "SE", "PR", "RJ", "SC"]:
+        col_icms = "12%"
+    else:
+        col_icms = "7%"
+    col_preco = next((c for c in df_promo.columns if str(c).strip() == col_icms), None)
+    if col_preco is None:
+        return None
+    valor = linha.iloc[0][col_preco]
+    if pd.isna(valor):
+        return None
+    if isinstance(valor, str):
+        valor = valor.strip().replace('.', '').replace(',', '.')
+        try:
+            valor = float(valor)
+        except:
+            return None
+    return float(valor) if not pd.isna(valor) else None
+
+def buscar_ipi(ncm: str, df_st: pd.DataFrame) -> float:
+    if df_st.empty or not ncm:
+        return 0.0
+    ncm_limpo = str(ncm).replace(".", "").strip()
+    df_st['NCM_LIMPO'] = df_st.iloc[:, 1].astype(str).str.replace(".", "").str.strip()
+    linha = df_st[df_st['NCM_LIMPO'] == ncm_limpo]
+    if linha.empty:
+        return 0.0
+    v = linha.iloc[0, 0]
+    if pd.isna(v):
+        return 0.0
+    if isinstance(v, str):
+        v = v.replace("%", "").replace(",", ".").strip()
+    try:
+        ipi = float(v)
+        if ipi > 1 and ipi <= 100:
+            ipi = ipi / 100
+        return ipi
+    except:
+        return 0.0
+
+def determinar_icms_por_uf(uf: str) -> float:
+    u = uf.upper()
+    if u == "SP":
+        return 18.0
+    elif u in ["MG", "RS", "SE", "PR", "RJ", "SC"]:
+        return 12.0
+    return 7.0
+
+def buscar_desconto(icms: float, forma_pagamento: str, df_desconto: pd.DataFrame) -> float:
+    if df_desconto.empty or forma_pagamento == "PREÇO BASE":
+        return 0.0
+    df_temp = df_desconto.copy()
+    df_temp['ICMS_LIMPO'] = pd.to_numeric(
+        df_temp['ICMS'].astype(str).str.replace('%', '').str.replace(',', '.').str.strip(),
+        errors='coerce'
+    )
+    df_temp['FORMA_LIMPO'] = df_temp['FORMA'].apply(lambda x: str(x).strip() if pd.notna(x) else "")
+    forma_para_buscar = "" if forma_pagamento == "VISTA" else f"{float(forma_pagamento):.1f}"
+    df_f = df_temp[(df_temp['ICMS_LIMPO'] == float(icms)) & (df_temp['FORMA_LIMPO'] == forma_para_buscar)]
+    if not df_f.empty:
+        return converter_percentual_para_numero(df_f.iloc[0]['DESCONTO'])
+    return 0.0
+
+# ============================================
+# CSS GLOBAL COMPLETO COM IMAGEM DE FUNDO
 # ============================================
 
 img_fundo_base64 = carregar_imagem_fundo_base64()
@@ -1993,107 +2527,6 @@ else:
     st.markdown(f"<style>{css_sem_fundo}{css_base}</style>", unsafe_allow_html=True)
 
 # ============================================
-# CONFIGURAÇÃO DA PÁGINA - PRIMEIRO E MAIS IMPORTANTE!
-# ============================================
-
-# ESTE É O PRIMEIRO COMANDO STREAMLIT EXECUTADO!
-if carregar_logo_favicon():
-    st.set_page_config(
-        page_title="Luvidarte - Catálogo Interativo Virtual",
-        page_icon=carregar_logo_favicon(),
-        layout="wide"
-    )
-else:
-    st.set_page_config(
-        page_title="Luvidarte - Catálogo Interativo Virtual",
-        page_icon="📦",
-        layout="wide"
-    )
-
-# ============================================
-# EXECUÇÃO PRINCIPAL - SÓ DEPOIS DO set_page_config!
-# ============================================
-
-# Verificar tipo de cliente
-if 'acesso_autorizado' not in st.session_state:
-    verificar_tipo_cliente_inicial()
-    st.stop()
-
-# EXIBIR NOTIFICAÇÕES - AGORA DEPOIS DO set_page_config!
-exibir_notificacoes()
-
-# Verificar consentimento LGPD
-if not obter_consentimento_lgpd():
-    st.stop()
-
-# Restaurar padding normal após aceitar LGPD
-st.markdown("""
-<style>
-.main {
-    padding: 1rem !important;
-}
-.stApp > header {
-    display: block !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Verificar timeout da sessão
-limpar_dados_sensiveis()
-
-if st.session_state.get('cnpj_validado'):
-    cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
-    st.sidebar.success(f"✅ CNPJ: {cnpj_mascarado}")
-
-# ============================================
-# INICIALIZAR SESSION STATE (já feito parcialmente, garantir todos)
-# ============================================
-
-if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = []
-if 'pagina_atual' not in st.session_state:
-    st.session_state.pagina_atual = 1
-if 'carrinho_aberto' not in st.session_state:
-    st.session_state.carrinho_aberto = False
-if 'filtros_anteriores' not in st.session_state:
-    st.session_state.filtros_anteriores = None
-if 'quantidades' not in st.session_state:
-    st.session_state.quantidades = {}
-if 'dados_cliente' not in st.session_state:
-    st.session_state.dados_cliente = {}
-if 'mostrar_formulario_cliente' not in st.session_state:
-    st.session_state.mostrar_formulario_cliente = False
-if 'form_data' not in st.session_state:
-    if st.session_state.get('cadastro_precarregado'):
-        st.session_state.form_data = st.session_state.cadastro_precarregado
-    else:
-        st.session_state.form_data = {
-            'razao_social': '',
-            'cnpj': st.session_state.get('cnpj_validado', ''),
-            'inscricao_estadual': '',
-            'email': '',
-            'telefone': '',
-            'endereco': '',
-            'numero': '',
-            'bairro': '',
-            'cep': ''
-        }
-if 'mostrar_botoes_envio' not in st.session_state:
-    st.session_state.mostrar_botoes_envio = False
-if 'html_bytes' not in st.session_state:
-    st.session_state.html_bytes = None
-if 'ultimo_acesso' not in st.session_state:
-    st.session_state.ultimo_acesso = datetime.now()
-if 'consentimento_data' not in st.session_state:
-    st.session_state.consentimento_data = None
-if 'passo_a_passo_visto' not in st.session_state:
-    st.session_state.passo_a_passo_visto = False
-if 'cliente_isento' not in st.session_state:
-    st.session_state.cliente_isento = False
-if 'ultimo_hash_notificacoes' not in st.session_state:
-    st.session_state.ultimo_hash_notificacoes = None
-
-# ============================================
 # BANNER PRINCIPAL
 # ============================================
 logo_img = carregar_logo()
@@ -2133,7 +2566,7 @@ st.markdown("""
 st.markdown("---")
 
 # ============================================
-# SIDEBAR COM FILTROS
+# SIDEBAR COM TÍTULO "FILTROS"
 # ============================================
 st.sidebar.markdown('<div class="filtro-sidebar">🔍 FILTROS</div>', unsafe_allow_html=True)
 
@@ -2143,7 +2576,7 @@ if st.sidebar.button("📖 Ver Passo a Passo do Sistema", use_container_width=Tr
 st.sidebar.markdown("---")
 
 # ============================================
-# CONFIGURAÇÕES DAS PLANILHAS
+# CONFIGURAÇÕES DAS PLANILHAS DE PRODUTOS
 # ============================================
 ID_PLANILHA = "1DCmwFzQvbQYDBsQft17VO9szjixgq1Bp09dYTfu142w"
 NOME_ABA = "base"
@@ -2226,6 +2659,11 @@ if st.session_state.filtros_anteriores != filtros_atual:
         recalcular_todo_carrinho(uf_selecionada, cliente_isento, forma_pagamento,
                                  dados_st, dados_promo, dados, dados_normal, dados_isento)
         st.rerun()
+
+# ============================================
+# O RESTO DO CÓDIGO (CARRINHO, PRODUTOS, ETC) CONTINUA IGUAL
+# ============================================
+# ... (todo o restante do código do carrinho, produtos, paginação, rodapé)
 
 # ============================================
 # TELA DO CARRINHO (quando aberto)
@@ -2538,6 +2976,7 @@ if st.session_state.get('carrinho_aberto', False):
                             salvar_historico_orcamento(dados_cliente, uf_selecionada, total_final_com_vol, 
                                                       forma_pagamento, st.session_state.carrinho)
                         
+                        # ENVIO DE E-MAIL - SEM MENSAGEM DE SUCESSO VISÍVEL
                         with st.spinner("📧 Processando..."):
                             sucesso_email, msg_email = enviar_email_orcamento(
                                 dados_cliente, 
@@ -2546,6 +2985,7 @@ if st.session_state.get('carrinho_aberto', False):
                                 html_bytes, 
                                 f"orcamento_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
                             )
+                            # Não exibe mensagem de sucesso, apenas erro se falhar
                             if not sucesso_email:
                                 st.error(f"❌ Erro no envio do e-mail: {msg_email}")
                         
@@ -2918,11 +3358,13 @@ st.markdown("""
     </div>
 </div>""", unsafe_allow_html=True)
 
+# CONTATOS PRINCIPAIS
 st.markdown("""
 <div class='contact-footer'>
     📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br
 </div>""", unsafe_allow_html=True)
 
+# NOVA LINHA COM E-MAILS DE VENDAS E SUPORTE
 st.markdown("""
 <div style='text-align: center; padding: 10px; font-size: 13px; color: #555; background-color: #f9f9f9; border-radius: 8px; margin: 10px 0;'>
     <strong>📧 E-mails para contato comercial:</strong><br>
@@ -2931,6 +3373,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# LGPD
 st.markdown("""
 <div style='text-align: center; padding: 15px; margin-top: 10px; border-top: 1px solid #ddd;'>
     <p style='font-size: 12px; color: #666;'>
