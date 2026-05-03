@@ -72,8 +72,6 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         msg['To'] = destinatario  # Único destinatário
         msg['Subject'] = f"🛍️ NOVO ORÇAMENTO Luvidarte - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         
-        # ... resto da função igual ...
-        
         # Calcular quantidade total de itens
         qtd_total = sum(item.get('quantidade', 0) for item in itens_resumo)
         
@@ -119,14 +117,38 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                             <span>📋</span> DADOS DO CLIENTE
                         </div>
                         <table class="info-table">
-                            <tr><td>Razão Social:</td><td><strong>{dados_cliente.get('razao_social', 'NÃO INFORMADO')}</strong></td></tr>
-                            <tr><td>CNPJ/CPF:</td><td>{dados_cliente.get('cnpj', 'NÃO INFORMADO')}</td></tr>
-                            <tr><td>Inscrição Estadual:</td><td>{dados_cliente.get('inscricao_estadual', 'NÃO INFORMADO')}</td></tr>
-                            <tr><td>E-mail:</td><td>{dados_cliente.get('email', 'NÃO INFORMADO')}</td></tr>
-                            <tr><td>Telefone:</td><td>{dados_cliente.get('telefone', 'NÃO INFORMADO')}</td></tr>
-                            <tr><td>Endereço:</td><td>{dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')} - {dados_cliente.get('bairro', '')}</td></tr>
-                            <tr><td>CEP:</td><td>{dados_cliente.get('cep', 'NÃO INFORMADO')}</td></tr>
-                            <tr><td>UF:</td><td><span class="badge">{dados_cliente.get('uf', 'NÃO INFORMADO')}</span></td></tr>
+                            <tr>
+                                <td>Razão Social:</td>
+                                <td><strong>{dados_cliente.get('razao_social', 'NÃO INFORMADO')}</strong></td>
+                            </tr>
+                            <tr>
+                                <td>CNPJ/CPF:</td>
+                                <td>{dados_cliente.get('cnpj', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>Inscrição Estadual:</td>
+                                <td>{dados_cliente.get('inscricao_estadual', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>E-mail:</td>
+                                <td>{dados_cliente.get('email', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>Telefone:</td>
+                                <td>{dados_cliente.get('telefone', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>Endereço:</td>
+                                <td>{dados_cliente.get('endereco', '')}, {dados_cliente.get('numero', '')} - {dados_cliente.get('bairro', '')}</td>
+                            </tr>
+                            <tr>
+                                <td>CEP:</td>
+                                <td>{dados_cliente.get('cep', 'NÃO INFORMADO')}</td>
+                            </tr>
+                            <tr>
+                                <td>UF:</td>
+                                <td><span class="badge">{dados_cliente.get('uf', 'NÃO INFORMADO')}</span></td>
+                            </tr>
                         </table>
                     </div>
                     
@@ -147,7 +169,13 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                         </div>
                         <table class="items-table">
                             <thead>
-                                <tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Valor Unit.</th><th>Subtotal</th></tr>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Descrição</th>
+                                    <th>Qtd</th>
+                                    <th>Valor Unit.</th>
+                                    <th>Subtotal</th>
+                                </tr>
                             </thead>
                             <tbody>
         """
@@ -222,7 +250,7 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         return False, str(e)
 
 # ============================================
-# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS - CORRIGIDO
+# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS
 # ============================================
 
 def carregar_notificacoes_google_sheets():
@@ -1443,7 +1471,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             • Acesso, correção e eliminação de dados<br>
             • Revogação do consentimento<br>
             • Portabilidade de dados<br><br>
-            <strong>Encarregado (DPO):</strong> dpo@luvidarte.com.br | (11) 4676-9000
+            <strong>Encarregado (DPO):</strong> sac@luvidarte.com.br | (11) 4676-9000
         </div>
         
         <div class="footer">
@@ -1528,9 +1556,6 @@ if 'acesso_autorizado' not in st.session_state:
     verificar_tipo_cliente_inicial()
     st.stop()
 
-# EXIBIR NOTIFICAÇÕES DO GOOGLE SHEETS
-exibir_notificacoes()
-
 # Verificar consentimento LGPD depois de validar CNPJ
 if not obter_consentimento_lgpd():
     st.stop()
@@ -1575,6 +1600,11 @@ else:
         page_icon="📦",
         layout="wide"
     )
+
+# ============================================
+# EXIBIR NOTIFICAÇÕES DO GOOGLE SHEETS - MOVIDO PARA DEPOIS DO set_page_config!
+# ============================================
+exibir_notificacoes()
 
 if st.session_state.get('cnpj_validado'):
     cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
@@ -3083,7 +3113,7 @@ st.markdown("""
     <p style='font-size: 12px; color: #666;'>
         🔒 <strong>LGPD - Lei 13.709/2018</strong><br>
         Seus direitos: <strong>acesso, correção, exclusão e portabilidade</strong> dos dados<br>
-        📧 Solicitações: <strong>lgpd@luvidarte.com.br</strong> | DPO: <strong>dpo@luvidarte.com.br</strong><br>
+        📧 Solicitações: <strong>sac@luvidarte.com.br</strong> | DPO: <strong>dpo@luvidarte.com.br</strong><br>
         ⏱️ Prazo de resposta: <strong>15 dias úteis</strong>
     </p>
 </div>
