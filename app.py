@@ -320,26 +320,31 @@ def carregar_notificacoes_google_sheets():
         return []
 
 def exibir_notificacoes():
-    """Exibe as notificações como pop-ups na tela principal (TODA VEZ que carregar)"""
+    """Exibe as notificações como pop-ups na tela principal"""
     try:
         notificacoes = carregar_notificacoes_google_sheets()
         
         if not notificacoes:
             return
         
-        # REMOVIDO o controle de hash - agora exibe SEMPRE!
-        for notif in notificacoes:
-            if notif['tipo'] == 'success':
-                st.success(f"🎉 {notif['mensagem']}")
-            elif notif['tipo'] == 'error':
-                st.error(f"❌ {notif['mensagem']}")
-            elif notif['tipo'] == 'warning':
-                st.warning(f"⚠️ {notif['mensagem']}")
-            else:
-                st.info(f"ℹ️ {notif['mensagem']}")
-                
+        # Gerar hash das notificações
+        hash_notificacoes = hashlib.md5(str(notificacoes).encode()).hexdigest()
+        
+        # Verificar se já exibimos
+        if st.session_state.get('ultimo_hash_notificacoes') != hash_notificacoes:
+            st.session_state.ultimo_hash_notificacoes = hash_notificacoes
+            
+            for notif in notificacoes:
+                if notif['tipo'] == 'success':
+                    st.success(f"🎉 {notif['mensagem']}")
+                elif notif['tipo'] == 'error':
+                    st.error(f"❌ {notif['mensagem']}")
+                elif notif['tipo'] == 'warning':
+                    st.warning(f"⚠️ {notif['mensagem']}")  # Alerta em laranja
+                else:
+                    st.info(f"ℹ️ {notif['mensagem']}")
     except Exception as e:
-        pass  # Silencioso
+        pass
 
 # ============================================
 # CONFIGURAÇÃO DO GOOGLE SHEETS
@@ -1466,7 +1471,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             • Acesso, correção e eliminação de dados<br>
             • Revogação do consentimento<br>
             • Portabilidade de dados<br><br>
-            <strong>Encarregado (DPO):</strong> sac@luvidarte.com.br | (11) 4676-9000
+            <strong>Encarregado (DPO):</strong> dpo@luvidarte.com.br | (11) 4676-9000
         </div>
         
         <div class="footer">
@@ -1543,13 +1548,47 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     return msg
 
 # ============================================
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO DA PÁGINA - DEVE SER O PRIMEIRO COMANDO STREAMLIT!
 # ============================================
 
-# PRIMEIRO: Verificar tipo de cliente (Pessoa Física vs Jurídica)
+def carregar_logo_favicon():
+    url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
+    try:
+        response = requests.get(url_drive, timeout=10)
+        if response.status_code == 200:
+            img = Image.open(BytesIO(response.content))
+            img = img.resize((32, 32))
+            return img
+    except:
+        pass
+    return None
+
+# PRIMEIRO E MAIS IMPORTANTE: Configurar a página ANTES de qualquer outro comando Streamlit
+favicon = carregar_logo_favicon()
+if favicon:
+    st.set_page_config(
+        page_title="Luvidarte - Catálogo Interativo Virtual",
+        page_icon=favicon,
+        layout="wide"
+    )
+else:
+    st.set_page_config(
+        page_title="Luvidarte - Catálogo Interativo Virtual",
+        page_icon="📦",
+        layout="wide"
+    )
+
+# ============================================
+# SÓ AGORA PODEMOS EXECUTAR OS OUTROS COMANDOS STREAMLIT
+# ============================================
+
+# Verificar tipo de cliente (Pessoa Física vs Jurídica)
 if 'acesso_autorizado' not in st.session_state:
     verificar_tipo_cliente_inicial()
     st.stop()
+
+# EXIBIR NOTIFICAÇÕES DO GOOGLE SHEETS - AGORA sim, depois do set_page_config!
+exibir_notificacoes()
 
 # Verificar consentimento LGPD depois de validar CNPJ
 if not obter_consentimento_lgpd():
@@ -1569,37 +1608,6 @@ st.markdown("""
 
 # Verificar timeout da sessão
 limpar_dados_sensiveis()
-
-def carregar_logo_favicon():
-    url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
-    try:
-        response = requests.get(url_drive, timeout=10)
-        if response.status_code == 200:
-            img = Image.open(BytesIO(response.content))
-            img = img.resize((32, 32))
-            return img
-    except:
-        pass
-    return None
-
-favicon = carregar_logo_favicon()
-if favicon:
-    st.set_page_config(
-        page_title="Luvidarte - Catálogo Interativo Virtual",
-        page_icon=favicon,
-        layout="wide"
-    )
-else:
-    st.set_page_config(
-        page_title="Luvidarte - Catálogo Interativo Virtual",
-        page_icon="📦",
-        layout="wide"
-    )
-
-# ============================================
-# EXIBIR NOTIFICAÇÕES DO GOOGLE SHEETS - MOVIDO PARA DEPOIS DO set_page_config!
-# ============================================
-exibir_notificacoes()
 
 if st.session_state.get('cnpj_validado'):
     cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
@@ -2394,7 +2402,7 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO
+# TELA DO CARRINHO (continua...)
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
 
@@ -3108,7 +3116,7 @@ st.markdown("""
     <p style='font-size: 12px; color: #666;'>
         🔒 <strong>LGPD - Lei 13.709/2018</strong><br>
         Seus direitos: <strong>acesso, correção, exclusão e portabilidade</strong> dos dados<br>
-        📧 Solicitações: <strong>sac@luvidarte.com.br</strong> | DPO: <strong>dpo@luvidarte.com.br</strong><br>
+        📧 Solicitações: <strong>lgpd@luvidarte.com.br</strong> | DPO: <strong>dpo@luvidarte.com.br</strong><br>
         ⏱️ Prazo de resposta: <strong>15 dias úteis</strong>
     </p>
 </div>
