@@ -17,6 +17,14 @@ import pytz
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+import os
+import traceback
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
@@ -35,17 +43,66 @@ SESSION_TIMEOUT = 1800  # 30 minutos
 TIMEZONE_BR = pytz.timezone('America/Sao_Paulo')
 
 # ============================================
-# CONFIGURAÇÃO DO GOOGLE SHEETS
+# CONFIGURAÇÃO DE E-MAIL DO ORÇAMENTO
 # ============================================
 
-# ID da planilha de cadastro
-ID_PLANILHA_CADASTRO = "1_s01QhZJni2dYoJwkWflEtdrKzSZ5yt7mpZvASPlFxk"
+EMAIL_CONFIG_ORCAMENTO = {
+    "usuario": "erp@luvidarte.com.br",
+    "senha": "Qualidade123#",
+    "destinatario": "qualidade@luvidarte.com.br",  # APENAS este e-mail
+    "smtp_server": "email-ssl.com.br",
+    "smtp_port": 465
+}
 
-# Escopos necessários para o Google Sheets API
-ESCOPOS = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
-]
+# ============================================
+# FUNÇÕES DE UTILIDADE
+# ============================================
+
+def get_horario_brasil():
+    return datetime.now(TIMEZONE_BR)
+
+def formatar_data_brasil():
+    agora = get_horario_brasil()
+    return agora.strftime('%d/%m/%Y %H:%M:%S')
+
+def formatar_moeda(valor):
+    if valor is None or valor == 0:
+        return "R$ 0,00"
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def validar_cnpj(cnpj):
+    cnpj = re.sub(r'[^0-9]', '', str(cnpj))
+    if len(cnpj) != 14:
+        return False
+    if len(set(cnpj)) == 1:
+        return False
+    peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
+    digito1 = 11 - (soma1 % 11)
+    if digito1 >= 10:
+        digito1 = 0
+    peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
+    digito2 = 11 - (soma2 % 11)
+    if digito2 >= 10:
+        digito2 = 0
+    return int(cnpj[12]) == digito1 and int(cnpj[13]) == digito2
+
+def validar_email(email):
+    padrao = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(padrao, email) is not None
+
+def validar_telefone(telefone):
+    telefone = re.sub(r'[^0-9]', '', str(telefone))
+    return len(telefone) >= 10 and len(telefone) <= 11
+
+def validar_cep(cep):
+    cep = re.sub(r'[^0-9]', '', str(cep))
+    return len(cep) == 8
+
+# ============================================
+# FUNÇÃO DE CONEXÃO COM GOOGLE SHEETS
+# ============================================
 
 def conectar_google_sheets():
     """Conecta ao Google Sheets usando credenciais (local ou secrets)"""
@@ -68,8 +125,6 @@ def conectar_google_sheets():
                     "client_x509_cert_url": st.secrets["google"].get("client_x509_cert_url", "")
                 }
                 credenciais_dict = {k: v for k, v in credenciais_dict.items() if v}
-                if credenciais_dict.get('private_key'):
-                    st.info("🔐 Usando credenciais do Streamlit Secrets")
         except Exception as e:
             pass
         
@@ -78,19 +133,13 @@ def conectar_google_sheets():
             try:
                 with open('credentials.json', 'r') as f:
                     credenciais_dict = json.load(f)
-                st.info("📁 Usando credenciais do arquivo credentials.json")
             except FileNotFoundError:
                 pass
             except Exception as e:
-                st.warning(f"⚠️ Erro ao ler credentials.json: {str(e)[:100]}")
+                pass
         
         # 3. VERIFICAR SE TEM CREDENCIAIS
         if not credenciais_dict or not credenciais_dict.get('private_key'):
-            st.error("❌ Credenciais não encontradas!")
-            st.info("""
-            **Para resolver:**
-            - Coloque o arquivo `credentials.json` na mesma pasta do app.py
-            """)
             return None
         
         # 4. CONECTAR
@@ -100,24 +149,128 @@ def conectar_google_sheets():
         # 5. TESTAR CONEXÃO
         try:
             test_planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
-            st.success(f"✅ Conectado à planilha: {test_planilha.title}")
             return cliente
         except Exception as e:
-            st.error(f"❌ Erro ao acessar planilha: {str(e)}")
-            st.info("Verifique se a planilha foi compartilhada com o e-mail da service account")
             return None
         
     except Exception as e:
-        st.error(f"❌ Erro na conexão: {str(e)}")
         return None
 
+# ============================================
+# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS
+# ============================================
+
+def carregar_notificacoes_google_sheets():
+    """Carrega notificações da aba NOTIFICACAO do Google Sheets"""
+    try:
+        cliente = conectar_google_sheets()
+        if not cliente:
+            return []
+        
+        # Abrir a planilha
+        planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
+        
+        # Tentar acessar a aba NOTIFICACAO
+        try:
+            aba_notificacao = planilha.worksheet("NOTIFICACAO")
+        except Exception as e:
+            # Se não existir, criar a aba
+            try:
+                aba_notificacao = planilha.add_worksheet(title="NOTIFICACAO", rows="100", cols="4")
+                cabecalho = ["MENSAGEM", "DATA_CRIACAO", "ATIVA", "TIPO"]
+                aba_notificacao.append_row(cabecalho)
+                return []
+            except:
+                return []
+        
+        # Buscar todas as linhas
+        todas_linhas = aba_notificacao.get_all_values()
+        
+        notificacoes = []
+        for i, linha in enumerate(todas_linhas):
+            if i == 0:  # Pular cabeçalho
+                continue
+            
+            # Verificar se tem mensagem na coluna A
+            if len(linha) >= 1 and linha[0] and str(linha[0]).strip():
+                mensagem = str(linha[0]).strip()
+                
+                # Verificar se está ativa (Coluna C - índice 2)
+                ativa = False
+                if len(linha) >= 3 and linha[2]:
+                    valor_ativa = str(linha[2]).strip().lower()
+                    # Aceitar: sim, true, ativa, 1, s, yes
+                    ativa = valor_ativa in ['sim', 'true', 'ativa', '1', 's', 'yes']
+                
+                # Se não estiver ativa, pular
+                if not ativa:
+                    continue
+                
+                # Tipo da notificação (Coluna D - índice 3) - caso não tenha, padrão 'info'
+                tipo = "info"
+                if len(linha) >= 4 and linha[3]:
+                    tipo = str(linha[3]).strip().lower()
+                    # Mapear "alerta" para "warning"
+                    if tipo == "alerta":
+                        tipo = "warning"
+                    elif tipo == "sucesso":
+                        tipo = "success"
+                
+                notificacoes.append({
+                    'mensagem': mensagem,
+                    'tipo': tipo
+                })
+        
+        return notificacoes
+        
+    except Exception as e:
+        return []
+
+def exibir_notificacoes():
+    """Exibe as notificações como pop-ups na tela principal"""
+    try:
+        notificacoes = carregar_notificacoes_google_sheets()
+        
+        if not notificacoes:
+            return
+        
+        # Gerar hash das notificações
+        hash_notificacoes = hashlib.md5(str(notificacoes).encode()).hexdigest()
+        
+        # Verificar se já exibimos
+        if st.session_state.get('ultimo_hash_notificacoes') != hash_notificacoes:
+            st.session_state.ultimo_hash_notificacoes = hash_notificacoes
+            
+            for notif in notificacoes:
+                if notif['tipo'] == 'success':
+                    st.success(f"🎉 {notif['mensagem']}")
+                elif notif['tipo'] == 'error':
+                    st.error(f"❌ {notif['mensagem']}")
+                elif notif['tipo'] == 'warning':
+                    st.warning(f"⚠️ {notif['mensagem']}")  # Alerta em laranja
+                else:
+                    st.info(f"ℹ️ {notif['mensagem']}")
+    except Exception as e:
+        pass
+
+# ============================================
+# CONFIGURAÇÃO DO GOOGLE SHEETS
+# ============================================
+
+# ID da planilha de cadastro
+ID_PLANILHA_CADASTRO = "1_s01QhZJni2dYoJwkWflEtdrKzSZ5yt7mpZvASPlFxk"
+
+# Escopos necessários para o Google Sheets API
+ESCOPOS = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 
 def salvar_cadastro_cliente(dados_cliente):
     """Salva os dados do cliente na planilha Cadastro_Virtual (aba Cadastro)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
-            st.warning("⚠️ Não foi possível conectar. Cadastro NÃO salvo.")
             return False
         
         # Abrir a planilha
@@ -141,18 +294,17 @@ def salvar_cadastro_cliente(dados_cliente):
         linha_encontrada = None
         
         for i, linha in enumerate(todas_linhas):
-            if i == 0:  # Pular cabeçalho
+            if i == 0:
                 continue
             if len(linha) > 1:
                 cnpj_linha = re.sub(r'[^0-9]', '', str(linha[1]))
                 if cnpj_linha == cnpj_limpo:
-                    linha_encontrada = i + 1  # +1 porque o índice 0 é linha 1
+                    linha_encontrada = i + 1
                     break
         
         data_atual = formatar_data_brasil().split()[0]
         hora_atual = formatar_data_brasil().split()[1]
         
-        # Preparar dados para salvar
         nova_linha = [
             dados_cliente.get('razao_social', ''),
             dados_cliente.get('cnpj', ''),
@@ -169,43 +321,31 @@ def salvar_cadastro_cliente(dados_cliente):
         ]
         
         if linha_encontrada:
-            # Atualizar linha existente
             for col, valor in enumerate(nova_linha, start=1):
                 try:
                     aba_cadastro.update_cell(linha_encontrada, col, valor)
                 except:
                     pass
-            st.success(f"✅ Cadastro ATUALIZADO: {dados_cliente.get('razao_social', '')}")
         else:
-            # Adicionar nova linha
             aba_cadastro.append_row(nova_linha)
-            st.success(f"✅ Novo CADASTRO salvo: {dados_cliente.get('razao_social', '')}")
         
         return True
         
     except Exception as e:
-        st.error(f"❌ Erro ao salvar cadastro: {str(e)}")
-        import traceback
-        st.error(f"Detalhes: {traceback.format_exc()}")
         return False
-
 
 def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, itens_resumo):
     """Salva o histórico do orçamento na planilha (aba Historico)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
-            st.warning("⚠️ Não foi possível conectar. Histórico NÃO salvo.")
             return False
         
-        # Abrir a planilha
         planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
         
-        # Selecionar a aba Historico
         try:
             aba_historico = planilha.worksheet("Historico")
         except:
-            # Se a aba não existir, criar
             aba_historico = planilha.add_worksheet(title="Historico", rows="10000", cols="20")
             cabecalho = ["DATA", "HORA", "CNPJ", "RAZÃO SOCIAL", "UF", "E-MAIL", "VALOR", 
                         "FORMA_PAGAMENTO", "QTD_ITENS", "TIPO_CLIENTE", "DATA_HORA_COMPLETA"]
@@ -215,9 +355,7 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
         hora_atual = formatar_data_brasil().split()[1]
         data_hora_completa = formatar_data_brasil()
         
-        # Contar quantidade de itens no carrinho
         qtd_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
-        
         tipo_cliente_str = "NÃO CONTRIBUINTE" if st.session_state.get('cliente_isento', False) else "NORMAL"
         
         nova_linha = [
@@ -235,15 +373,10 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
         ]
         
         aba_historico.append_row(nova_linha)
-        st.success(f"✅ Histórico salvo! Orçamento registrado em {data_hora_completa}")
         return True
         
     except Exception as e:
-        st.error(f"❌ Erro ao salvar histórico: {str(e)}")
-        import traceback
-        st.error(f"Detalhes: {traceback.format_exc()}")
         return False
-
 
 def buscar_cadastro_por_cnpj(cnpj):
     """Busca cadastro do cliente pelo CNPJ na planilha"""
@@ -259,14 +392,11 @@ def buscar_cadastro_por_cnpj(cnpj):
         except:
             return None
         
-        # Limpar CNPJ para busca
         cnpj_limpo = re.sub(r'[^0-9]', '', cnpj)
-        
-        # Buscar em todas as linhas
         todas_linhas = aba_cadastro.get_all_values()
         
         for i, linha in enumerate(todas_linhas):
-            if i == 0:  # Pular cabeçalho
+            if i == 0:
                 continue
             if len(linha) > 1:
                 cnpj_linha = re.sub(r'[^0-9]', '', str(linha[1]))
@@ -285,7 +415,6 @@ def buscar_cadastro_por_cnpj(cnpj):
                     }
         return None
     except Exception as e:
-        st.warning(f"⚠️ Erro ao buscar cadastro: {str(e)}")
         return None
 
 # ============================================
@@ -293,11 +422,9 @@ def buscar_cadastro_por_cnpj(cnpj):
 # ============================================
 
 def gerar_id_sessao() -> str:
-    """Gera um ID de sessão único e seguro"""
     return secrets.token_hex(16)
 
 def mascarar_dados_sensiveis(texto: str, tipo: str = 'email') -> str:
-    """Mascara dados sensíveis para logs"""
     if not texto:
         return ''
     if tipo == 'email':
@@ -313,11 +440,9 @@ def mascarar_dados_sensiveis(texto: str, tipo: str = 'email') -> str:
     return '***'
 
 def limpar_dados_sensiveis():
-    """Limpa dados sensíveis do session_state após timeout"""
     if 'ultimo_acesso' in st.session_state:
         tempo_decorrido = (datetime.now() - st.session_state.ultimo_acesso).total_seconds()
         if tempo_decorrido > SESSION_TIMEOUT:
-            # Limpar dados do cliente
             st.session_state.dados_cliente = {}
             st.session_state.form_data = {
                 'razao_social': '',
@@ -331,528 +456,14 @@ def limpar_dados_sensiveis():
                 'cep': ''
             }
             st.session_state.carrinho = []
-            st.warning("🔒 Sessão expirada por segurança. Seus dados foram removidos.")
             return True
     st.session_state.ultimo_acesso = datetime.now()
     return False
 
 # ============================================
-# FUNÇÃO PARA OBTER HORÁRIO LOCAL DO BRASIL
-# ============================================
-def get_horario_brasil():
-    """Retorna a data e hora atual no fuso horário do Brasil"""
-    return datetime.now(TIMEZONE_BR)
-
-def formatar_data_brasil():
-    """Formata a data e hora atual no padrão brasileiro"""
-    agora = get_horario_brasil()
-    return agora.strftime('%d/%m/%Y %H:%M:%S')
-
-# ============================================
-# FUNÇÃO PARA VALIDAR CNPJ
-# ============================================
-def validar_cnpj(cnpj):
-    """Valida se o CNPJ é válido"""
-    cnpj = re.sub(r'[^0-9]', '', str(cnpj))
-    if len(cnpj) != 14:
-        return False
-    
-    # Verificar se todos os dígitos são iguais
-    if len(set(cnpj)) == 1:
-        return False
-    
-    # Calcular primeiro dígito verificador
-    peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    soma1 = sum(int(cnpj[i]) * peso1[i] for i in range(12))
-    digito1 = 11 - (soma1 % 11)
-    if digito1 >= 10:
-        digito1 = 0
-    
-    # Calcular segundo dígito verificador
-    peso2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    soma2 = sum(int(cnpj[i]) * peso2[i] for i in range(13))
-    digito2 = 11 - (soma2 % 11)
-    if digito2 >= 10:
-        digito2 = 0
-    
-    return int(cnpj[12]) == digito1 and int(cnpj[13]) == digito2
-
-# ============================================
-# FUNÇÃO PARA VALIDAR EMAIL
-# ============================================
-def validar_email(email):
-    """Valida se o email tem formato correto"""
-    padrao = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(padrao, email) is not None
-
-# ============================================
-# FUNÇÃO PARA VALIDAR TELEFONE
-# ============================================
-def validar_telefone(telefone):
-    """Valida se o telefone tem formato correto"""
-    telefone = re.sub(r'[^0-9]', '', str(telefone))
-    return len(telefone) >= 10 and len(telefone) <= 11
-
-# ============================================
-# FUNÇÃO PARA VALIDAR CEP
-# ============================================
-def validar_cep(cep):
-    """Valida se o CEP tem formato correto"""
-    cep = re.sub(r'[^0-9]', '', str(cep))
-    return len(cep) == 8
-
-# ============================================
-# TELA DE VALIDAÇÃO INICIAL (PESSOA FÍSICA vs JURÍDICA)
-# ============================================
-def verificar_tipo_cliente_inicial():
-    """Verifica se o usuário já selecionou o tipo de cliente"""
-    
-    # Carregar imagem de fundo
-    img_fundo_base64 = ""
-    try:
-        with open("Frontpage.jpeg", "rb") as f:
-            img_fundo_base64 = base64.b64encode(f.read()).decode()
-    except:
-        pass
-    
-    if img_fundo_base64:
-        st.markdown(f"""
-        <style>
-        .stApp {{
-            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
-            background-size: cover;
-        }}
-        .stApp::before {{
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(255, 255, 255, 0.88);
-            z-index: 0;
-            pointer-events: none;
-        }}
-        .main {{
-            position: relative;
-            z-index: 1;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div style='text-align: center; padding: 40px 20px;'>
-        <h1 style='color: #2E7D32;'>Catálogo Interativo Virtual</h1>
-        <p style='font-size: 18px; color: #555; margin-top: 10px;'>
-        Peças exclusivas em vidro e decoração
-        </p>
-        <hr style='margin: 30px auto; width: 50%;'>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div style='max-width: 600px; margin: 0 auto; padding: 20px;'>
-        <h3 style='color: #333; text-align: center;'>🔐 Identificação do Perfil</h3>
-        <p style='text-align: center; color: #666; margin-bottom: 30px;'>
-        Para acessar nosso catálogo, precisamos confirmar seu perfil de acordo com a LGPD.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("👤 Pessoa Física", use_container_width=True, type="primary"):
-            st.session_state.tipo_pessoa = "FISICA"
-            st.session_state.pessoa_fisica_recusada = True
-            st.rerun()
-    
-    with col2:
-        if st.button("🏢 Pessoa Jurídica", use_container_width=True, type="primary"):
-            st.session_state.tipo_pessoa = "JURIDICA"
-            st.session_state.aguardando_cnpj = True
-            st.rerun()
-    
-    # Se for Pessoa Física, mostrar mensagem de bloqueio
-    if st.session_state.get('pessoa_fisica_recusada', False):
-        st.markdown("---")
-        st.markdown("""
-        <div style='background-color: #FFEBEE; border-left: 4px solid #D32F2F; 
-                    padding: 20px; border-radius: 8px; margin-top: 20px;'>
-            <h3 style='color: #D32F2F; margin-bottom: 15px;'>⛔ Acesso Restrito</h3>
-            <p style='color: #333; font-size: 16px;'>
-            <strong>Este catálogo é exclusivo para PESSOAS JURÍDICAS (CNPJ).</strong>
-            </p>
-            <p style='color: #555; margin-top: 15px;'>
-            A Luvidarte atende exclusivamente empresas, revendedores e profissionais do setor.
-            </p>
-            <p style='color: #555; margin-top: 15px;'>
-            Caso você seja uma pessoa física e tenha interesse em nossos produtos, 
-            entre em contato conosco através dos canais abaixo:
-            </p>
-            <div style='margin-top: 20px; padding: 15px; background-color: #FFF; border-radius: 8px;'>
-                <p>📞 <strong>Telefone:</strong> (11) 4676-9000</p>
-                <p>💬 <strong>WhatsApp:</strong> (11) 93011-9335</p>
-                <p>✉️ <strong>E-mail:</strong> sac@luvidarte.com.br</p>
-                <p>📍 <strong>Endereço:</strong> Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP</p>
-            </div>
-            <p style='color: #666; margin-top: 20px; font-size: 14px;'>
-            Nossa equipe terá prazer em atendê-lo e apresentar nossas soluções personalizadas.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("◀ Voltar e Selecionar Pessoa Jurídica", use_container_width=True):
-            st.session_state.pessoa_fisica_recusada = False
-            st.rerun()
-        
-        st.stop()
-    
-    # Se estiver aguardando CNPJ
-    if st.session_state.get('aguardando_cnpj', False):
-        st.markdown("---")
-        st.markdown("""
-        <div style='max-width: 600px; margin: 0 auto;'>
-            <h3 style='color: #2E7D32; text-align: center;'>📋 Validação de Pessoa Jurídica</h3>
-            <p style='text-align: center; color: #666; margin-bottom: 20px;'>
-            Conforme a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018), 
-            solicitamos a confirmação do seu CNPJ para acesso ao catálogo.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        with st.form(key="form_validacao_cnpj"):
-            cnpj_input = st.text_input(
-                "CNPJ da Empresa *",
-                placeholder="99.999.999/9999-99",
-                help="Digite apenas números ou utilize máscara"
-            )
-            
-            st.caption("🔒 **LGPD - Proteção de Dados:**")
-            st.caption("• Seu CNPJ será utilizado apenas para validação de acesso")
-            st.caption("• Seus dados serão armazenados conforme consentimento LGPD")
-            st.caption("• Você pode solicitar a exclusão dos seus dados a qualquer momento")
-            st.caption("• DPO para questões LGPD: sac@luvidarte.com.br")
-            
-            # Botão para buscar cadastro existente
-            if cnpj_input:
-                cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_input)
-                if len(cnpj_limpo) == 14:
-                    cadastro_existente = buscar_cadastro_por_cnpj(cnpj_limpo)
-                    if cadastro_existente:
-                        st.info("✅ CNPJ já cadastrado! Os dados serão carregados automaticamente.")
-            
-            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
-            
-            with col_btn2:
-                enviar = st.form_submit_button("✅ Validar e Continuar", use_container_width=True)
-            
-            with col_btn1:
-                if st.form_submit_button("◀ Voltar", use_container_width=True):
-                    st.session_state.aguardando_cnpj = False
-                    st.session_state.tipo_pessoa = None
-                    st.rerun()
-            
-            if enviar:
-                cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_input)
-                if len(cnpj_limpo) == 14 and validar_cnpj(cnpj_limpo):
-                    st.session_state.cnpj_validado = cnpj_limpo
-                    st.session_state.cnpj_validado_data = formatar_data_brasil()
-                    st.session_state.acesso_autorizado = True
-                    st.session_state.mostrar_lgpd = True
-                    
-                    # Buscar cadastro existente para pré-preencher
-                    cadastro = buscar_cadastro_por_cnpj(cnpj_limpo)
-                    if cadastro:
-                        st.session_state.cadastro_precarregado = cadastro
-                    else:
-                        st.session_state.cadastro_precarregado = None
-                    
-                    st.rerun()
-                else:
-                    st.error("❌ CNPJ inválido. Verifique os dígitos e tente novamente.")
-        
-        st.stop()
-    
-    # Primeira vez, apenas mostrar tela inicial
-    if 'acesso_autorizado' not in st.session_state:
-        st.stop()
-    
-    return True
-
-# ============================================
-# PASSOS DO SISTEMA
-# ============================================
-def mostrar_passo_a_passo():
-    """Exibe um tutorial passo a passo do sistema"""
-    with st.sidebar.expander("📖 PASSO A PASSO - Como usar", expanded=False):
-        st.markdown("""
-        ### 🎯 Guia Rápido do Sistema - Catálogo Interativo Virtual
-        
-        ---
-        
-        #### 📌 **PASSO 1: Validação de CNPJ**
-        - Informe seu CNPJ válido para acesso ao catálogo
-        - Conforme LGPD, seus dados são tratados com confidencialidade
-        - ⚠️ *Catálogo exclusivo para Pessoa Jurídica*
-        
-        ---
-        
-        #### 🔍 **PASSO 2: Configure os Filtros (Sidebar Esquerda)**
-        - **📍 UF (ICMS):** Selecione o estado de entrega
-        - **📦 Família de Produtos:** Escolha categoria do produto
-        - **🔎 Buscar Referência:** Pesquise por código
-        - **💰 Faixa de Preço:** Ajuste o slider
-        - **🏷️ Cliente Não Contribuinte:** Marque se for Não Contribuinte
-        - **💳 Pagamento:** Escolha a condição (Vista ou Prazo)
-        
-        ---
-        
-        #### 🛍️ **PASSO 3: Adicione Produtos**
-        - Navegue pelos produtos na página principal
-        - Defina a **quantidade** desejada
-        - Clique em **"🛒 Adicionar"**
-        
-        ---
-        
-        #### 📊 **PASSO 4: Revise o Carrinho**
-        - Clique em **"🛒 Acessar meu carrinho"**
-        - Verifique os valores, quantidades e descontos
-        
-        ---
-        
-        #### 📝 **PASSO 5: Preencha os Dados do Cliente**
-        - No carrinho, clique em **"📋 Solicitar Orçamento"**
-        - Seus dados serão salvos na planilha de cadastro
-        - Aceite os termos da LGPD
-        
-        ---
-        
-        #### 📤 **PASSO 6: Finalize o Orçamento**
-        - Baixe o orçamento em HTML
-        - Envie via WhatsApp
-        - O histórico é salvo automaticamente
-        
-        ---
-        
-        #### 📞 **Suporte**
-        - WhatsApp: (11) 93011-9335
-        - E-mail: sac@luvidarte.com.br
-        """)
-        
-        st.markdown("---")
-        if st.button("✅ Já entendi, vamos começar!", use_container_width=True):
-            st.session_state.passo_a_passo_visto = True
-            st.rerun()
-
-def mostrar_politica_privacidade():
-    """Exibe a política de privacidade com imagem de fundo - VERSÃO LGPD COMPLETA"""
-    
-    # Carregar imagem para fundo da LGPD
-    img_fundo_base64 = ""
-    try:
-        with open("Frontpage.jpeg", "rb") as f:
-            img_fundo_base64 = base64.b64encode(f.read()).decode()
-    except:
-        pass
-    
-    # Adicionar fundo na tela LGPD
-    if img_fundo_base64:
-        st.markdown(f"""
-        <style>
-        .stApp {{
-            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
-            background-size: cover;
-        }}
-        .stApp::before {{
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(255, 255, 255, 0.88);
-            z-index: 0;
-            pointer-events: none;
-        }}
-        .main {{
-            position: relative;
-            z-index: 1;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
-    
-    # Mostrar CNPJ validado
-    if st.session_state.get('cnpj_validado'):
-        cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
-        st.success(f"✅ CNPJ Validado: {cnpj_mascarado} | Data: {st.session_state.cnpj_validado_data}")
-    
-    with st.expander("📋 POLÍTICA DE PRIVACIDADE - LGPD (Lei 13.709/2018)", expanded=True):
-        st.markdown("""
-        ### 🔒 POLÍTICA DE PRIVACIDADE Luvidarte
-        
-        ---
-        
-        #### **1. QUAIS DADOS COLETAMOS E PARA QUE SERVEM?**
-        
-        | Dado Coletado | Finalidade Específica |
-        |---------------|------------------------|
-        | **Razão Social** | Identificação para emissão do orçamento e nota fiscal |
-        | **CNPJ** | Obrigatório para emissão de nota fiscal (Lei 8.846/94) |
-        | **Inscrição Estadual** | Necessário para cálculo correto de ICMS e ST |
-        | **Endereço completo** | Calcular frete e verificar ICMS por UF |
-        | **E-mail** | Enviar o orçamento e comunicar novidades (se autorizado) |
-        | **Telefone/WhatsApp** | Contato comercial para finalizar o pedido |
-        | **Histórico de orçamentos** | Agilizar futuras cotações e melhorar atendimento |
-        
-        ---
-        
-        #### **2. SEUS DIREITOS (Art. 18º da LGPD)**
-        
-        Você pode solicitar a qualquer momento, SEM CUSTO:
-        - ✅ **Confirmar** se seus dados estão armazenados
-        - ✅ **Acessar** todos os seus dados
-        - ✅ **Corrigir** dados incompletos ou errados
-        - ✅ **Excluir** seus dados (exceto quando lei exigir)
-        - ✅ **Revogar** seu consentimento
-        
-        **📧 Canal exclusivo:** `sac@luvidarte.com.br`
-        **Prazo de resposta:** Até 15 dias úteis
-        
-        ---
-        
-        #### **3. POR QUANTO TEMPO GUARDAMOS SEUS DADOS?**
-        
-        | Tipo de Dado | Prazo de Retenção |
-        |--------------|-------------------|
-        | Dados cadastrais | **2 anos** sem novo orçamento |
-        | Histórico de orçamentos | **2 anos** |
-        | Dados fiscais (CNPJ, IE) | **5 anos** (exigido pela Receita Federal) |
-        
-        ---
-        
-        #### **4. QUEM PODE VER SEUS DADOS?**
-        
-        Seus dados são acessíveis APENAS para:
-        - 👥 Equipe comercial da Luvidarte
-        - 👥 Equipe fiscal (para emissão de notas)
-        - 🔒 Google (servidor criptografado)
-        
-        **NUNCA compartilhamos** com empresas de marketing ou terceiros.
-        
-        ---
-        
-        #### **5. ENCARREGADO (DPO)**
-        
-        | Canal | Contato |
-        |-------|---------|
-        | **E-mail** | `dpo@luvidarte.com.br` |
-        | **Telefone** | (11) 4676-9000 |
-        
-        ---
-        
-        <div style='background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin-top: 15px;'>
-        <strong>✅ PARA ACEITAR ESTA POLÍTICA, VOCÊ CONCORDA QUE:</strong><br><br>
-        • Leu e compreendeu todas as cláusulas acima<br>
-        • Autoriza a coleta e armazenamento dos seus dados conforme descrito<br>
-        • Conhece seus direitos de acesso, correção e exclusão<br><br>
-        <small>Data da última atualização: 30/04/2026 - Versão 2.0 (LGPD)</small>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("✅ ACEITO E CONCORDO COM A POLÍTICA DE PRIVACIDADE", key="aceitar_privacidade", use_container_width=True):
-            st.session_state.privacidade_aceita = True
-            st.session_state.consentimento_data = formatar_data_brasil()
-            st.session_state.mostrar_lgpd = False
-            st.rerun()
-
-def mostrar_termos_uso():
-    """Exibe os termos de uso"""
-    with st.expander("📜 Termos de Uso - Orçamento Virtual"):
-        st.markdown("""
-        ### TERMOS DE USO - CATÁLOGO INTERATIVO VIRTUAL Luvidarte
-        
-        **1. NATUREZA DO ORÇAMENTO**
-        - Este é um ORÇAMENTO VIRTUAL, NÃO uma compra finalizada
-        - Os valores são ESTIMATIVAS sujeitas à confirmação
-        
-        **2. ARMAZENAMENTO DE DADOS**
-        - Seus dados serão armazenados para agilizar futuros atendimentos
-        - O histórico de orçamentos é mantido para consulta
-        
-        **3. PÚBLICO-ALVO**
-        - Este catálogo é exclusivo para PESSOAS JURÍDICAS
-        
-        **4. CANCELAMENTO DE DADOS**
-        - Solicite a exclusão dos seus dados via e-mail: sac@luvidarte.com.br
-        
-        **5. DISPOSIÇÕES GERAIS**
-        - A Luvidarte se reserva o direito de recusar pedidos
-        
-        ---
-        📞 **Dúvidas:** (11) 4676-9000 | sac@luvidarte.com.br
-        """)
-
-# ============================================
-# CONSENTIMENTO LGPD
-# ============================================
-
-def obter_consentimento_lgpd() -> bool:
-    """Verifica se o usuário já consentiu com a LGPD"""
-    
-    if st.session_state.get('mostrar_lgpd', True) and 'privacidade_aceita' not in st.session_state:
-        st.session_state.privacidade_aceita = False
-    
-    if not st.session_state.get('privacidade_aceita', False):
-        mostrar_politica_privacidade()
-        mostrar_termos_uso()
-        return False
-    
-    # Após aceitar, restaurar o fundo normal
-    img_fundo_base64 = ""
-    try:
-        with open("Frontpage.jpeg", "rb") as f:
-            img_fundo_base64 = base64.b64encode(f.read()).decode()
-    except:
-        pass
-    
-    if img_fundo_base64:
-        st.markdown(f"""
-        <style>
-        .stApp {{
-            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
-            background-size: cover;
-        }}
-        .stApp::before {{
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(255, 255, 255, 0.88);
-            z-index: 0;
-            pointer-events: none;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
-    
-    return True
-
-# ============================================
-# FUNÇÃO PARA FORMATAR MOEDA (PADRÃO BRASILEIRO)
-# ============================================
-def formatar_moeda(valor):
-    """Formata valor para moeda brasileira: R$ 49.984,56"""
-    if valor is None or valor == 0:
-        return "R$ 0,00"
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-# ============================================
 # FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME
 # ============================================
 def calcular_desconto_volume(valor_base):
-    """Calcula o percentual de desconto por volume baseado no valor base"""
     if valor_base >= 4000:
         return 0.15
     elif valor_base >= 2500:
@@ -861,7 +472,6 @@ def calcular_desconto_volume(valor_base):
         return 0.0
 
 def calcular_faltante_para_desconto(valor_base):
-    """Calcula o valor faltante para o próximo desconto"""
     if valor_base < 2500:
         return 2500 - valor_base, 10
     elif valor_base < 4000:
@@ -870,9 +480,6 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 def gerar_botao_desconto_flutuante():
-    """Gera o HTML/CSS para o botão flutuante de desconto"""
-    
-    # Calcular valores atuais do carrinho
     if st.session_state.carrinho:
         valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
         desconto_percentual = calcular_desconto_volume(valor_base_total)
@@ -897,7 +504,6 @@ def gerar_botao_desconto_flutuante():
             icone = "📈"
             texto_desconto = "0% OFF"
         
-        # Calcular barra de progresso
         if valor_base_total >= 4000:
             progresso = 100
         elif valor_base_total >= 2500:
@@ -906,7 +512,6 @@ def gerar_botao_desconto_flutuante():
             progresso = (valor_base_total / 2500) * 75
         
         progresso = min(100, max(0, progresso))
-        
     else:
         mensagem = "💰 Adicione produtos para ganhar desconto por volume!"
         faltante = 2500
@@ -916,7 +521,6 @@ def gerar_botao_desconto_flutuante():
         texto_desconto = "0% OFF"
         progresso = 0
     
-    # HTML do botão flutuante
     html = f"""
     <style>
     @keyframes slideInRight {{
@@ -1069,19 +673,10 @@ def gerar_botao_desconto_flutuante():
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
 def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
-    """Aplica o desconto por volume no item e recalcula IPI e ST proporcionalmente"""
-    # Valor base do item (preço final com desconto da condição de pagamento)
     valor_base_item = item['preco_final']
-    
-    # Aplicar desconto por volume no valor base
     valor_com_desconto_volume = valor_base_item * (1 - desconto_volume_percentual)
-    
-    # Recalcular IPI e ST proporcionalmente ao novo valor base
-    # Manter a mesma alíquota efetiva
     novo_valor_ipi = valor_com_desconto_volume * item['ipi_percentual']
     novo_valor_st = valor_com_desconto_volume * item['st_aliquota']
-    
-    # Novo total do item
     novo_total_geral = valor_com_desconto_volume + novo_valor_ipi + novo_valor_st
     
     return {
@@ -1097,18 +692,15 @@ def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
 def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_pagamento, 
                          desconto_volume_percentual, valor_base_total, valor_desconto_volume,
                          total_final, total_ipi, total_st):
-    """Gera um HTML com o orçamento detalhado"""
     
     novo_valor_base = valor_base_total - valor_desconto_volume
     
-    # Calcular fator de proporcionalidade para IPI e ST
     if valor_base_total > 0:
         fator_ipi_st = novo_valor_base / valor_base_total
     else:
         fator_ipi_st = 0
     
-    # Adicionar aviso de confidencialidade
-    data_geracao = formatar_data_brasil()  # USAR HORÁRIO LOCAL BRASIL
+    data_geracao = formatar_data_brasil()
     id_documento = hashlib.sha256(f"{dados_cliente.get('cnpj', '')}{data_geracao}".encode()).hexdigest()[:8]
     
     html_content = f"""
@@ -1199,35 +791,26 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     total_geral_exibido = 0
     
     for item in itens_carrinho:
-        # Valor base do item (já com desconto da condição de pagamento)
         valor_base_item = item['preco_final']
-        
-        # Aplicar desconto por volume no valor base do item
         valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
-        
-        # Recalcular IPI e ST de cada item proporcionalmente
         aliquota_ipi_item = item['valor_ipi'] / valor_base_item if valor_base_item > 0 else 0
         aliquota_st_item = item['valor_st'] / valor_base_item if valor_base_item > 0 else 0
         
-        # Aplicar as alíquotas sobre o novo valor base
         novo_ipi_unitario = valor_com_desconto_item * aliquota_ipi_item
         novo_st_unitario = valor_com_desconto_item * aliquota_st_item
         
-        # Totais do item
         subtotal_item = valor_com_desconto_item * item['quantidade']
         ipi_total_item = novo_ipi_unitario * item['quantidade']
         st_total_item = novo_st_unitario * item['quantidade']
         total_item = (valor_com_desconto_item + novo_ipi_unitario + novo_st_unitario) * item['quantidade']
         
-        # Acumular para verificação
         total_ipi_exibido += ipi_total_item
         total_st_exibido += st_total_item
         total_geral_exibido += total_item
         
         html_content += f"""
                     <tr>
-                        <td>{item['referencia']}</td>
-                        <td>{item['descricao'][:50]}</td>
+                        <td>{item['referencia']}</td>                        <td>{item['descricao'][:50]}</td>
                         <td style="text-align:center">{item['quantidade']}</td>
                         <td style="text-align:right">{formatar_moeda(valor_com_desconto_item)}</td>
                         <td style="text-align:right">{formatar_moeda(subtotal_item)}</td>
@@ -1262,7 +845,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             • Acesso, correção e eliminação de dados<br>
             • Revogação do consentimento<br>
             • Portabilidade de dados<br><br>
-            <strong>Encarregado (DPO):</strong> sac@luvidarte.com.br | (11) 4676-9000
+            <strong>Encarregado (DPO):</strong> dpo@luvidarte.com.br | (11) 4676-9000
         </div>
         
         <div class="footer">
@@ -1275,7 +858,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p>A venda será formalizada APENAS após contato e confirmação da nossa equipe via WhatsApp.</p>
             <p><strong>Validade do orçamento: 7 (sete) dias corridos.</strong></p>
             <p>---</p>
-            <p>© 2026 Luvidarte - Todos os direitos reservados | Versão 1.0</p>
+            <p>© 2026 Luvidarte - Todos os direitos reservados | Versão 2.0</p>
         </div>
     </body>
     </html>
@@ -1289,7 +872,6 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
 def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento, total_final,
                                 desconto_volume_percentual, valor_desconto_volume, valor_base_total,
                                 total_ipi, total_st):
-    """Formata a mensagem para WhatsApp com resumo do orçamento e aviso LGPD"""
     
     msg = "🛍️ NOVO ORÇAMENTO Luvidarte 🛍️\n\n"
     msg += "━" * 30 + "\n\n"
@@ -1320,10 +902,8 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     else:
         msg += "\n"
     
-    # Lista resumida dos itens
     msg += "ITENS SOLICITADOS\n"
     for item in st.session_state.carrinho:
-        # Mostrar preço com desconto por volume se aplicável
         valor_base_item = item['preco_final']
         valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
         msg += f"• {item['quantidade']}x {item['descricao'][:50]}\n"
@@ -1336,337 +916,502 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     msg += "2️⃣ Confirmaremos disponibilidade dos produtos\n"
     msg += "3️⃣ Enviaremos as condições de pagamento e frete\n\n"
     msg += "🔒 LGPD: Seus dados são tratados com confidencialidade conforme Lei 13.709/2018\n"
-    msg += "📧 DPO: sac@luvidarte.com.br\n\n"
+    msg += "📧 DPO: dpo@luvidarte.com.br\n\n"
     msg += "✨ Agradecemos a preferência! ✨"
     
     return msg
 
 # ============================================
-# CONFIGURAÇÃO DA PÁGINA
+# FUNÇÃO PARA ENVIAR E-MAIL DO ORÇAMENTO
 # ============================================
 
-# PRIMEIRO: Verificar tipo de cliente (Pessoa Física vs Jurídica)
-# Isso deve ser executado ANTES de qualquer outra validação
-if 'acesso_autorizado' not in st.session_state:
-    verificar_tipo_cliente_inicial()
-    st.stop()
-
-# Verificar consentimento LGPD depois de validar CNPJ
-if not obter_consentimento_lgpd():
-    st.stop()
-
-# Restaurar padding normal após aceitar LGPD
-st.markdown("""
-<style>
-.main {
-    padding: 1rem !important;
-}
-.stApp > header {
-    display: block !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Verificar timeout da sessão
-limpar_dados_sensiveis()
-
-def carregar_logo_favicon():
-    url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
+def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes, nome_arquivo):
+    """
+    Envia e-mail com o orçamento anexado para qualidade@luvidarte.com.br
+    SEM exibir mensagens de sucesso na interface
+    """
     try:
-        response = requests.get(url_drive, timeout=10)
-        if response.status_code == 200:
-            img = Image.open(BytesIO(response.content))
-            img = img.resize((32, 32))
-            return img
+        usuario = EMAIL_CONFIG_ORCAMENTO["usuario"]
+        senha = EMAIL_CONFIG_ORCAMENTO["senha"]
+        destinatario = EMAIL_CONFIG_ORCAMENTO["destinatario"]
+        smtp_server = EMAIL_CONFIG_ORCAMENTO["smtp_server"]
+        smtp_port = EMAIL_CONFIG_ORCAMENTO["smtp_port"]
+        
+        # Criar mensagem
+        msg = MIMEMultipart()
+        msg['From'] = usuario
+        msg['To'] = destinatario
+        msg['Subject'] = f"🛍️ NOVO ORÇAMENTO Luvidarte - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        
+        # Calcular quantidade total de itens
+        qtd_total = sum(item.get('quantidade', 0) for item in itens_resumo)
+        
+        # Corpo do e-mail (HTML)
+        corpo_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Orçamento Luvidarte</title>
+        </head>
+        <body>
+            <h2>🛍️ NOVO ORÇAMENTO Luvidarte</h2>
+            <p><strong>Cliente:</strong> {dados_cliente.get('razao_social', 'NÃO INFORMADO')}</p>
+            <p><strong>CNPJ:</strong> {dados_cliente.get('cnpj', 'NÃO INFORMADO')}</p>
+            <p><strong>Total:</strong> {formatar_moeda(valor_total)}</p>
+            <p><strong>Quantidade de Itens:</strong> {qtd_total}</p>
+            <hr>
+            <p><small>Orçamento gerado em: {formatar_data_brasil()}</small></p>
+            <p><small>Este é um orçamento virtual, sujeito à confirmação de estoque.</small></p>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(corpo_html, 'html'))
+        
+        # Anexar arquivo (se houver)
+        if anexo_bytes and len(anexo_bytes) > 0:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(anexo_bytes)
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
+            msg.attach(part)
+        
+        # Enviar e-mail
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
+            server.login(usuario, senha)
+            server.send_message(msg)
+        
+        return True, ""
+        
+    except Exception as e:
+        return False, str(e)
+
+# ============================================
+# TELA DE VALIDAÇÃO INICIAL (PESSOA FÍSICA vs JURÍDICA)
+# ============================================
+def verificar_tipo_cliente_inicial():
+    img_fundo_base64 = ""
+    try:
+        with open("Frontpage.jpeg", "rb") as f:
+            img_fundo_base64 = base64.b64encode(f.read()).decode()
     except:
         pass
-    return None
-
-favicon = carregar_logo_favicon()
-if favicon:
-    st.set_page_config(
-        page_title="Luvidarte - Catálogo Interativo Virtual",
-        page_icon=favicon,
-        layout="wide"
-    )
-else:
-    st.set_page_config(
-        page_title="Luvidarte - Catálogo Interativo Virtual",
-        page_icon="📦",
-        layout="wide"
-    )
-
-# Mostrar CNPJ validado no topo
-if st.session_state.get('cnpj_validado'):
-    cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
-    st.sidebar.success(f"✅ CNPJ: {cnpj_mascarado}")
-
-# ============================================
-# INICIALIZAR SESSION STATE
-# ============================================
-if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = []
-if 'pagina_atual' not in st.session_state:
-    st.session_state.pagina_atual = 1
-if 'carrinho_aberto' not in st.session_state:
-    st.session_state.carrinho_aberto = False
-if 'filtros_anteriores' not in st.session_state:
-    st.session_state.filtros_anteriores = None
-if 'quantidades' not in st.session_state:
-    st.session_state.quantidades = {}
-if 'dados_cliente' not in st.session_state:
-    st.session_state.dados_cliente = {}
-if 'mostrar_formulario_cliente' not in st.session_state:
-    st.session_state.mostrar_formulario_cliente = False
-if 'form_data' not in st.session_state:
-    # Pré-preencher com dados do cadastro se existir
-    if st.session_state.get('cadastro_precarregado'):
-        st.session_state.form_data = st.session_state.cadastro_precarregado
-    else:
-        st.session_state.form_data = {
-            'razao_social': '',
-            'cnpj': st.session_state.get('cnpj_validado', ''),
-            'inscricao_estadual': '',
-            'email': '',
-            'telefone': '',
-            'endereco': '',
-            'numero': '',
-            'bairro': '',
-            'cep': ''
-        }
-if 'mostrar_botoes_envio' not in st.session_state:
-    st.session_state.mostrar_botoes_envio = False
-if 'html_bytes' not in st.session_state:
-    st.session_state.html_bytes = None
-if 'ultimo_acesso' not in st.session_state:
-    st.session_state.ultimo_acesso = datetime.now()
-if 'consentimento_data' not in st.session_state:
-    st.session_state.consentimento_data = None
-if 'passo_a_passo_visto' not in st.session_state:
-    st.session_state.passo_a_passo_visto = False
-if 'cliente_isento' not in st.session_state:
-    st.session_state.cliente_isento = False
-
-# ============================================
-# FUNÇÕES PARA CONTROLAR CARRINHO
-# ============================================
-def abrir_carrinho():
-    st.session_state.carrinho_aberto = True
-    st.rerun()
-
-def fechar_carrinho():
-    st.session_state.carrinho_aberto = False
-    st.rerun()
-
-def mostrar_formulario():
-    st.session_state.mostrar_formulario_cliente = True
-    st.rerun()
-
-def cancelar_formulario():
-    st.session_state.mostrar_formulario_cliente = False
-    st.session_state.mostrar_botoes_envio = False
-    st.session_state.html_bytes = None
-    st.rerun()
-
-# ============================================
-# FUNÇÃO PARA ATUALIZAR QUANTIDADE NO CARRINHO
-# ============================================
-def atualizar_quantidade_carrinho(indice, nova_quantidade):
-    """Atualiza a quantidade de um item no carrinho e recalcula os totais"""
-    if 0 <= indice < len(st.session_state.carrinho):
-        item = st.session_state.carrinho[indice]
-        item['quantidade'] = nova_quantidade
-        item['preco_total'] = item['preco_final'] * nova_quantidade
-        item['ipi_total'] = item['valor_ipi'] * nova_quantidade
-        item['st_total'] = item['valor_st'] * nova_quantidade
-        item['total_geral'] = (item['preco_final'] + item['valor_ipi'] + item['valor_st']) * nova_quantidade
-        return True
-    return False
-
-# ============================================
-# FUNÇÃO PARA BUSCAR ALIQUOTA ST
-# ============================================
-def buscar_aliquota_st(ncm: str, uf: str, df_st: pd.DataFrame) -> float:
-    if df_st.empty or not ncm or not uf:
-        return 0.0
-    ncm_limpo = str(ncm).replace(".", "").strip()
-    df_st['NCM_LIMPO'] = df_st.iloc[:, 1].astype(str).str.replace(".", "").str.strip()
-    linha_ncm = df_st[df_st['NCM_LIMPO'] == ncm_limpo]
-    if linha_ncm.empty:
-        return 0.0
-    uf_upper = uf.upper().strip()
-    colunas_uf = {}
-    for col in df_st.columns[2:]:
-        col_clean = str(col).strip().upper()
-        colunas_uf[col_clean] = col
-    if uf_upper not in colunas_uf:
-        for col_key in colunas_uf.keys():
-            if uf_upper in col_key or col_key in uf_upper:
-                nome_coluna = colunas_uf[col_key]
-                break
-        else:
-            return 0.0
-    else:
-        nome_coluna = colunas_uf[uf_upper]
-    valor = linha_ncm.iloc[0][nome_coluna]
-    if pd.isna(valor):
-        return 0.0
-    if isinstance(valor, str):
-        valor = valor.replace("%", "").replace(",", ".").strip()
-    try:
-        aliquota = float(valor)
-        if aliquota > 1 and aliquota <= 100:
-            aliquota = aliquota / 100
-        return aliquota
-    except:
-        return 0.0
-
-# ============================================
-# RECALCULAR TODO O CARRINHO
-# ============================================
-def recalcular_todo_carrinho(uf, cliente_isento, forma_pagamento,
-                              dados_st, dados_promo, dados, dados_normal, dados_isento):
-    if not st.session_state.carrinho:
-        return
-    icms_uf = determinar_icms_por_uf(uf)
-    tabela_desconto = dados_isento if cliente_isento else dados_normal
-    for item in st.session_state.carrinho:
-        referencia = item['referencia']
-        produto_dados = dados[dados['Referência'] == referencia]
-        if produto_dados.empty:
-            continue
-        produto = produto_dados.iloc[0]
-        is_promo = 'SIM' in str(produto.get('Promo', '')).strip().upper()
-        preco_promo = None
-        if is_promo and not dados_promo.empty:
-            preco_promo = buscar_preco_promo(referencia, uf, dados_promo)
-        if is_promo and preco_promo is not None and preco_promo > 0:
-            preco_bruto = preco_promo
-            desconto_percentual = 0.0
-            valor_desconto = 0.0
-            preco_com_desconto = preco_bruto
-            if cliente_isento:
-                preco_final = preco_com_desconto * 1.10
-            else:
-                preco_final = preco_com_desconto
-        else:
-            preco_bruto = produto['Preço'] if pd.notna(produto['Preço']) and produto['Preço'] > 0 else 0
-            if forma_pagamento != "PREÇO BASE":
-                desconto_percentual = buscar_desconto(icms_uf, forma_pagamento, tabela_desconto)
-                valor_desconto = preco_bruto * desconto_percentual
-                preco_com_desconto = preco_bruto - valor_desconto
-            else:
-                desconto_percentual = 0.0
-                valor_desconto = 0.0
-                preco_com_desconto = preco_bruto
-            preco_final = preco_com_desconto
+    
+    if img_fundo_base64:
+        st.markdown(f"""
+        <style>
+        .stApp {{
+            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
+            background-size: cover;
+        }}
+        .stApp::before {{
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.88);
+            z-index: 0;
+            pointer-events: none;
+        }}
+        .main {{
+            position: relative;
+            z-index: 1;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style='text-align: center; padding: 40px 20px;'>
+        <h1 style='color: #2E7D32;'>Catálogo Interativo Virtual</h1>
+        <p style='font-size: 18px; color: #555; margin-top: 10px;'>
+        Peças exclusivas em vidro e decoração
+        </p>
+        <hr style='margin: 30px auto; width: 50%;'>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style='max-width: 600px; margin: 0 auto; padding: 20px;'>
+        <h3 style='color: #333; text-align: center;'>🔐 Identificação do Perfil</h3>
+        <p style='text-align: center; color: #666; margin-bottom: 30px;'>
+        Para acessar nosso catálogo, precisamos confirmar seu perfil de acordo com a LGPD.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("👤 Pessoa Física", use_container_width=True, type="primary"):
+            st.session_state.tipo_pessoa = "FISICA"
+            st.session_state.pessoa_fisica_recusada = True
+            st.rerun()
+    
+    with col2:
+        if st.button("🏢 Pessoa Jurídica", use_container_width=True, type="primary"):
+            st.session_state.tipo_pessoa = "JURIDICA"
+            st.session_state.aguardando_cnpj = True
+            st.rerun()
+    
+    if st.session_state.get('pessoa_fisica_recusada', False):
+        st.markdown("---")
+        st.markdown("""
+        <div style='background-color: #FFEBEE; border-left: 4px solid #D32F2F; 
+                    padding: 20px; border-radius: 8px; margin-top: 20px;'>
+            <h3 style='color: #D32F2F; margin-bottom: 15px;'>⛔ Acesso Restrito</h3>
+            <p style='color: #333; font-size: 16px;'>
+            <strong>Este catálogo é exclusivo para PESSOAS JURÍDICAS (CNPJ).</strong>
+            </p>
+            <p style='color: #555; margin-top: 15px;'>
+            A Luvidarte atende exclusivamente empresas, revendedores e profissionais do setor.
+            </p>
+            <p style='color: #555; margin-top: 15px;'>
+            Caso você seja uma pessoa física e tenha interesse em nossos produtos, 
+            entre em contato conosco através dos canais abaixo:
+            </p>
+            <div style='margin-top: 20px; padding: 15px; background-color: #FFF; border-radius: 8px;'>
+                <p>📞 <strong>Telefone:</strong> (11) 4676-9000</p>
+                <p>💬 <strong>WhatsApp:</strong> (11) 93011-9335</p>
+                <p>✉️ <strong>E-mail:</strong> sac@luvidarte.com.br</p>
+                <p>📍 <strong>Endereço:</strong> Rua Caetano Rubio, 213 - Ferraz de Vasconcelos - SP</p>
+            </div>
+            <p style='color: #666; margin-top: 20px; font-size: 14px;'>
+            Nossa equipe terá prazer em atendê-lo e apresentar nossas soluções personalizadas.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        ncm_produto = produto.get('NCM', '')
-        ipi_percentual = buscar_ipi(ncm_produto, dados_st)
-        valor_ipi = preco_final * ipi_percentual
-        aliquota_st = buscar_aliquota_st(ncm_produto, uf, dados_st)
-        valor_st = 0.0 if cliente_isento else preco_final * aliquota_st
-        valor_total = preco_final + valor_ipi + valor_st
-        quantidade = item['quantidade']
-        item['preco_bruto'] = preco_bruto
-        item['desconto_percentual'] = desconto_percentual
-        item['valor_desconto'] = valor_desconto
-        item['preco_com_desconto'] = preco_com_desconto
-        item['preco_final'] = preco_final
-        item['preco_unitario'] = preco_final
-        item['preco_total'] = preco_final * quantidade
-        item['ipi_percentual'] = ipi_percentual
-        item['valor_ipi'] = valor_ipi
-        item['ipi_total'] = valor_ipi * quantidade
-        item['st_aliquota'] = aliquota_st
-        item['valor_st'] = valor_st
-        item['st_total'] = valor_st * quantidade
-        item['total_geral'] = valor_total * quantidade
-
-# ============================================
-# FUNÇÕES DO CARRINHO
-# ============================================
-def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
-                           valor_desconto, preco_com_desconto, preco_final,
-                           valor_ipi, valor_st, ipi_percentual, aliquota_st, valor_total):
-    for item in st.session_state.carrinho:
-        if item['referencia'] == produto['Referência']:
-            item['quantidade'] += quantidade
-            item['preco_total'] = item['preco_final'] * item['quantidade']
-            item['ipi_total'] = item['valor_ipi'] * item['quantidade']
-            item['st_total'] = item['valor_st'] * item['quantidade']
-            item['total_geral'] = (item['preco_final'] + item['valor_ipi'] + item['valor_st']) * item['quantidade']
-            return True
-    st.session_state.carrinho.append({
-        'referencia': produto['Referência'],
-        'descricao': produto['Descrição'],
-        'grupo': produto['GRUPO'],
-        'quantidade': quantidade,
-        'preco_bruto': preco_bruto,
-        'desconto_percentual': desconto_percentual,
-        'valor_desconto': valor_desconto,
-        'preco_com_desconto': preco_com_desconto,
-        'preco_final': preco_final,
-        'preco_unitario': preco_final,
-        'preco_total': preco_final * quantidade,
-        'ipi_percentual': ipi_percentual,
-        'valor_ipi': valor_ipi,
-        'ipi_total': valor_ipi * quantidade,
-        'st_aliquota': aliquota_st,
-        'valor_st': valor_st,
-        'st_total': valor_st * quantidade,
-        'total_geral': (preco_final + valor_ipi + valor_st) * quantidade,
-        'medidas': produto.get('Medidas', ''),
-        'ml': produto.get('ml', ''),
-        'imagem_url': produto.get('imagem_url', '')
-    })
+        if st.button("◀ Voltar e Selecionar Pessoa Jurídica", use_container_width=True):
+            st.session_state.pessoa_fisica_recusada = False
+            st.rerun()
+        
+        st.stop()
+    
+    if st.session_state.get('aguardando_cnpj', False):
+        st.markdown("---")
+        st.markdown("""
+        <div style='max-width: 600px; margin: 0 auto;'>
+            <h3 style='color: #2E7D32; text-align: center;'>📋 Validação de Pessoa Jurídica</h3>
+            <p style='text-align: center; color: #666; margin-bottom: 20px;'>
+            Conforme a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018), 
+            solicitamos a confirmação do seu CNPJ para acesso ao catálogo.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.form(key="form_validacao_cnpj"):
+            cnpj_input = st.text_input(
+                "CNPJ da Empresa *",
+                placeholder="99.999.999/9999-99",
+                help="Digite apenas números ou utilize máscara"
+            )
+            
+            st.caption("🔒 **LGPD - Proteção de Dados:**")
+            st.caption("• Seu CNPJ será utilizado apenas para validação de acesso")
+            st.caption("• Seus dados serão armazenados conforme consentimento LGPD")
+            st.caption("• Você pode solicitar a exclusão dos seus dados a qualquer momento")
+            st.caption("• DPO para questões LGPD: sac@luvidarte.com.br")
+            
+            if cnpj_input:
+                cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_input)
+                if len(cnpj_limpo) == 14:
+                    cadastro_existente = buscar_cadastro_por_cnpj(cnpj_limpo)
+                    if cadastro_existente:
+                        st.info("✅ CNPJ já cadastrado! Os dados serão carregados automaticamente.")
+            
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+            
+            with col_btn2:
+                enviar = st.form_submit_button("✅ Validar e Continuar", use_container_width=True)
+            
+            with col_btn1:
+                if st.form_submit_button("◀ Voltar", use_container_width=True):
+                    st.session_state.aguardando_cnpj = False
+                    st.session_state.tipo_pessoa = None
+                    st.rerun()
+            
+            if enviar:
+                cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_input)
+                if len(cnpj_limpo) == 14 and validar_cnpj(cnpj_limpo):
+                    st.session_state.cnpj_validado = cnpj_limpo
+                    st.session_state.cnpj_validado_data = formatar_data_brasil()
+                    st.session_state.acesso_autorizado = True
+                    st.session_state.mostrar_lgpd = True
+                    
+                    cadastro = buscar_cadastro_por_cnpj(cnpj_limpo)
+                    if cadastro:
+                        st.session_state.cadastro_precarregado = cadastro
+                    else:
+                        st.session_state.cadastro_precarregado = None
+                    
+                    st.rerun()
+                else:
+                    st.error("❌ CNPJ inválido. Verifique os dígitos e tente novamente.")
+        
+        st.stop()
+    
+    if 'acesso_autorizado' not in st.session_state:
+        st.stop()
+    
     return True
 
-def remover_do_carrinho(indice):
-    if 0 <= indice < len(st.session_state.carrinho):
-        st.session_state.carrinho.pop(indice)
+# ============================================
+# PASSOS DO SISTEMA
+# ============================================
+def mostrar_passo_a_passo():
+    with st.sidebar.expander("📖 PASSO A PASSO - Como usar", expanded=False):
+        st.markdown("""
+        ### 🎯 Guia Rápido do Sistema - Catálogo Interativo Virtual
+        
+        ---
+        
+        #### 📌 **PASSO 1: Validação de CNPJ**
+        - Informe seu CNPJ válido para acesso ao catálogo
+        - Conforme LGPD, seus dados são tratados com confidencialidade
+        - ⚠️ *Catálogo exclusivo para Pessoa Jurídica*
+        
+        ---
+        
+        #### 🔍 **PASSO 2: Configure os Filtros (Sidebar Esquerda)**
+        - **📍 UF (ICMS):** Selecione o estado de entrega
+        - **📦 Família de Produtos:** Escolha categoria do produto
+        - **🔎 Buscar Referência:** Pesquise por código
+        - **💰 Faixa de Preço:** Ajuste o slider
+        - **🏷️ Cliente Não Contribuinte:** Marque se for Não Contribuinte
+        - **💳 Pagamento:** Escolha a condição (Vista ou Prazo)
+        
+        ---
+        
+        #### 🛍️ **PASSO 3: Adicione Produtos**
+        - Navegue pelos produtos na página principal
+        - Defina a **quantidade** desejada
+        - Clique em **"🛒 Adicionar"**
+        
+        ---
+        
+        #### 📊 **PASSO 4: Revise o Carrinho**
+        - Clique em **"🛒 Acessar meu carrinho"**
+        - Verifique os valores, quantidades e descontos
+        
+        ---
+        
+        #### 📝 **PASSO 5: Preencha os Dados do Cliente**
+        - No carrinho, clique em **"📋 Solicitar Orçamento"**
+        - Seus dados serão salvos na planilha de cadastro
+        - Aceite os termos da LGPD
+        
+        ---
+        
+        #### 📤 **PASSO 6: Finalize o Orçamento**
+        - Baixe o orçamento em HTML
+        - Envie via WhatsApp
+        - O histórico é salvo automaticamente
+        
+        ---
+        
+        #### 📞 **Suporte**
+        - WhatsApp: (11) 93011-9335
+        - E-mail: sac@luvidarte.com.br
+        """)
+        
+        st.markdown("---")
+        if st.button("✅ Já entendi, vamos começar!", use_container_width=True):
+            st.session_state.passo_a_passo_visto = True
+            st.rerun()
 
-def limpar_carrinho():
-    st.session_state.carrinho = []
-    st.session_state.mostrar_formulario_cliente = False
-    st.session_state.mostrar_botoes_envio = False
-    st.session_state.html_bytes = None
+def mostrar_politica_privacidade():
+    img_fundo_base64 = ""
+    try:
+        with open("Frontpage.jpeg", "rb") as f:
+            img_fundo_base64 = base64.b64encode(f.read()).decode()
+    except:
+        pass
+    
+    if img_fundo_base64:
+        st.markdown(f"""
+        <style>
+        .stApp {{
+            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
+            background-size: cover;
+        }}
+        .stApp::before {{
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.88);
+            z-index: 0;
+            pointer-events: none;
+        }}
+        .main {{
+            position: relative;
+            z-index: 1;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+    
+    if st.session_state.get('cnpj_validado'):
+        cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
+        st.success(f"✅ CNPJ Validado: {cnpj_mascarado} | Data: {st.session_state.cnpj_validado_data}")
+    
+    with st.expander("📋 POLÍTICA DE PRIVACIDADE - LGPD (Lei 13.709/2018)", expanded=True):
+        st.markdown("""
+        ### 🔒 POLÍTICA DE PRIVACIDADE Luvidarte
+        
+        ---
+        
+        #### **1. QUAIS DADOS COLETAMOS E PARA QUE SERVEM?**
+        
+        | Dado Coletado | Finalidade Específica |
+        |---------------|------------------------|
+        | **Razão Social** | Identificação para emissão do orçamento e nota fiscal |
+        | **CNPJ** | Obrigatório para emissão de nota fiscal (Lei 8.846/94) |
+        | **Inscrição Estadual** | Necessário para cálculo correto de ICMS e ST |
+        | **Endereço completo** | Calcular frete e verificar ICMS por UF |
+        | **E-mail** | Enviar o orçamento e comunicar novidades (se autorizado) |
+        | **Telefone/WhatsApp** | Contato comercial para finalizar o pedido |
+        | **Histórico de orçamentos** | Agilizar futuras cotações e melhorar atendimento |
+        
+        ---
+        
+        #### **2. SEUS DIREITOS (Art. 18º da LGPD)**
+        
+        Você pode solicitar a qualquer momento, SEM CUSTO:
+        - ✅ **Confirmar** se seus dados estão armazenados
+        - ✅ **Acessar** todos os seus dados
+        - ✅ **Corrigir** dados incompletos ou errados
+        - ✅ **Excluir** seus dados (exceto quando lei exigir)
+        - ✅ **Revogar** seu consentimento
+        
+        **📧 Canal exclusivo:** `sac@luvidarte.com.br`
+        **Prazo de resposta:** Até 15 dias úteis
+        
+        ---
+        
+        #### **3. POR QUANTO TEMPO GUARDAMOS SEUS DADOS?**
+        
+        | Tipo de Dado | Prazo de Retenção |
+        |--------------|-------------------|
+        | Dados cadastrais | **2 anos** sem novo orçamento |
+        | Histórico de orçamentos | **2 anos** |
+        | Dados fiscais (CNPJ, IE) | **5 anos** (exigido pela Receita Federal) |
+        
+        ---
+        
+        #### **4. QUEM PODE VER SEUS DADOS?**
+        
+        Seus dados são acessíveis APENAS para:
+        - 👥 Equipe comercial da Luvidarte
+        - 👥 Equipe fiscal (para emissão de notas)
+        - 🔒 Google (servidor criptografado)
+        
+        **NUNCA compartilhamos** com empresas de marketing ou terceiros.
+        
+        ---
+        
+        #### **5. ENCARREGADO (DPO)**
+        
+        | Canal | Contato |
+        |-------|---------|
+        | **E-mail** | `dpo@luvidarte.com.br` |
+        | **Telefone** | (11) 4676-9000 |
+        
+        ---
+        
+        <div style='background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin-top: 15px;'>
+        <strong>✅ PARA ACEITAR ESTA POLÍTICA, VOCÊ CONCORDA QUE:</strong><br><br>
+        • Leu e compreendeu todas as cláusulas acima<br>
+        • Autoriza a coleta e armazenamento dos seus dados conforme descrito<br>
+        • Conhece seus direitos de acesso, correção e exclusão<br><br>
+        <small>Data da última atualização: 30/04/2026 - Versão 2.0 (LGPD)</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("✅ ACEITO E CONCORDO COM A POLÍTICA DE PRIVACIDADE", key="aceitar_privacidade", use_container_width=True):
+            st.session_state.privacidade_aceita = True
+            st.session_state.consentimento_data = formatar_data_brasil()
+            st.session_state.mostrar_lgpd = False
+            st.rerun()
 
-def calcular_resumo_carrinho():
-    if not st.session_state.carrinho:
-        return {'total_itens': 0, 'total_geral': 0.0, 'total_ipi': 0.0,
-                'total_st': 0.0, 'total_desconto': 0.0, 'total_bruto': 0.0}
-    
-    # Calcular valor base total para desconto volume
-    valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-    desconto_vol = calcular_desconto_volume(valor_base_total)
-    
-    total_com_desconto = 0
-    total_ipi = 0
-    total_st = 0
-    
-    for item in st.session_state.carrinho:
-        item_com_desconto = recalcular_item_com_desconto_volume(item, desconto_vol)
-        total_com_desconto += item_com_desconto['total_geral'] * item['quantidade']
-        total_ipi += item['valor_ipi'] * item['quantidade']  # IPI original
-        total_st += item['valor_st'] * item['quantidade']    # ST original
-    
-    return {
-        'total_itens': sum(i['quantidade'] for i in st.session_state.carrinho),
-        'total_geral': total_com_desconto,
-        'total_ipi': total_ipi,
-        'total_st': total_st,
-        'total_desconto': sum(i['valor_desconto'] * i['quantidade'] for i in st.session_state.carrinho),
-        'total_bruto': sum(i['preco_bruto'] * i['quantidade'] for i in st.session_state.carrinho),
-        'desconto_volume_percentual': desconto_vol,
-        'valor_base_total': valor_base_total,
-        'valor_desconto_volume': valor_base_total * desconto_vol,
-        'novo_valor_base': valor_base_total * (1 - desconto_vol)
-    }
+def mostrar_termos_uso():
+    with st.expander("📜 Termos de Uso - Orçamento Virtual"):
+        st.markdown("""
+        ### TERMOS DE USO - CATÁLOGO INTERATIVO VIRTUAL Luvidarte
+        
+        **1. NATUREZA DO ORÇAMENTO**
+        - Este é um ORÇAMENTO VIRTUAL, NÃO uma compra finalizada
+        - Os valores são ESTIMATIVAS sujeitas à confirmação
+        
+        **2. ARMAZENAMENTO DE DADOS**
+        - Seus dados serão armazenados para agilizar futuros atendimentos
+        - O histórico de orçamentos é mantido para consulta
+        
+        **3. PÚBLICO-ALVO**
+        - Este catálogo é exclusivo para PESSOAS JURÍDICAS
+        
+        **4. CANCELAMENTO DE DADOS**
+        - Solicite a exclusão dos seus dados via e-mail: sac@luvidarte.com.br
+        
+        **5. DISPOSIÇÕES GERAIS**
+        - A Luvidarte se reserva o direito de recusar pedidos
+        
+        ---
+        📞 **Dúvidas:** (11) 4676-9000 | sac@luvidarte.com.br
+        """)
 
 # ============================================
-# FUNÇÕES AUXILIARES
+# CONSENTIMENTO LGPD
 # ============================================
+
+def obter_consentimento_lgpd() -> bool:
+    if st.session_state.get('mostrar_lgpd', True) and 'privacidade_aceita' not in st.session_state:
+        st.session_state.privacidade_aceita = False
+    
+    if not st.session_state.get('privacidade_aceita', False):
+        mostrar_politica_privacidade()
+        mostrar_termos_uso()
+        return False
+    
+    img_fundo_base64 = ""
+    try:
+        with open("Frontpage.jpeg", "rb") as f:
+            img_fundo_base64 = base64.b64encode(f.read()).decode()
+    except:
+        pass
+    
+    if img_fundo_base64:
+        st.markdown(f"""
+        <style>
+        .stApp {{
+            background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
+            background-size: cover;
+        }}
+        .stApp::before {{
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.88);
+            z-index: 0;
+            pointer-events: none;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+    
+    return True
+
+# ============================================
+# CARREGAMENTO DE DADOS (FUNÇÕES DE CACHE)
+# ============================================
+
 def converter_moeda_para_numero(valor):
     if pd.isna(valor) or valor == '' or valor is None:
         return np.nan
@@ -1700,9 +1445,6 @@ def formatar_ml(valor):
     except:
         return None
 
-# ============================================
-# CARREGAMENTO DE DADOS
-# ============================================
 @st.cache_data(ttl=600)
 def carregar_planilha(id_planilha, nome_aba="base"):
     try:
@@ -1768,6 +1510,7 @@ def carregar_descontos_isento(id_planilha, nome_aba="ISENTO"):
 # ============================================
 # FUNÇÕES DE CÁLCULO
 # ============================================
+
 def buscar_preco_promo(referencia: str, uf: str, df_promo: pd.DataFrame) -> float:
     if df_promo.empty or not referencia:
         return None
@@ -1844,6 +1587,41 @@ def buscar_desconto(icms: float, forma_pagamento: str, df_desconto: pd.DataFrame
         return converter_percentual_para_numero(df_f.iloc[0]['DESCONTO'])
     return 0.0
 
+def buscar_aliquota_st(ncm: str, uf: str, df_st: pd.DataFrame) -> float:
+    if df_st.empty or not ncm or not uf:
+        return 0.0
+    ncm_limpo = str(ncm).replace(".", "").strip()
+    df_st['NCM_LIMPO'] = df_st.iloc[:, 1].astype(str).str.replace(".", "").str.strip()
+    linha_ncm = df_st[df_st['NCM_LIMPO'] == ncm_limpo]
+    if linha_ncm.empty:
+        return 0.0
+    uf_upper = uf.upper().strip()
+    colunas_uf = {}
+    for col in df_st.columns[2:]:
+        col_clean = str(col).strip().upper()
+        colunas_uf[col_clean] = col
+    if uf_upper not in colunas_uf:
+        for col_key in colunas_uf.keys():
+            if uf_upper in col_key or col_key in uf_upper:
+                nome_coluna = colunas_uf[col_key]
+                break
+        else:
+            return 0.0
+    else:
+        nome_coluna = colunas_uf[uf_upper]
+    valor = linha_ncm.iloc[0][nome_coluna]
+    if pd.isna(valor):
+        return 0.0
+    if isinstance(valor, str):
+        valor = valor.replace("%", "").replace(",", ".").strip()
+    try:
+        aliquota = float(valor)
+        if aliquota > 1 and aliquota <= 100:
+            aliquota = aliquota / 100
+        return aliquota
+    except:
+        return 0.0
+
 def carregar_logo():
     url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
     try:
@@ -1854,13 +1632,19 @@ def carregar_logo():
         pass
     return None
 
-# ============================================
-# CSS GLOBAL COMPLETO COM IMAGEM DE FUNDO
-# ============================================
+def carregar_logo_favicon():
+    url_drive = "https://drive.google.com/uc?export=download&id=1wiwp3txOXGsEMRrUgzdLFlxQL2188uTw"
+    try:
+        response = requests.get(url_drive, timeout=10)
+        if response.status_code == 200:
+            img = Image.open(BytesIO(response.content))
+            img = img.resize((32, 32))
+            return img
+    except:
+        pass
+    return None
 
-# Função para carregar imagem de fundo
 def carregar_imagem_fundo_base64():
-    """Carrega a imagem Frontpage.jpeg e retorna em base64"""
     try:
         with open("Frontpage.jpeg", "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -1874,10 +1658,181 @@ def carregar_imagem_fundo_base64():
         except:
             return None
 
-# Carregar imagem
+# ============================================
+# FUNÇÕES DE CARRINHO
+# ============================================
+
+def abrir_carrinho():
+    st.session_state.carrinho_aberto = True
+    st.rerun()
+
+def fechar_carrinho():
+    st.session_state.carrinho_aberto = False
+    st.rerun()
+
+def mostrar_formulario():
+    st.session_state.mostrar_formulario_cliente = True
+    st.rerun()
+
+def cancelar_formulario():
+    st.session_state.mostrar_formulario_cliente = False
+    st.session_state.mostrar_botoes_envio = False
+    st.session_state.html_bytes = None
+    st.rerun()
+
+def atualizar_quantidade_carrinho(indice, nova_quantidade):
+    if 0 <= indice < len(st.session_state.carrinho):
+        item = st.session_state.carrinho[indice]
+        item['quantidade'] = nova_quantidade
+        item['preco_total'] = item['preco_final'] * nova_quantidade
+        item['ipi_total'] = item['valor_ipi'] * nova_quantidade
+        item['st_total'] = item['valor_st'] * nova_quantidade
+        item['total_geral'] = (item['preco_final'] + item['valor_ipi'] + item['valor_st']) * nova_quantidade
+        return True
+    return False
+
+def recalcular_todo_carrinho(uf, cliente_isento, forma_pagamento,
+                              dados_st, dados_promo, dados, dados_normal, dados_isento):
+    if not st.session_state.carrinho:
+        return
+    icms_uf = determinar_icms_por_uf(uf)
+    tabela_desconto = dados_isento if cliente_isento else dados_normal
+    for item in st.session_state.carrinho:
+        referencia = item['referencia']
+        produto_dados = dados[dados['Referência'] == referencia]
+        if produto_dados.empty:
+            continue
+        produto = produto_dados.iloc[0]
+        is_promo = 'SIM' in str(produto.get('Promo', '')).strip().upper()
+        preco_promo = None
+        if is_promo and not dados_promo.empty:
+            preco_promo = buscar_preco_promo(referencia, uf, dados_promo)
+        if is_promo and preco_promo is not None and preco_promo > 0:
+            preco_bruto = preco_promo
+            desconto_percentual = 0.0
+            valor_desconto = 0.0
+            preco_com_desconto = preco_bruto
+            if cliente_isento:
+                preco_final = preco_com_desconto * 1.10
+            else:
+                preco_final = preco_com_desconto
+        else:
+            preco_bruto = produto['Preço'] if pd.notna(produto['Preço']) and produto['Preço'] > 0 else 0
+            if forma_pagamento != "PREÇO BASE":
+                desconto_percentual = buscar_desconto(icms_uf, forma_pagamento, tabela_desconto)
+                valor_desconto = preco_bruto * desconto_percentual
+                preco_com_desconto = preco_bruto - valor_desconto
+            else:
+                desconto_percentual = 0.0
+                valor_desconto = 0.0
+                preco_com_desconto = preco_bruto
+            preco_final = preco_com_desconto
+        
+        ncm_produto = produto.get('NCM', '')
+        ipi_percentual = buscar_ipi(ncm_produto, dados_st)
+        valor_ipi = preco_final * ipi_percentual
+        aliquota_st = buscar_aliquota_st(ncm_produto, uf, dados_st)
+        valor_st = 0.0 if cliente_isento else preco_final * aliquota_st
+        valor_total = preco_final + valor_ipi + valor_st
+        quantidade = item['quantidade']
+        item['preco_bruto'] = preco_bruto
+        item['desconto_percentual'] = desconto_percentual
+        item['valor_desconto'] = valor_desconto
+        item['preco_com_desconto'] = preco_com_desconto
+        item['preco_final'] = preco_final
+        item['preco_unitario'] = preco_final
+        item['preco_total'] = preco_final * quantidade
+        item['ipi_percentual'] = ipi_percentual
+        item['valor_ipi'] = valor_ipi
+        item['ipi_total'] = valor_ipi * quantidade
+        item['st_aliquota'] = aliquota_st
+        item['valor_st'] = valor_st
+        item['st_total'] = valor_st * quantidade
+        item['total_geral'] = valor_total * quantidade
+
+def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
+                           valor_desconto, preco_com_desconto, preco_final,
+                           valor_ipi, valor_st, ipi_percentual, aliquota_st, valor_total):
+    for item in st.session_state.carrinho:
+        if item['referencia'] == produto['Referência']:
+            item['quantidade'] += quantidade
+            item['preco_total'] = item['preco_final'] * item['quantidade']
+            item['ipi_total'] = item['valor_ipi'] * item['quantidade']
+            item['st_total'] = item['valor_st'] * item['quantidade']
+            item['total_geral'] = (item['preco_final'] + item['valor_ipi'] + item['valor_st']) * item['quantidade']
+            return True
+    st.session_state.carrinho.append({
+        'referencia': produto['Referência'],
+        'descricao': produto['Descrição'],
+        'grupo': produto['GRUPO'],
+        'quantidade': quantidade,
+        'preco_bruto': preco_bruto,
+        'desconto_percentual': desconto_percentual,
+        'valor_desconto': valor_desconto,
+        'preco_com_desconto': preco_com_desconto,
+        'preco_final': preco_final,
+        'preco_unitario': preco_final,
+        'preco_total': preco_final * quantidade,
+        'ipi_percentual': ipi_percentual,
+        'valor_ipi': valor_ipi,
+        'ipi_total': valor_ipi * quantidade,
+        'st_aliquota': aliquota_st,
+        'valor_st': valor_st,
+        'st_total': valor_st * quantidade,
+        'total_geral': (preco_final + valor_ipi + valor_st) * quantidade,
+        'medidas': produto.get('Medidas', ''),
+        'ml': produto.get('ml', ''),
+        'imagem_url': produto.get('imagem_url', '')
+    })
+    return True
+
+def remover_do_carrinho(indice):
+    if 0 <= indice < len(st.session_state.carrinho):
+        st.session_state.carrinho.pop(indice)
+
+def limpar_carrinho():
+    st.session_state.carrinho = []
+    st.session_state.mostrar_formulario_cliente = False
+    st.session_state.mostrar_botoes_envio = False
+    st.session_state.html_bytes = None
+
+def calcular_resumo_carrinho():
+    if not st.session_state.carrinho:
+        return {'total_itens': 0, 'total_geral': 0.0, 'total_ipi': 0.0,
+                'total_st': 0.0, 'total_desconto': 0.0, 'total_bruto': 0.0}
+    
+    valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
+    desconto_vol = calcular_desconto_volume(valor_base_total)
+    
+    total_com_desconto = 0
+    total_ipi = 0
+    total_st = 0
+    
+    for item in st.session_state.carrinho:
+        item_com_desconto = recalcular_item_com_desconto_volume(item, desconto_vol)
+        total_com_desconto += item_com_desconto['total_geral'] * item['quantidade']
+        total_ipi += item['valor_ipi'] * item['quantidade']
+        total_st += item['valor_st'] * item['quantidade']
+    
+    return {
+        'total_itens': sum(i['quantidade'] for i in st.session_state.carrinho),
+        'total_geral': total_com_desconto,
+        'total_ipi': total_ipi,
+        'total_st': total_st,
+        'total_desconto': sum(i['valor_desconto'] * i['quantidade'] for i in st.session_state.carrinho),
+        'total_bruto': sum(i['preco_bruto'] * i['quantidade'] for i in st.session_state.carrinho),
+        'desconto_volume_percentual': desconto_vol,
+        'valor_base_total': valor_base_total,
+        'valor_desconto_volume': valor_base_total * desconto_vol,
+        'novo_valor_base': valor_base_total * (1 - desconto_vol)
+    }
+
+# ============================================
+# CSS GLOBAL
+# ============================================
+
 img_fundo_base64 = carregar_imagem_fundo_base64()
 
-# CSS Base (comum para ambos os casos)
 css_base = """
 * { margin: 0; padding: 0; box-sizing: border-box; }
 .stDecoration { display: none; }
@@ -1898,11 +1853,6 @@ css_base = """
 .legal-banner {
     background-color: #FFF9E6; border-left: 4px solid #C9A03D;
     border-radius: 8px; padding: 10px 15px; margin: 10px 0; font-size: 12px; color: #666;
-}
-.contato-central {
-    text-align: center; margin: 10px 0 20px 0; padding: 10px;
-    font-size: clamp(11px,3vw,13px); color: #666; background-color: #FFF;
-    border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #E8E8E8;
 }
 
 .cart-link-top { text-align: right; }
@@ -1953,7 +1903,6 @@ css_base = """
     margin-bottom: 20px; border-bottom: 2px solid #C9A03D;
     display: inline-block; padding-bottom: 5px;
 }
-.campo-obrigatorio { color: #D32F2F; font-size: 12px; margin-left: 5px; }
 
 .product-card {
     background-color: #FFF; border-radius: 12px; padding: 16px; margin: 10px 0;
@@ -1993,16 +1942,6 @@ css_base = """
     font-weight: bold; font-size: 16px; border-top: 1px solid #E0E0E0;
     margin-top: 8px; padding-top: 8px; color: #D32F2F;
 }
-.desconto-vol-banner {
-    background: linear-gradient(135deg,#E8F5E9,#C8E6C9); border: 2px solid #4CAF50;
-    border-radius: 10px; padding: 12px 16px; margin: 12px 0;
-    text-align: center; font-weight: bold; color: #1B5E20; font-size: 15px;
-}
-.prox-desconto-hint {
-    background: linear-gradient(135deg,#E8F5E9,#C8E6C9); border: 1px solid #A5D6A7;
-    border-radius: 8px; padding: 8px 12px; margin: 8px 0 12px 0;
-    font-size: 12px; color: #2E7D32; text-align: center;
-}
 
 .social-links-container { text-align: center; margin: 15px 0; }
 .social-title { color: #C9A03D; font-weight: bold; font-size: 14px; }
@@ -2013,19 +1952,12 @@ css_base = """
     text-align: center; font-size: 12px; color: #666;
     padding: 15px 0; margin-top: 20px;
 }
-.horario-atendimento { text-align: center; margin: 10px 0; font-size: 13px; }
-.horario-label { color: #C9A03D; font-weight: bold; }
-.horario-text { color: #555; }
 
 @media (max-width: 768px) {
     .whatsapp-float-fixed { bottom: 15px; right: 15px; }
     .cart-link-button { font-size: 12px !important; white-space: normal; }
 }
 
-.alert-uf-consistente {
-    background-color: #FFF3E0; border-left: 4px solid #FF9800;
-    border-radius: 8px; padding: 12px; margin: 10px 0; font-size: 13px;
-}
 .uf-bloqueada-info {
     background-color: #E8F5E9; border-left: 4px solid #4CAF50;
     border-radius: 8px; padding: 12px; margin: 10px 0;
@@ -2033,16 +1965,12 @@ css_base = """
 }
 """
 
-# Aplicar CSS com ou sem imagem de fundo
 if img_fundo_base64:
     css_fundo = f"""
-    /* Imagem de fundo */
     .stApp {{
         background: url('data:image/jpeg;base64,{img_fundo_base64}') no-repeat center center fixed;
         background-size: cover;
     }}
-    
-    /* Overlay para legibilidade */
     .stApp::before {{
         content: '';
         position: fixed;
@@ -2054,7 +1982,6 @@ if img_fundo_base64:
         z-index: 0;
         pointer-events: none;
     }}
-    
     .main {{
         position: relative;
         z-index: 1;
@@ -2064,6 +1991,107 @@ if img_fundo_base64:
 else:
     css_sem_fundo = ".stApp { background-color: #F7F7F7; }"
     st.markdown(f"<style>{css_sem_fundo}{css_base}</style>", unsafe_allow_html=True)
+
+# ============================================
+# CONFIGURAÇÃO DA PÁGINA - PRIMEIRO E MAIS IMPORTANTE!
+# ============================================
+
+# ESTE É O PRIMEIRO COMANDO STREAMLIT EXECUTADO!
+if carregar_logo_favicon():
+    st.set_page_config(
+        page_title="Luvidarte - Catálogo Interativo Virtual",
+        page_icon=carregar_logo_favicon(),
+        layout="wide"
+    )
+else:
+    st.set_page_config(
+        page_title="Luvidarte - Catálogo Interativo Virtual",
+        page_icon="📦",
+        layout="wide"
+    )
+
+# ============================================
+# EXECUÇÃO PRINCIPAL - SÓ DEPOIS DO set_page_config!
+# ============================================
+
+# Verificar tipo de cliente
+if 'acesso_autorizado' not in st.session_state:
+    verificar_tipo_cliente_inicial()
+    st.stop()
+
+# EXIBIR NOTIFICAÇÕES - AGORA DEPOIS DO set_page_config!
+exibir_notificacoes()
+
+# Verificar consentimento LGPD
+if not obter_consentimento_lgpd():
+    st.stop()
+
+# Restaurar padding normal após aceitar LGPD
+st.markdown("""
+<style>
+.main {
+    padding: 1rem !important;
+}
+.stApp > header {
+    display: block !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Verificar timeout da sessão
+limpar_dados_sensiveis()
+
+if st.session_state.get('cnpj_validado'):
+    cnpj_mascarado = f"{st.session_state.cnpj_validado[:3]}.***.***/****-{st.session_state.cnpj_validado[-2:]}"
+    st.sidebar.success(f"✅ CNPJ: {cnpj_mascarado}")
+
+# ============================================
+# INICIALIZAR SESSION STATE (já feito parcialmente, garantir todos)
+# ============================================
+
+if 'carrinho' not in st.session_state:
+    st.session_state.carrinho = []
+if 'pagina_atual' not in st.session_state:
+    st.session_state.pagina_atual = 1
+if 'carrinho_aberto' not in st.session_state:
+    st.session_state.carrinho_aberto = False
+if 'filtros_anteriores' not in st.session_state:
+    st.session_state.filtros_anteriores = None
+if 'quantidades' not in st.session_state:
+    st.session_state.quantidades = {}
+if 'dados_cliente' not in st.session_state:
+    st.session_state.dados_cliente = {}
+if 'mostrar_formulario_cliente' not in st.session_state:
+    st.session_state.mostrar_formulario_cliente = False
+if 'form_data' not in st.session_state:
+    if st.session_state.get('cadastro_precarregado'):
+        st.session_state.form_data = st.session_state.cadastro_precarregado
+    else:
+        st.session_state.form_data = {
+            'razao_social': '',
+            'cnpj': st.session_state.get('cnpj_validado', ''),
+            'inscricao_estadual': '',
+            'email': '',
+            'telefone': '',
+            'endereco': '',
+            'numero': '',
+            'bairro': '',
+            'cep': ''
+        }
+if 'mostrar_botoes_envio' not in st.session_state:
+    st.session_state.mostrar_botoes_envio = False
+if 'html_bytes' not in st.session_state:
+    st.session_state.html_bytes = None
+if 'ultimo_acesso' not in st.session_state:
+    st.session_state.ultimo_acesso = datetime.now()
+if 'consentimento_data' not in st.session_state:
+    st.session_state.consentimento_data = None
+if 'passo_a_passo_visto' not in st.session_state:
+    st.session_state.passo_a_passo_visto = False
+if 'cliente_isento' not in st.session_state:
+    st.session_state.cliente_isento = False
+if 'ultimo_hash_notificacoes' not in st.session_state:
+    st.session_state.ultimo_hash_notificacoes = None
 
 # ============================================
 # BANNER PRINCIPAL
@@ -2102,34 +2130,32 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
 st.markdown("---")
 
 # ============================================
-# SIDEBAR COM TÍTULO "FILTROS"
+# SIDEBAR COM FILTROS
 # ============================================
 st.sidebar.markdown('<div class="filtro-sidebar">🔍 FILTROS</div>', unsafe_allow_html=True)
 
-# Adicionar botão "Passo a Passo" no topo do sidebar
 if st.sidebar.button("📖 Ver Passo a Passo do Sistema", use_container_width=True):
     mostrar_passo_a_passo()
 
 st.sidebar.markdown("---")
 
 # ============================================
-# CONFIGURAÇÕES
+# CONFIGURAÇÕES DAS PLANILHAS
 # ============================================
-ID_PLANILHA     = "1DCmwFzQvbQYDBsQft17VO9szjixgq1Bp09dYTfu142w"
-NOME_ABA        = "base"
-NOME_ABA_PROMO  = "PROMO"
-NOME_ABA_ST     = "BASE_ST"
+ID_PLANILHA = "1DCmwFzQvbQYDBsQft17VO9szjixgq1Bp09dYTfu142w"
+NOME_ABA = "base"
+NOME_ABA_PROMO = "PROMO"
+NOME_ABA_ST = "BASE_ST"
 NOME_ABA_NORMAL = "NORMAL"
 NOME_ABA_ISENTO = "ISENTO"
 
 with st.spinner("🔄 Carregando produtos..."):
-    dados        = carregar_planilha(ID_PLANILHA, NOME_ABA)
-    dados_promo  = carregar_planilha_promo(ID_PLANILHA, NOME_ABA_PROMO)
-    dados_st     = carregar_base_st(ID_PLANILHA, NOME_ABA_ST)
+    dados = carregar_planilha(ID_PLANILHA, NOME_ABA)
+    dados_promo = carregar_planilha_promo(ID_PLANILHA, NOME_ABA_PROMO)
+    dados_st = carregar_base_st(ID_PLANILHA, NOME_ABA_ST)
     dados_normal = carregar_descontos_normal(ID_PLANILHA, NOME_ABA_NORMAL)
     dados_isento = carregar_descontos_isento(ID_PLANILHA, NOME_ABA_ISENTO)
 
@@ -2150,14 +2176,14 @@ if dados.empty:
     st.stop()
 
 # ============================================
-# FILTROS SIDEBAR
+# FILTROS DA SIDEBAR
 # ============================================
 st.sidebar.subheader("📍 Localização e Tributos")
 
 uf_selecionada = st.sidebar.selectbox(
     "UF (ICMS) - *Importante para cálculo dos tributos*",
-    options=["SP","MG","RS","SE","PR","RJ","SC","MT","AC","AL","AP","AM",
-             "BA","CE","DF","ES","GO","MA","MS","PA","PB","PE","PI","RN","RO","RR","TO"],
+    options=["SP", "MG", "RS", "SE", "PR", "RJ", "SC", "MT", "AC", "AL", "AP", "AM",
+             "BA", "CE", "DF", "ES", "GO", "MA", "MS", "PA", "PB", "PE", "PI", "RN", "RO", "RR", "TO"],
     index=0,
     help="Selecione o estado de entrega. O formulário usará automaticamente esta UF!"
 )
@@ -2188,12 +2214,11 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("🏷️ Condições Comerciais")
 
-cliente_isento  = st.sidebar.checkbox("Cliente Não Contribuinte", value=False, help="Marque se for Não Contribuinte (MEI/Isento)")
+cliente_isento = st.sidebar.checkbox("Cliente Não Contribuinte", value=False, help="Marque se for Não Contribuinte (MEI/Isento)")
 st.session_state.cliente_isento = cliente_isento
 forma_pagamento = st.sidebar.radio("Condição de Pagamento",
-                                   options=["PREÇO BASE","VISTA","30","45","60"], index=0)
+                                   options=["PREÇO BASE", "VISTA", "30", "45", "60"], index=0)
 
-# Monitorar mudanças nos filtros
 filtros_atual = (uf_selecionada, cliente_isento, forma_pagamento)
 if st.session_state.filtros_anteriores != filtros_atual:
     st.session_state.filtros_anteriores = filtros_atual
@@ -2203,10 +2228,9 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO
+# TELA DO CARRINHO (quando aberto)
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
-
     st.markdown("# 🛒 Meu Orçamento Virtual")
     st.markdown("Revise os itens do seu orçamento antes de enviar.")
 
@@ -2217,15 +2241,11 @@ if st.session_state.get('carrinho_aberto', False):
         st.info("Seu orçamento está vazio. Adicione produtos para continuar.")
         st.stop()
 
-    # Calcular valor base total (soma dos preços finais sem IPI/ST)
     valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-    
-    # Calcular desconto por volume sobre o valor base
     desconto_volume_percentual = calcular_desconto_volume(valor_base_total)
     valor_desconto_volume = valor_base_total * desconto_volume_percentual
     novo_valor_base = valor_base_total - valor_desconto_volume
 
-    # Variáveis para totais
     total_ipi_recalculado = 0
     total_st_recalculado = 0
     total_geral_recalculado = 0
@@ -2233,7 +2253,6 @@ if st.session_state.get('carrinho_aberto', False):
     total_bruto_geral = 0
 
     for idx, item in enumerate(st.session_state.carrinho):
-        # Recalcular IPI e ST proporcionalmente ao novo valor base
         ipi_aliquota_efetiva = item['valor_ipi'] / item['preco_final'] if item['preco_final'] > 0 else 0
         st_aliquota_efetiva = item['valor_st'] / item['preco_final'] if item['preco_final'] > 0 else 0
         
@@ -2417,7 +2436,6 @@ if st.session_state.get('carrinho_aberto', False):
         st.markdown('<div class="formulario-titulo">📝 Dados do Cliente</div>', unsafe_allow_html=True)
         st.markdown('<p style="color:#D32F2F; font-size:12px; margin-bottom:15px;">* Campos obrigatórios</p>', unsafe_allow_html=True)
         
-        # INFORMAÇÃO DA UF BLOQUEADA
         st.markdown(f"""
         <div class='uf-bloqueada-info'>
             🔒 <strong>UF Bloqueada para Edição:</strong> A UF foi definida como <strong>{uf_selecionada}</strong> no filtro do sistema.<br>
@@ -2440,7 +2458,6 @@ if st.session_state.get('carrinho_aberto', False):
                 numero = st.text_input("Número *", value=st.session_state.form_data.get('numero', ''))
                 bairro = st.text_input("Bairro *", value=st.session_state.form_data.get('bairro', ''))
                 cep = st.text_input("CEP *", value=st.session_state.form_data.get('cep', ''), help="Digite apenas números")
-                # Campo UF do cliente - DESABILITADO e com valor fixo do filtro
                 uf_cliente = st.text_input("UF do Endereço *", value=uf_selecionada, disabled=True, 
                                           help="A UF é definida pelos filtros do sistema e não pode ser alterada aqui")
             
@@ -2502,7 +2519,6 @@ if st.session_state.get('carrinho_aberto', False):
                     }
                     st.session_state.dados_cliente = dados_cliente
                     
-                    # SALVAR CADASTRO NA PLANILHA
                     with st.spinner("💾 Salvando cadastro..."):
                         salvar_cadastro_cliente(dados_cliente)
                     
@@ -2518,10 +2534,20 @@ if st.session_state.get('carrinho_aberto', False):
                         st.session_state.html_bytes = html_bytes
                         st.session_state.mostrar_botoes_envio = True
                         
-                        # SALVAR HISTÓRICO DO ORÇAMENTO
                         with st.spinner("💾 Salvando histórico..."):
                             salvar_historico_orcamento(dados_cliente, uf_selecionada, total_final_com_vol, 
                                                       forma_pagamento, st.session_state.carrinho)
+                        
+                        with st.spinner("📧 Processando..."):
+                            sucesso_email, msg_email = enviar_email_orcamento(
+                                dados_cliente, 
+                                total_final_com_vol, 
+                                st.session_state.carrinho, 
+                                html_bytes, 
+                                f"orcamento_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+                            )
+                            if not sucesso_email:
+                                st.error(f"❌ Erro no envio do e-mail: {msg_email}")
                         
                         st.rerun()
                     else:
@@ -2575,11 +2601,11 @@ if st.session_state.get('carrinho_aberto', False):
     st.stop()
 
 # ============================================
-# APLICAÇÃO DOS FILTROS
+# APLICAÇÃO DOS FILTROS E EXIBIÇÃO DOS PRODUTOS
 # ============================================
-icms_uf         = determinar_icms_por_uf(uf_selecionada)
+icms_uf = determinar_icms_por_uf(uf_selecionada)
 tabela_desconto = dados_isento if cliente_isento else dados_normal
-tipo_cliente    = "NÃO CONTRIBUINTE" if cliente_isento else "NORMAL"
+tipo_cliente = "NÃO CONTRIBUINTE" if cliente_isento else "NORMAL"
 
 dados_filtrados = dados.copy()
 if grupo_escolhido == "Promoção":
@@ -2634,8 +2660,8 @@ total_paginas = max(1, (total_encontrados + ITENS_POR_PAGINA - 1) // ITENS_POR_P
 if st.session_state.pagina_atual > total_paginas:
     st.session_state.pagina_atual = total_paginas
 indice_inicio = (st.session_state.pagina_atual - 1) * ITENS_POR_PAGINA
-indice_fim    = min(indice_inicio + ITENS_POR_PAGINA, total_encontrados)
-dados_pagina  = dados_filtrados.iloc[indice_inicio:indice_fim]
+indice_fim = min(indice_inicio + ITENS_POR_PAGINA, total_encontrados)
+dados_pagina = dados_filtrados.iloc[indice_inicio:indice_fim]
 
 # ============================================
 # INFO RÁPIDA
@@ -2678,7 +2704,7 @@ else:
     colunas = st.columns(3)
 
     for posicao, (indice, produto) in enumerate(dados_pagina.iterrows()):
-        is_promo    = 'SIM' in str(produto.get('Promo', '')).strip().upper()
+        is_promo = 'SIM' in str(produto.get('Promo', '')).strip().upper()
         preco_promo = None
         if is_promo and not dados_promo.empty:
             preco_promo = buscar_preco_promo(produto['Referência'], uf_selecionada, dados_promo)
@@ -2715,10 +2741,10 @@ else:
 
         produto_carrinho = {
             'Referência': produto['Referência'],
-            'Descrição':  produto['Descrição'],
-            'GRUPO':      produto['GRUPO'],
-            'Medidas':    produto.get('Medidas', ''),
-            'ml':         produto.get('ml', ''),
+            'Descrição': produto['Descrição'],
+            'GRUPO': produto['GRUPO'],
+            'Medidas': produto.get('Medidas', ''),
+            'ml': produto.get('ml', ''),
             'imagem_url': produto.get('imagem_url', '')
         }
 
@@ -2894,10 +2920,17 @@ st.markdown("""
 
 st.markdown("""
 <div class='contact-footer'>
-    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br | 🔒 DPO: dpo@luvidarte.com.br | 🔒 LGPD: lgpd@luvidarte.com.br
+    📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br
 </div>""", unsafe_allow_html=True)
 
-# NOVA SEÇÃO DE DIREITOS LGPD
+st.markdown("""
+<div style='text-align: center; padding: 10px; font-size: 13px; color: #555; background-color: #f9f9f9; border-radius: 8px; margin: 10px 0;'>
+    <strong>📧 E-mails para contato comercial:</strong><br>
+    🛍️ <strong>Vendas:</strong> <a href='mailto:vendaspresente@luvidarte.com.br' style='color: #2E7D32; text-decoration: none;'>vendaspresente@luvidarte.com.br</a> &nbsp;|&nbsp;
+    🛠️ <strong>Suporte:</strong> <a href='mailto:suportevendas@luvidarte.com.br' style='color: #2E7D32; text-decoration: none;'>suportevendas@luvidarte.com.br</a>
+</div>
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <div style='text-align: center; padding: 15px; margin-top: 10px; border-top: 1px solid #ddd;'>
     <p style='font-size: 12px; color: #666;'>
@@ -2917,21 +2950,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-def mostrar_direitos_lgpd_rodape():
-    st.markdown("""
-    <div style='text-align: center; padding: 15px; margin-top: 20px; border-top: 1px solid #ddd;'>
-        <p style='font-size: 12px; color: #666;'>
-            🔒 <strong>LGPD - Lei 13.709/2018</strong><br>
-            Seus direitos: <strong>acesso, correção, exclusão e portabilidade</strong> dos dados<br>
-            📧 Solicitações: <strong>lgpd@luvidarte.com.br</strong> | DPO: <strong>dpo@luvidarte.com.br</strong><br>
-            ⏱️ Prazo de resposta: <strong>15 dias úteis</strong>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ============================================
-# WHATSAPP FLUTUANTE
-# ============================================
 st.markdown("""
 <div class="whatsapp-float-fixed">
     <a href="https://wa.me/5511930119335?text=Olá! Gostaria de informações sobre os produtos Luvidarte"
