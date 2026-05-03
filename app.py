@@ -320,31 +320,26 @@ def carregar_notificacoes_google_sheets():
         return []
 
 def exibir_notificacoes():
-    """Exibe as notificações como pop-ups na tela principal"""
+    """Exibe as notificações como pop-ups na tela principal (TODA VEZ que carregar)"""
     try:
         notificacoes = carregar_notificacoes_google_sheets()
         
         if not notificacoes:
             return
         
-        # Gerar hash das notificações
-        hash_notificacoes = hashlib.md5(str(notificacoes).encode()).hexdigest()
-        
-        # Verificar se já exibimos
-        if st.session_state.get('ultimo_hash_notificacoes') != hash_notificacoes:
-            st.session_state.ultimo_hash_notificacoes = hash_notificacoes
-            
-            for notif in notificacoes:
-                if notif['tipo'] == 'success':
-                    st.success(f"🎉 {notif['mensagem']}")
-                elif notif['tipo'] == 'error':
-                    st.error(f"❌ {notif['mensagem']}")
-                elif notif['tipo'] == 'warning':
-                    st.warning(f"⚠️ {notif['mensagem']}")  # Alerta em laranja
-                else:
-                    st.info(f"ℹ️ {notif['mensagem']}")
+        # REMOVIDO o controle de hash - agora exibe SEMPRE!
+        for notif in notificacoes:
+            if notif['tipo'] == 'success':
+                st.success(f"🎉 {notif['mensagem']}")
+            elif notif['tipo'] == 'error':
+                st.error(f"❌ {notif['mensagem']}")
+            elif notif['tipo'] == 'warning':
+                st.warning(f"⚠️ {notif['mensagem']}")
+            else:
+                st.info(f"ℹ️ {notif['mensagem']}")
+                
     except Exception as e:
-        pass
+        pass  # Silencioso
 
 # ============================================
 # CONFIGURAÇÃO DO GOOGLE SHEETS
