@@ -1672,21 +1672,21 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
         
         <div class="section">
             <h2 class="section-title">ITENS DO ORÇAMENTO</h2>
-        </table>
-            <thead>
-                <tr>
-                    <th>Código</th>
-                    <th>Descrição</th>
-                    <th>Qtd</th>
-                    <th>Valor Unit.</th>
-                    <th>Subtotal</th>
-                    <th>IPI</th>
-                    <th>ST</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
+            <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px;">
+                <thead>
+                    <tr style="background-color: #2E7D32; color: white;">
+                        <th style="padding: 10px; border: 1px solid #ddd;">Código</th>
+                        <th style="padding: 10px; border: 1px solid #ddd;">Descrição</th>
+                        <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Qtd</th>
+                        <th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Valor Unit.</th>
+                        <th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Subtotal</th>
+                        <th style="padding: 10px; text-align: right; border: 1px solid #ddd;">IPI</th>
+                        <th style="padding: 10px; text-align: right; border: 1px solid #ddd;">ST</th>
+                        <th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+"""
     
     total_ipi_exibido = 0
     total_st_exibido = 0
@@ -1776,9 +1776,9 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
                                 desconto_volume_percentual, valor_desconto_volume, valor_base_total,
                                 total_ipi, total_st):
     
-    msg = "🛍️ NOVO ORÇAMENTO Luvidarte 🛍️\n\n"
-    msg += "━" * 30 + "\n\n"
-    msg += "DADOS DO CLIENTE\n"
+    msg = "🛍️ *NOVO ORÇAMENTO Luvidarte* 🛍️\n\n"
+    msg += "═" * 40 + "\n\n"
+    msg += "*📋 DADOS DO CLIENTE*\n"
     msg += f"🏢 Razão Social: {dados_cliente.get('razao_social', '')}\n"
     msg += f"📄 CNPJ/CPF: {dados_cliente.get('cnpj', '')}\n"
     msg += f"🔢 IE: {dados_cliente.get('inscricao_estadual', '')}\n"
@@ -1788,39 +1788,38 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     msg += f"🏘️ Bairro: {dados_cliente.get('bairro', '')}\n"
     msg += f"📮 CEP: {dados_cliente.get('cep', '')}\n"
     msg += f"🗺️ UF (ICMS calculado): {uf}\n\n"
-    msg += "━" * 30 + "\n\n"
-    msg += "RESUMO DO ORÇAMENTO\n"
+    msg += "═" * 40 + "\n\n"
+    
+    msg += "*💰 RESUMO DO ORÇAMENTO*\n"
     msg += f"📅 Data: {formatar_data_brasil()}\n"
     msg += f"👤 Tipo Cliente: {tipo_cliente}\n"
-    msg += f"💳 Pagamento: {forma_pagamento}\n"
+    msg += f"💳 Pagamento: {forma_pagamento}\n\n"
     
-    if desconto_volume_percentual > 0:
-        novo_valor_base = valor_base_total - valor_desconto_volume
-        msg += f"🎉 DESCONTO POR VOLUME: {int(desconto_volume_percentual*100)}%\n"
-        msg += f"💰 Valor Base Original: {formatar_moeda(valor_base_total)}\n"
-        msg += f"💰 Desconto: {formatar_moeda(valor_desconto_volume)}\n"
-        msg += f"💰 Novo Valor Base: {formatar_moeda(novo_valor_base)}\n"
-        msg += f"🔷 IPI Total: {formatar_moeda(total_ipi)}\n"
-        msg += f"🟣 ST Total: {formatar_moeda(total_st)}\n\n"
-    else:
-        msg += "\n"
+    msg += "*🛍️ ITENS SOLICITADOS*\n"
+    msg += "═" * 40 + "\n\n"
     
-    msg += "ITENS SOLICITADOS\n"
-    for item in st.session_state.carrinho:
+    for idx, item in enumerate(st.session_state.carrinho, 1):
         valor_base_item = item['preco_final']
         valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
-        msg += f"• {item['quantidade']}x {item['descricao'][:50]}\n"
-        msg += f"  REF: {item['referencia']} - Valor unit: {formatar_moeda(valor_com_desconto)}\n"
+        msg += f"{idx}. *{item['descricao'][:50]}*\n"
+        msg += f"   📦 Código: {item['referencia']}\n"
+        msg += f"   🔢 Quantidade: {item['quantidade']}\n"
+        msg += f"   💰 Valor unitário: {formatar_moeda(valor_com_desconto)}\n"
+        msg += f"   📊 Subtotal: {formatar_moeda(valor_com_desconto * item['quantidade'])}\n\n"
     
-    msg += "\n━" * 30 + "\n\n"
-    msg += f"💰 TOTAL DO ORÇAMENTO: {formatar_moeda(total_final)}\n\n"
-    msg += "📋 Próximos passos:\n"
+    msg += "═" * 40 + "\n"
+    msg += f"*✅ TOTAL DO ORÇAMENTO: {formatar_moeda(total_final)}*\n"
+    msg += "═" * 40 + "\n\n"
+    
+    msg += "*📋 Próximos passos:*\n"
     msg += "1️⃣ Aguarde o contato da nossa equipe\n"
     msg += "2️⃣ Confirmaremos disponibilidade dos produtos\n"
     msg += "3️⃣ Enviaremos as condições de pagamento e frete\n\n"
-    msg += "🔒 LGPD: Seus dados são tratados com confidencialidade conforme Lei 13.709/2018\n"
+    
+    msg += "🔒 *LGPD*: Seus dados são tratados com confidencialidade conforme Lei 13.709/2018\n"
     msg += "📧 DPO: sac@luvidarte.com.br\n\n"
-    msg += "✨ Agradecemos a preferência! ✨"
+    
+    msg += "✨ *Agradecemos a preferência!* ✨"
     
     return msg
 
