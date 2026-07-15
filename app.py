@@ -1363,21 +1363,35 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ============================================
-# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME
+# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME - ATUALIZADA
 # ============================================
 def calcular_desconto_volume(valor_base):
+    """
+    Calcula o percentual de desconto por volume baseado no valor total
+    
+    NOVAS REGRAS:
+    - 10% de desconto para valores >= R$ 1.500,00
+    - 15% de desconto para valores >= R$ 2.500,00
+    - 20% de desconto para valores >= R$ 4.000,00
+    - Itens em PROMOÇÃO não recebem este desconto
+    """
     if valor_base >= 4000:
-        return 0.15
+        return 0.20  # 20%
     elif valor_base >= 2500:
-        return 0.10
+        return 0.15  # 15%
+    elif valor_base >= 1500:
+        return 0.10  # 10%
     else:
         return 0.0
 
 def calcular_faltante_para_desconto(valor_base):
-    if valor_base < 2500:
-        return 2500 - valor_base, 10
+    """Calcula quanto falta para atingir a próxima faixa de desconto"""
+    if valor_base < 1500:
+        return 1500 - valor_base, 10
+    elif valor_base < 2500:
+        return 2500 - valor_base, 15
     elif valor_base < 4000:
-        return 4000 - valor_base, 15
+        return 4000 - valor_base, 20
     else:
         return 0, 0
 
@@ -1387,36 +1401,43 @@ def gerar_botao_desconto_flutuante():
         desconto_percentual = calcular_desconto_volume(valor_base_total)
         faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_total)
         
-        if desconto_percentual == 0.15:
-            mensagem = f"🏆 PARABÉNS! Você atingiu 15% de desconto máximo!"
+        if desconto_percentual == 0.20:
+            mensagem = f"🏆 PARABÉNS! Você atingiu 20% de desconto máximo!"
             cor = "#FF9800"
             icone = "🏆"
+            texto_desconto = "20% OFF"
+        elif desconto_percentual == 0.15:
+            mensagem = f"✅ Você já tem 15% de desconto! Faltam {formatar_moeda(faltante)} para 20%"
+            cor = "#4CAF50"
+            icone = "🎯"
             texto_desconto = "15% OFF"
         elif desconto_percentual == 0.10:
             mensagem = f"✅ Você já tem 10% de desconto! Faltam {formatar_moeda(faltante)} para 15%"
-            cor = "#4CAF50"
-            icone = "🎯"
+            cor = "#2196F3"
+            icone = "📈"
             texto_desconto = "10% OFF"
         else:
             if faltante > 0:
                 mensagem = f"📈 Adicione mais {formatar_moeda(faltante)} e ganhe {prox_desconto}% de desconto!"
             else:
                 mensagem = f"💰 Adicione produtos para ganhar desconto por volume!"
-            cor = "#2196F3"
-            icone = "📈"
+            cor = "#9E9E9E"
+            icone = "💰"
             texto_desconto = "0% OFF"
         
         if valor_base_total >= 4000:
             progresso = 100
         elif valor_base_total >= 2500:
             progresso = 75 + ((valor_base_total - 2500) / 1500) * 25
+        elif valor_base_total >= 1500:
+            progresso = ((valor_base_total - 1500) / 1000) * 75
         else:
-            progresso = (valor_base_total / 2500) * 75
+            progresso = (valor_base_total / 1500) * 50
         
         progresso = min(100, max(0, progresso))
     else:
         mensagem = "💰 Adicione produtos para ganhar desconto por volume!"
-        faltante = 2500
+        faltante = 1500
         prox_desconto = 10
         cor = "#9E9E9E"
         icone = "💰"
@@ -1562,8 +1583,9 @@ def gerar_botao_desconto_flutuante():
             </div>
             <div class="progress-labels">
                 <span>💰 R$ 0</span>
-                <span>🎯 10% (R$ 2.500)</span>
-                <span>🏆 15% (R$ 4.000)</span>
+                <span>🎯 10% (R$ 1.500)</span>
+                <span>🏅 15% (R$ 2.500)</span>
+                <span>🏆 20% (R$ 4.000)</span>
             </div>
         </div>
     </div>
@@ -1628,6 +1650,8 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                            padding: 10px; margin: 20px 0; font-size: 11px; }}
             .alert-uf {{ background-color: #FFE0B2; border-left: 4px solid #FF9800;
                         padding: 10px; margin: 20px 0; font-size: 12px; }}
+            .desconto-destaque {{ background-color: #E8F5E9; border-left: 4px solid #4CAF50;
+                                padding: 10px; margin: 15px 0; font-size: 13px; }}
         </style>
     </head>
     <body>
@@ -1668,6 +1692,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p><strong>Tipo de Cliente:</strong> {tipo_cliente}</p>
             <p><strong>Condição de Pagamento:</strong> {forma_pagamento}</p>
             <p><strong>Validade do Orçamento:</strong> 7 dias corridos</p>
+            <p><strong>Desconto por Volume:</strong> {int(desconto_volume_percentual*100)}%</p>
         </div>
         
         <div class="section">
@@ -1793,7 +1818,8 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     msg += "*💰 RESUMO DO ORÇAMENTO*\n"
     msg += f"📅 Data: {formatar_data_brasil()}\n"
     msg += f"👤 Tipo Cliente: {tipo_cliente}\n"
-    msg += f"💳 Pagamento: {forma_pagamento}\n\n"
+    msg += f"💳 Pagamento: {forma_pagamento}\n"
+    msg += f"🎯 Desconto por Volume: {int(desconto_volume_percentual*100)}%\n\n"
     
     msg += "*🛍️ ITENS SOLICITADOS*\n"
     msg += "═" * 40 + "\n\n"
@@ -2769,17 +2795,32 @@ if st.session_state.get('carrinho_aberto', False):
 
     total_final_com_vol = novo_valor_base + total_ipi_recalculado + total_st_recalculado
 
+    # Exibe mensagem de desconto conforme novas regras
     if desconto_volume_percentual > 0:
         st.markdown(f"""
-        <div class='desconto-vol-banner'>
+        <div class='desconto-vol-banner' style='background-color: #E8F5E9; border-left: 4px solid #4CAF50;
+                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
             🎉 Parabéns! Você ganhou <strong>{int(desconto_volume_percentual*100)}% de desconto</strong> por volume!<br>
             Economia de <strong>{formatar_moeda(valor_desconto_volume)}</strong> aplicada sobre o valor base.<br>
             <small>IPI e ST recalculados proporcionalmente sobre o novo valor base.</small>
         </div>""", unsafe_allow_html=True)
+    elif 1500 - valor_base_total > 0:
+        st.markdown(f"""
+        <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
+                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
+            💡 Adicione mais <strong>{formatar_moeda(1500-valor_base_total)}</strong> em valor base e ganhe <strong>10% de desconto</strong>!
+        </div>""", unsafe_allow_html=True)
     elif 2500 - valor_base_total > 0:
         st.markdown(f"""
-        <div class='prox-desconto-hint'>
-            💡 Adicione mais <strong>{formatar_moeda(2500-valor_base_total)}</strong> em valor base e ganhe <strong>10% de desconto</strong>!
+        <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
+                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
+            💡 Adicione mais <strong>{formatar_moeda(2500-valor_base_total)}</strong> em valor base e ganhe <strong>15% de desconto</strong>!
+        </div>""", unsafe_allow_html=True)
+    elif 4000 - valor_base_total > 0:
+        st.markdown(f"""
+        <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
+                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
+            💡 Adicione mais <strong>{formatar_moeda(4000-valor_base_total)}</strong> em valor base e ganhe <strong>20% de desconto</strong>!
         </div>""", unsafe_allow_html=True)
 
     st.markdown("## 📋 Resumo do Orçamento")
