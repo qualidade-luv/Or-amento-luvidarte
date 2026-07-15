@@ -86,162 +86,6 @@ def converter_valor_para_numero(valor_str):
     return round(valor_numero, 2)
 
 # ============================================
-# FUNÇÕES DE CÁLCULO DE DESCONTO POR VOLUME
-# ============================================
-def calcular_desconto_volume(valor_total, eh_promocao=False):
-    """
-    Calcula o desconto por volume baseado no valor total do orçamento
-    
-    Regras:
-    - Itens em PROMOÇÃO não recebem desconto por volume
-    - 10% de desconto para valores acima de R$ 1.500,00
-    - 15% de desconto para valores acima de R$ 2.500,00
-    - 20% de desconto para valores acima de R$ 4.000,00
-    
-    Args:
-        valor_total (float): Valor total do orçamento
-        eh_promocao (bool): Se o item é de promoção
-    
-    Returns:
-        tuple: (percentual_desconto, valor_desconto)
-    """
-    # Itens em promoção não recebem desconto por volume
-    if eh_promocao:
-        return 0.0, 0.0
-    
-    # Calcula o percentual de desconto baseado no valor total
-    if valor_total > 4000.00:
-        percentual = 0.20  # 20%
-    elif valor_total > 2500.00:
-        percentual = 0.15  # 15%
-    elif valor_total > 1500.00:
-        percentual = 0.10  # 10%
-    else:
-        percentual = 0.0
-    
-    valor_desconto = valor_total * percentual
-    return percentual, valor_desconto
-
-def aplicar_desconto_volume_em_df(df):
-    """
-    Aplica o desconto por volume em um DataFrame de orçamentos
-    
-    Args:
-        df (pd.DataFrame): DataFrame com os dados dos orçamentos
-    
-    Returns:
-        pd.DataFrame: DataFrame com as colunas de desconto adicionadas
-    """
-    if df.empty:
-        return df
-    
-    # Verifica se as colunas necessárias existem
-    if 'VALOR_NUM' not in df.columns:
-        return df
-    
-    # Cria cópia para não modificar o original
-    df_result = df.copy()
-    
-    # Verifica se existe coluna de tipo de cliente ou produto para identificar promoções
-    # Adapte conforme a estrutura real dos seus dados
-    if 'TIPO_CLIENTE' in df_result.columns:
-        df_result['EH_PROMOCAO'] = df_result['TIPO_CLIENTE'].str.upper().str.contains('PROMOÇÃO|PROMOCAO', na=False)
-    elif 'TIPO_PRODUTO' in df_result.columns:
-        df_result['EH_PROMOCAO'] = df_result['TIPO_PRODUTO'].str.upper().str.contains('PROMOÇÃO|PROMOCAO', na=False)
-    else:
-        # Se não tiver coluna de tipo, assume que nenhum item é promoção
-        df_result['EH_PROMOCAO'] = False
-    
-    # Calcula desconto para cada linha
-    descontos = df_result.apply(
-        lambda row: calcular_desconto_volume(row['VALOR_NUM'], row['EH_PROMOCAO']),
-        axis=1
-    )
-    
-    df_result['PERCENTUAL_DESCONTO_VOLUME'] = descontos.apply(lambda x: x[0])
-    df_result['VALOR_DESCONTO_VOLUME'] = descontos.apply(lambda x: x[1])
-    
-    # Calcula valor com desconto
-    df_result['VALOR_COM_DESCONTO'] = df_result['VALOR_NUM'] - df_result['VALOR_DESCONTO_VOLUME']
-    df_result['VALOR_COM_DESCONTO_EXIBICAO'] = df_result['VALOR_COM_DESCONTO'].apply(formatar_moeda)
-    
-    return df_result
-
-def calcular_metricas_com_desconto(df):
-    """
-    Calcula métricas considerando os descontos por volume
-    
-    Args:
-        df (pd.DataFrame): DataFrame com os dados dos orçamentos
-    
-    Returns:
-        dict: Dicionário com as métricas calculadas
-    """
-    if df.empty:
-        return {
-            'total_orcamentos': 0,
-            'total_clientes': 0,
-            'valor_total_sem_desconto': 0.0,
-            'valor_total_com_desconto': 0.0,
-            'total_desconto_aplicado': 0.0,
-            'ticket_medio_sem_desconto': 0.0,
-            'ticket_medio_com_desconto': 0.0,
-            'economia_total': 0.0
-        }
-    
-    # Aplica descontos
-    df_com_desconto = aplicar_desconto_volume_em_df(df)
-    
-    total_orcamentos = len(df_com_desconto)
-    total_clientes = df_com_desconto['CNPJ'].nunique() if 'CNPJ' in df_com_desconto.columns else 0
-    
-    valor_total_sem_desconto = df_com_desconto['VALOR_NUM'].sum()
-    valor_total_com_desconto = df_com_desconto['VALOR_COM_DESCONTO'].sum() if 'VALOR_COM_DESCONTO' in df_com_desconto.columns else valor_total_sem_desconto
-    total_desconto_aplicado = df_com_desconto['VALOR_DESCONTO_VOLUME'].sum() if 'VALOR_DESCONTO_VOLUME' in df_com_desconto.columns else 0
-    
-    ticket_medio_sem_desconto = valor_total_sem_desconto / total_orcamentos if total_orcamentos > 0 else 0
-    ticket_medio_com_desconto = valor_total_com_desconto / total_orcamentos if total_orcamentos > 0 else 0
-    
-    economia_total = total_desconto_aplicado
-    
-    # Verifica se há itens em promoção
-    if 'EH_PROMOCAO' in df_com_desconto.columns:
-        itens_promocao = df_com_desconto[df_com_desconto['EH_PROMOCAO'] == True]
-        itens_nao_promocao = df_com_desconto[df_com_desconto['EH_PROMOCAO'] == False]
-        
-        return {
-            'total_orcamentos': total_orcamentos,
-            'total_clientes': total_clientes,
-            'valor_total_sem_desconto': valor_total_sem_desconto,
-            'valor_total_com_desconto': valor_total_com_desconto,
-            'total_desconto_aplicado': total_desconto_aplicado,
-            'ticket_medio_sem_desconto': ticket_medio_sem_desconto,
-            'ticket_medio_com_desconto': ticket_medio_com_desconto,
-            'economia_total': economia_total,
-            'itens_promocao': len(itens_promocao),
-            'itens_nao_promocao': len(itens_nao_promocao),
-            'valor_promocao': itens_promocao['VALOR_NUM'].sum() if not itens_promocao.empty else 0,
-            'valor_nao_promocao': itens_nao_promocao['VALOR_NUM'].sum() if not itens_nao_promocao.empty else 0,
-            'df_com_desconto': df_com_desconto
-        }
-    else:
-        return {
-            'total_orcamentos': total_orcamentos,
-            'total_clientes': total_clientes,
-            'valor_total_sem_desconto': valor_total_sem_desconto,
-            'valor_total_com_desconto': valor_total_com_desconto,
-            'total_desconto_aplicado': total_desconto_aplicado,
-            'ticket_medio_sem_desconto': ticket_medio_sem_desconto,
-            'ticket_medio_com_desconto': ticket_medio_com_desconto,
-            'economia_total': economia_total,
-            'itens_promocao': 0,
-            'itens_nao_promocao': total_orcamentos,
-            'valor_promocao': 0,
-            'valor_nao_promocao': valor_total_sem_desconto,
-            'df_com_desconto': df_com_desconto
-        }
-
-# ============================================
 # FUNÇÕES DE EXPORTAÇÃO
 # ============================================
 def converter_para_excel(df):
@@ -683,95 +527,21 @@ def pagina_analise_orcamentos(df_historico):
     if pag_filter and 'FORMA_PAGAMENTO' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['FORMA_PAGAMENTO'].isin(pag_filter)]
     
-    # CALCULAR MÉTRICAS COM DESCONTO POR VOLUME
-    metricas = calcular_metricas_com_desconto(df_filtrado)
-    df_com_desconto = metricas['df_com_desconto']
-    
     # MÉTRICAS
+    total_orcamentos = len(df_filtrado)
+    total_clientes = df_filtrado['CNPJ'].nunique() if 'CNPJ' in df_filtrado.columns else 0
+    valor_total = df_filtrado['VALOR_NUM'].sum()
+    ticket_medio = valor_total / total_orcamentos if total_orcamentos > 0 else 0
+    
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown(f"""
-        <div class='metric-card'>
-            <div class='metric-icon'>📋</div>
-            <div class='metric-title'>Total de Orçamentos</div>
-            <div class='metric-value'>{metricas['total_orcamentos']}</div>
-            <div class='metric-sub'>Orçamentos gerados</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-card'><div class='metric-icon'>📋</div><div class='metric-title'>Total de Orçamentos</div><div class='metric-value'>{total_orcamentos}</div><div class='metric-sub'>Orçamentos gerados</div></div>", unsafe_allow_html=True)
     with col2:
-        st.markdown(f"""
-        <div class='metric-card'>
-            <div class='metric-icon'>🏢</div>
-            <div class='metric-title'>Clientes Ativos</div>
-            <div class='metric-value'>{metricas['total_clientes']}</div>
-            <div class='metric-sub'>Empresas cadastradas</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-card'><div class='metric-icon'>🏢</div><div class='metric-title'>Clientes Ativos</div><div class='metric-value'>{total_clientes}</div><div class='metric-sub'>Empresas cadastradas</div></div>", unsafe_allow_html=True)
     with col3:
-        st.markdown(f"""
-        <div class='metric-card'>
-            <div class='metric-icon'>💰</div>
-            <div class='metric-title'>Valor Total Orçado</div>
-            <div class='metric-value'>{formatar_moeda(metricas['valor_total_sem_desconto'])}</div>
-            <div class='metric-sub'>Soma de todos os orçamentos</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-card'><div class='metric-icon'>💰</div><div class='metric-title'>Valor Total Orçado</div><div class='metric-value'>{formatar_moeda(valor_total)}</div><div class='metric-sub'>Soma de todos os orçamentos</div></div>", unsafe_allow_html=True)
     with col4:
-        st.markdown(f"""
-        <div class='metric-card'>
-            <div class='metric-icon'>🎯</div>
-            <div class='metric-title'>Ticket Médio</div>
-            <div class='metric-value'>{formatar_moeda(metricas['ticket_medio_sem_desconto'])}</div>
-            <div class='metric-sub'>Média por orçamento</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # MÉTRICAS DE DESCONTO
-    st.markdown("---")
-    st.markdown("<div class='section-title'><span></span>💰 Análise de Descontos por Volume</div>", unsafe_allow_html=True)
-    
-    col_d1, col_d2, col_d3, col_d4 = st.columns(4)
-    with col_d1:
-        st.markdown(f"""
-        <div class='metric-card' style='border-color: #F59E0B;'>
-            <div class='metric-icon'>🏷️</div>
-            <div class='metric-title'>Total em Descontos</div>
-            <div class='metric-value' style='color: #D97706;'>{formatar_moeda(metricas['total_desconto_aplicado'])}</div>
-            <div class='metric-sub'>Economia total gerada</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_d2:
-        st.markdown(f"""
-        <div class='metric-card' style='border-color: #10B981;'>
-            <div class='metric-icon'>💳</div>
-            <div class='metric-title'>Valor com Desconto</div>
-            <div class='metric-value' style='color: #059669;'>{formatar_moeda(metricas['valor_total_com_desconto'])}</div>
-            <div class='metric-sub'>Valor final após descontos</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_d3:
-        st.markdown(f"""
-        <div class='metric-card' style='border-color: #8B5CF6;'>
-            <div class='metric-icon'>📊</div>
-            <div class='metric-title'>Ticket Médio com Desconto</div>
-            <div class='metric-value' style='color: #7C3AED;'>{formatar_moeda(metricas['ticket_medio_com_desconto'])}</div>
-            <div class='metric-sub'>Média com desconto aplicado</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_d4:
-        economia_percentual = (metricas['total_desconto_aplicado'] / metricas['valor_total_sem_desconto'] * 100) if metricas['valor_total_sem_desconto'] > 0 else 0
-        st.markdown(f"""
-        <div class='metric-card' style='border-color: #EF4444;'>
-            <div class='metric-icon'>📈</div>
-            <div class='metric-title'>Economia Total</div>
-            <div class='metric-value' style='color: #DC2626;'>{economia_percentual:.1f}%</div>
-            <div class='metric-sub'>Percentual de desconto médio</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Informações sobre itens em promoção
-    if metricas['itens_promocao'] > 0:
-        st.info(f"ℹ️ {metricas['itens_promocao']} itens em promoção não receberam desconto por volume (R$ {formatar_moeda(metricas['valor_promocao'])})")
+        st.markdown(f"<div class='metric-card'><div class='metric-icon'>🎯</div><div class='metric-title'>Ticket Médio</div><div class='metric-value'>{formatar_moeda(ticket_medio)}</div><div class='metric-sub'>Média por orçamento</div></div>", unsafe_allow_html=True)
     
     st.markdown("---")
     
@@ -785,15 +555,9 @@ def pagina_analise_orcamentos(df_historico):
         df_uf = df_filtrado.groupby('UF')['VALOR_NUM'].sum().reset_index().sort_values('VALOR_NUM', ascending=False)
         cols = st.columns(4)
         for i, row in df_uf.iterrows():
-            percentual = (row['VALOR_NUM'] / metricas['valor_total_sem_desconto'] * 100) if metricas['valor_total_sem_desconto'] > 0 else 0
+            percentual = (row['VALOR_NUM'] / valor_total * 100) if valor_total > 0 else 0
             with cols[i % 4]:
-                st.markdown(f"""
-                <div class='uf-card'>
-                    <div class='uf-nome'>{row['UF']}</div>
-                    <div class='uf-valor'>{formatar_moeda(row['VALOR_NUM'])}</div>
-                    <div class='uf-percentual'>{percentual:.1f}% do total</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"<div class='uf-card'><div class='uf-nome'>{row['UF']}</div><div class='uf-valor'>{formatar_moeda(row['VALOR_NUM'])}</div><div class='uf-percentual'>{percentual:.1f}% do total</div></div>", unsafe_allow_html=True)
     else:
         st.info("Nenhum dado regional disponível para o período selecionado")
     
@@ -804,52 +568,27 @@ def pagina_analise_orcamentos(df_historico):
     if 'VALOR_NUM' in df_filtrado.columns and df_filtrado['VALOR_NUM'].sum() > 0:
         ranking = df_filtrado.groupby(['CNPJ', 'RAZÃO SOCIAL'])['VALOR_NUM'].sum().reset_index().sort_values('VALOR_NUM', ascending=False).head(5)
         for i, row in ranking.iterrows():
-            st.markdown(f"""
-            <div class='ranking-row'>
-                <div class='ranking-position'>#{i+1}</div>
-                <div class='ranking-client'>{row['RAZÃO SOCIAL']}</div>
-                <div class='ranking-value'>{formatar_moeda(row['VALOR_NUM'])}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"<div class='ranking-row'><div class='ranking-position'>#{i+1}</div><div class='ranking-client'>{row['RAZÃO SOCIAL']}</div><div class='ranking-value'>{formatar_moeda(row['VALOR_NUM'])}</div></div>", unsafe_allow_html=True)
     else:
         st.info("Nenhum dado de clientes disponível para o período selecionado")
     
     st.markdown("---")
     
-    # TABELA DE ORÇAMENTOS COM DESCONTO
-    st.markdown("<div class='section-title'><span></span>📋 Todos os Orçamentos com Desconto</div>", unsafe_allow_html=True)
+    # TABELA DE ORÇAMENTOS
+    st.markdown("<div class='section-title'><span></span>📋 Todos os Orçamentos</div>", unsafe_allow_html=True)
     col_btn1, col_btn2 = st.columns([1, 5])
     with col_btn1:
-        excel_data = converter_para_excel(df_com_desconto)
-        st.download_button("📊 Exportar Excel", data=excel_data, file_name=f"orcamentos_com_desconto_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", use_container_width=True)
-        csv_data = converter_para_csv(df_com_desconto)
-        st.download_button("📄 Exportar CSV", data=csv_data, file_name=f"orcamentos_com_desconto_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", use_container_width=True)
+        excel_data = converter_para_excel(df_filtrado)
+        st.download_button("📊 Exportar Excel", data=excel_data, file_name=f"orcamentos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", use_container_width=True)
+        csv_data = converter_para_csv(df_filtrado)
+        st.download_button("📄 Exportar CSV", data=csv_data, file_name=f"orcamentos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", use_container_width=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
-    colunas_exibicao = {
-        'DATA': 'Data',
-        'RAZÃO SOCIAL': 'Cliente',
-        'CNPJ': 'CNPJ',
-        'UF': 'UF',
-        'VALOR_EXIBICAO': 'Valor Original',
-        'FORMA_PAGAMENTO': 'Pagamento',
-        'QTD_ITENS': 'Qtd Itens',
-        'TIPO_CLIENTE': 'Tipo Cliente',
-        'VALOR_DESCONTO_VOLUME': 'Desconto',
-        'VALOR_COM_DESCONTO_EXIBICAO': 'Valor com Desconto'
-    }
-    
-    # Adiciona colunas de desconto
-    colunas_presentes = [col for col in colunas_exibicao.keys() if col in df_com_desconto.columns]
-    df_exibicao = df_com_desconto[colunas_presentes].rename(columns={k: v for k, v in colunas_exibicao.items() if k in colunas_presentes})
-    
-    # Formata valores de desconto
-    if 'Desconto' in df_exibicao.columns:
-        df_exibicao['Desconto'] = df_exibicao['Desconto'].apply(formatar_moeda)
-    
+    colunas_exibicao = {'DATA': 'Data', 'RAZÃO SOCIAL': 'Cliente', 'CNPJ': 'CNPJ', 'UF': 'UF', 'VALOR_EXIBICAO': 'Valor', 'FORMA_PAGAMENTO': 'Pagamento', 'QTD_ITENS': 'Qtd Itens', 'TIPO_CLIENTE': 'Tipo Cliente'}
+    colunas_presentes = [col for col in colunas_exibicao.keys() if col in df_filtrado.columns]
+    df_exibicao = df_filtrado[colunas_presentes].rename(columns={k: v for k, v in colunas_exibicao.items() if k in colunas_presentes})
     if 'DATA' in df_exibicao.columns:
         df_exibicao = df_exibicao.sort_values('DATA', ascending=False)
-    
     st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
     st.caption(f"📊 Total de {len(df_exibicao)} registros encontrados")
 
