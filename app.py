@@ -103,6 +103,7 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                 .footer {{ background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 11px; color: #666; }}
                 .badge {{ display: inline-block; background-color: #4CAF50; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; }}
                 .alert {{ background-color: #FFF3E0; border-left: 4px solid #FF9800; padding: 10px; margin: 15px 0; font-size: 12px; }}
+                .promo-badge-email {{ background-color: #D32F2F; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }}
             </style>
         </head>
         <body>
@@ -176,6 +177,7 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                                     <th>Qtd</th>
                                     <th>Valor Unit.</th>
                                     <th>Subtotal</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -187,6 +189,9 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
             subtotal = preco * qtd
             descricao = item.get('descricao', '')[:60]
             referencia = item.get('referencia', '')
+            eh_promo = item.get('eh_promocao', False)
+            
+            status = '<span class="promo-badge-email">🔥 PROMOÇÃO</span>' if eh_promo else 'Normal'
             
             corpo_html += f"""
                                 <tr>
@@ -195,6 +200,7 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
                                     <td style="text-align:center">{qtd}</td>
                                     <td style="text-align:right">{formatar_moeda(preco)}</td>
                                     <td style="text-align:right">{formatar_moeda(subtotal)}</td>
+                                    <td style="text-align:center">{status}</td>
                                 </tr>
             """
         
@@ -1365,7 +1371,8 @@ def formatar_moeda(valor):
 # ============================================
 # FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME - CORRIGIDA
 # ============================================
-def calcular_desconto_volume(valor_base):
+
+def calcular_desconto_volume(valor_base, eh_promocao=False):
     """
     Calcula o percentual de desconto por volume baseado no valor total
     
@@ -1375,6 +1382,10 @@ def calcular_desconto_volume(valor_base):
     - 20% de desconto para valores >= R$ 4.000,00
     - Itens em PROMOÇÃO não recebem este desconto
     """
+    # Itens em promoção NÃO recebem desconto por volume
+    if eh_promocao:
+        return 0.0
+    
     if valor_base >= 4000:
         return 0.20  # 20%
     elif valor_base >= 2500:
@@ -1384,43 +1395,83 @@ def calcular_desconto_volume(valor_base):
     else:
         return 0.0
 
-def calcular_faltante_para_desconto(valor_base):
-    """Calcula quanto falta para atingir a próxima faixa de desconto"""
-    if valor_base < 1500:
-        return 1500 - valor_base, 10
-    elif valor_base < 2500:
-        return 2500 - valor_base, 15
-    elif valor_base < 4000:
-        return 4000 - valor_base, 20
+def calcular_desconto_volume_para_carrinho(carrinho):
+    """
+    Calcula o desconto por volume considerando apenas itens NÃO PROMOCIONAIS
+    Itens em promoção NÃO entram no cálculo do valor base para desconto
+    """
+    # Soma apenas o valor dos itens NÃO promocionais
+    valor_base_nao_promo = 0
+    for item in carrinho:
+        if not item.get('eh_promocao', False):
+            valor_base_nao_promo += item['preco_final'] * item['quantidade']
+    
+    # Calcula desconto baseado apenas no valor de itens não promocionais
+    if valor_base_nao_promo >= 4000:
+        return 0.20
+    elif valor_base_nao_promo >= 2500:
+        return 0.15
+    elif valor_base_nao_promo >= 1500:
+        return 0.10
+    else:
+        return 0.0
+
+def calcular_faltante_para_desconto_para_carrinho(carrinho):
+    """Calcula quanto falta para atingir a próxima faixa de desconto considerando apenas itens NÃO promocionais"""
+    # Soma apenas o valor dos itens NÃO promocionais
+    valor_base_nao_promo = 0
+    for item in carrinho:
+        if not item.get('eh_promocao', False):
+            valor_base_nao_promo += item['preco_final'] * item['quantidade']
+    
+    if valor_base_nao_promo < 1500:
+        return 1500 - valor_base_nao_promo, 10
+    elif valor_base_nao_promo < 2500:
+        return 2500 - valor_base_nao_promo, 15
+    elif valor_base_nao_promo < 4000:
+        return 4000 - valor_base_nao_promo, 20
     else:
         return 0, 0
 
 def gerar_botao_desconto_flutuante():
     if st.session_state.carrinho:
-        valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-        desconto_percentual = calcular_desconto_volume(valor_base_total)
+        # Usa a nova função que considera apenas itens NÃO promocionais
+        itens_promo = [item for item in st.session_state.carrinho if item.get('eh_promocao', False)]
+        tem_promo = len(itens_promo) > 0
+        valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
+        
+        valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho if not item.get('eh_promocao', False))
+        desconto_percentual = calcular_desconto_volume(valor_base_total, False)
         faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_total)
         
         if desconto_percentual == 0.20:
-            mensagem = f"🏆 PARABÉNS! Você atingiu 20% de desconto máximo!"
+            mensagem = f"🏆 PARABÉNS! Você atingiu 20% de desconto máximo em itens NÃO promocionais!"
+            if tem_promo:
+                mensagem += f" (Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)"
             cor = "#FF9800"
             icone = "🏆"
             texto_desconto = "20% OFF"
         elif desconto_percentual == 0.15:
-            mensagem = f"✅ Você já tem 15% de desconto! Faltam {formatar_moeda(faltante)} para 20%"
+            mensagem = f"✅ Você já tem 15% de desconto em itens NÃO promocionais! Faltam {formatar_moeda(faltante)} para 20%"
+            if tem_promo:
+                mensagem += f" (Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)"
             cor = "#4CAF50"
             icone = "🎯"
             texto_desconto = "15% OFF"
         elif desconto_percentual == 0.10:
-            mensagem = f"✅ Você já tem 10% de desconto! Faltam {formatar_moeda(faltante)} para 15%"
+            mensagem = f"✅ Você já tem 10% de desconto em itens NÃO promocionais! Faltam {formatar_moeda(faltante)} para 15%"
+            if tem_promo:
+                mensagem += f" (Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)"
             cor = "#2196F3"
             icone = "📈"
             texto_desconto = "10% OFF"
         else:
             if faltante > 0:
-                mensagem = f"📈 Adicione mais {formatar_moeda(faltante)} e ganhe {prox_desconto}% de desconto!"
+                mensagem = f"📈 Adicione mais {formatar_moeda(faltante)} em itens NÃO promocionais e ganhe {prox_desconto}% de desconto!"
             else:
-                mensagem = f"💰 Adicione produtos para ganhar desconto por volume!"
+                mensagem = f"💰 Adicione produtos NÃO promocionais para ganhar desconto por volume!"
+            if tem_promo:
+                mensagem += f" (Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)"
             cor = "#9E9E9E"
             icone = "💰"
             texto_desconto = "0% OFF"
@@ -1429,13 +1480,10 @@ def gerar_botao_desconto_flutuante():
         if valor_base_total >= 4000:
             progresso = 100
         elif valor_base_total >= 2500:
-            # Entre 2500 e 4000: 75% a 100%
             progresso = 75 + ((valor_base_total - 2500) / 1500) * 25
         elif valor_base_total >= 1500:
-            # Entre 1500 e 2500: 50% a 75%
             progresso = 50 + ((valor_base_total - 1500) / 1000) * 25
         else:
-            # Abaixo de 1500: 0% a 50%
             progresso = (valor_base_total / 1500) * 50
         
         progresso = min(100, max(0, progresso))
@@ -1447,6 +1495,18 @@ def gerar_botao_desconto_flutuante():
         icone = "💰"
         texto_desconto = "0% OFF"
         progresso = 0
+        tem_promo = False
+        valor_promo = 0
+        itens_promo = []
+    
+    # Adiciona badge de promoção se houver itens em promoção
+    badge_promo = ""
+    if tem_promo:
+        badge_promo = f"""
+        <div style='background-color: #D32F2F; color: white; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; display: inline-block; margin-top: 5px;'>
+            🔥 {len(itens_promo)} item(ns) em promoção (sem desconto por volume)
+        </div>
+        """
     
     html = f"""
     <style>
@@ -1582,6 +1642,7 @@ def gerar_botao_desconto_flutuante():
                 </div>
             </div>
             <div class="desconto-message">{mensagem}</div>
+            {badge_promo}
             <div class="progress-bar-container">
                 <div class="progress-bar-fill"></div>
             </div>
@@ -1596,6 +1657,17 @@ def gerar_botao_desconto_flutuante():
     """
     
     return html
+
+def calcular_faltante_para_desconto(valor_base):
+    """Calcula quanto falta para atingir a próxima faixa de desconto"""
+    if valor_base < 1500:
+        return 1500 - valor_base, 10
+    elif valor_base < 2500:
+        return 2500 - valor_base, 15
+    elif valor_base < 4000:
+        return 4000 - valor_base, 20
+    else:
+        return 0, 0
 
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
@@ -1631,6 +1703,11 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     data_geracao = formatar_data_brasil()
     id_documento = hashlib.sha256(f"{dados_cliente.get('cnpj', '')}{data_geracao}".encode()).hexdigest()[:8]
     
+    # Verifica se há itens em promoção
+    itens_promo = [item for item in itens_carrinho if item.get('eh_promocao', False)]
+    tem_promo = len(itens_promo) > 0
+    valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
+    
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -1656,6 +1733,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                         padding: 10px; margin: 20px 0; font-size: 12px; }}
             .desconto-destaque {{ background-color: #E8F5E9; border-left: 4px solid #4CAF50;
                                 padding: 10px; margin: 15px 0; font-size: 13px; }}
+            .promo-badge-email {{ background-color: #D32F2F; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }}
         </style>
     </head>
     <body>
@@ -1697,6 +1775,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p><strong>Condição de Pagamento:</strong> {forma_pagamento}</p>
             <p><strong>Validade do Orçamento:</strong> 7 dias corridos</p>
             <p><strong>Desconto por Volume:</strong> {int(desconto_volume_percentual*100)}%</p>
+            {f"<p><strong>Itens em Promoção:</strong> {len(itens_promo)} item(ns) - {formatar_moeda(valor_promo)} (sem desconto por volume)</p>" if tem_promo else ""}
         </div>
         
         <div class="section">
@@ -1712,6 +1791,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                         <th style="padding: 10px; text-align: right; border: 1px solid #ddd;">IPI</th>
                         <th style="padding: 10px; text-align: right; border: 1px solid #ddd;">ST</th>
                         <th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Total</th>
+                        <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1722,22 +1802,34 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     total_geral_exibido = 0
     
     for item in itens_carrinho:
-        valor_base_item = item['preco_final']
-        valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
-        aliquota_ipi_item = item['valor_ipi'] / valor_base_item if valor_base_item > 0 else 0
-        aliquota_st_item = item['valor_st'] / valor_base_item if valor_base_item > 0 else 0
+        eh_promo = item.get('eh_promocao', False)
         
-        novo_ipi_unitario = valor_com_desconto_item * aliquota_ipi_item
-        novo_st_unitario = valor_com_desconto_item * aliquota_st_item
+        # Se for promoção, não aplica desconto por volume
+        if eh_promo:
+            valor_base_item = item['preco_final']
+            valor_com_desconto_item = valor_base_item
+            ipi_aliquota = item['ipi_percentual']
+            st_aliquota = item['st_aliquota']
+            ipi_unitario = item['valor_ipi']
+            st_unitario = item['valor_st']
+        else:
+            valor_base_item = item['preco_final']
+            valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
+            ipi_aliquota = item['ipi_percentual']
+            st_aliquota = item['st_aliquota']
+            ipi_unitario = valor_com_desconto_item * ipi_aliquota
+            st_unitario = valor_com_desconto_item * st_aliquota
         
         subtotal_item = valor_com_desconto_item * item['quantidade']
-        ipi_total_item = novo_ipi_unitario * item['quantidade']
-        st_total_item = novo_st_unitario * item['quantidade']
-        total_item = (valor_com_desconto_item + novo_ipi_unitario + novo_st_unitario) * item['quantidade']
+        ipi_total_item = ipi_unitario * item['quantidade']
+        st_total_item = st_unitario * item['quantidade']
+        total_item = (valor_com_desconto_item + ipi_unitario + st_unitario) * item['quantidade']
         
         total_ipi_exibido += ipi_total_item
         total_st_exibido += st_total_item
         total_geral_exibido += total_item
+        
+        status = '<span class="promo-badge-email">🔥 PROMOÇÃO</span>' if eh_promo else 'Normal'
         
         html_content += f"""
                 <tr>
@@ -1749,6 +1841,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
                     <td style="text-align:right">{formatar_moeda(ipi_total_item) if ipi_total_item > 0 else '-'}</td>
                     <td style="text-align:right">{formatar_moeda(st_total_item) if st_total_item > 0 else '-'}</td>
                     <td style="text-align:right">{formatar_moeda(total_item)}</td>
+                    <td style="text-align:center">{status}</td>
                 </tr>
         """
     
@@ -1765,6 +1858,7 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p><strong>IPI Total:</strong> {formatar_moeda(total_ipi_exibido)}</p>
             <p><strong>ST Total:</strong> {formatar_moeda(total_st_exibido)}</p>
             <p class="total"><strong>TOTAL GERAL DO ORÇAMENTO:</strong> {formatar_moeda(total_geral_exibido)}</p>
+            {f"<p><strong>⚠️ Itens em Promoção:</strong> {len(itens_promo)} item(ns) - {formatar_moeda(valor_promo)} (não receberam desconto por volume)</p>" if tem_promo else ""}
         </div>
         
         <div class="lgpd-notice">
@@ -1805,6 +1899,11 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
                                 desconto_volume_percentual, valor_desconto_volume, valor_base_total,
                                 total_ipi, total_st):
     
+    # Verifica se há itens em promoção
+    itens_promo = [item for item in st.session_state.carrinho if item.get('eh_promocao', False)]
+    tem_promo = len(itens_promo) > 0
+    valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
+    
     msg = "🛍️ *NOVO ORÇAMENTO Luvidarte* 🛍️\n\n"
     msg += "═" * 40 + "\n\n"
     msg += "*📋 DADOS DO CLIENTE*\n"
@@ -1823,19 +1922,28 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
     msg += f"📅 Data: {formatar_data_brasil()}\n"
     msg += f"👤 Tipo Cliente: {tipo_cliente}\n"
     msg += f"💳 Pagamento: {forma_pagamento}\n"
-    msg += f"🎯 Desconto por Volume: {int(desconto_volume_percentual*100)}%\n\n"
+    msg += f"🎯 Desconto por Volume: {int(desconto_volume_percentual*100)}%\n"
+    if tem_promo:
+        msg += f"🔥 Itens em Promoção: {len(itens_promo)} item(ns) - {formatar_moeda(valor_promo)} (sem desconto por volume)\n\n"
     
     msg += "*🛍️ ITENS SOLICITADOS*\n"
     msg += "═" * 40 + "\n\n"
     
     for idx, item in enumerate(st.session_state.carrinho, 1):
-        valor_base_item = item['preco_final']
-        valor_com_desconto = valor_base_item * (1 - desconto_volume_percentual)
+        eh_promo = item.get('eh_promocao', False)
+        if eh_promo:
+            valor_com_desconto = item['preco_final']
+            status = "🔥 PROMOÇÃO"
+        else:
+            valor_com_desconto = item['preco_final'] * (1 - desconto_volume_percentual)
+            status = "Normal"
+        
         msg += f"{idx}. *{item['descricao'][:50]}*\n"
         msg += f"   📦 Código: {item['referencia']}\n"
         msg += f"   🔢 Quantidade: {item['quantidade']}\n"
         msg += f"   💰 Valor unitário: {formatar_moeda(valor_com_desconto)}\n"
-        msg += f"   📊 Subtotal: {formatar_moeda(valor_com_desconto * item['quantidade'])}\n\n"
+        msg += f"   📊 Subtotal: {formatar_moeda(valor_com_desconto * item['quantidade'])}\n"
+        msg += f"   🏷️ Status: {status}\n\n"
     
     msg += "═" * 40 + "\n"
     msg += f"*✅ TOTAL DO ORÇAMENTO: {formatar_moeda(total_final)}*\n"
@@ -2129,13 +2237,15 @@ def recalcular_todo_carrinho(uf, cliente_isento, forma_pagamento,
         item['valor_st'] = valor_st
         item['st_total'] = valor_st * quantidade
         item['total_geral'] = valor_total * quantidade
+        item['eh_promocao'] = is_promo
 
 # ============================================
 # FUNÇÕES DO CARRINHO
 # ============================================
 def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
                            valor_desconto, preco_com_desconto, preco_final,
-                           valor_ipi, valor_st, ipi_percentual, aliquota_st, valor_total):
+                           valor_ipi, valor_st, ipi_percentual, aliquota_st, valor_total,
+                           eh_promocao=False):
     for item in st.session_state.carrinho:
         if item['referencia'] == produto['Referência']:
             item['quantidade'] += quantidade
@@ -2165,7 +2275,8 @@ def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
         'total_geral': (preco_final + valor_ipi + valor_st) * quantidade,
         'medidas': produto.get('Medidas', ''),
         'ml': produto.get('ml', ''),
-        'imagem_url': produto.get('imagem_url', '')
+        'imagem_url': produto.get('imagem_url', ''),
+        'eh_promocao': eh_promocao
     })
     return True
 
@@ -2184,18 +2295,25 @@ def calcular_resumo_carrinho():
         return {'total_itens': 0, 'total_geral': 0.0, 'total_ipi': 0.0,
                 'total_st': 0.0, 'total_desconto': 0.0, 'total_bruto': 0.0}
     
-    valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-    desconto_vol = calcular_desconto_volume(valor_base_total)
+    # Calcula desconto considerando apenas itens NÃO promocionais
+    valor_base_nao_promo = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho if not item.get('eh_promocao', False))
+    desconto_vol = calcular_desconto_volume(valor_base_nao_promo, False)
     
     total_com_desconto = 0
     total_ipi = 0
     total_st = 0
     
     for item in st.session_state.carrinho:
-        item_com_desconto = recalcular_item_com_desconto_volume(item, desconto_vol)
-        total_com_desconto += item_com_desconto['total_geral'] * item['quantidade']
-        total_ipi += item['valor_ipi'] * item['quantidade']
-        total_st += item['valor_st'] * item['quantidade']
+        if item.get('eh_promocao', False):
+            # Itens em promoção NÃO recebem desconto por volume
+            total_com_desconto += item['total_geral']
+            total_ipi += item['valor_ipi'] * item['quantidade']
+            total_st += item['valor_st'] * item['quantidade']
+        else:
+            item_com_desconto = recalcular_item_com_desconto_volume(item, desconto_vol)
+            total_com_desconto += item_com_desconto['total_geral'] * item['quantidade']
+            total_ipi += item['valor_ipi'] * item['quantidade']
+            total_st += item['valor_st'] * item['quantidade']
     
     return {
         'total_itens': sum(i['quantidade'] for i in st.session_state.carrinho),
@@ -2205,9 +2323,9 @@ def calcular_resumo_carrinho():
         'total_desconto': sum(i['valor_desconto'] * i['quantidade'] for i in st.session_state.carrinho),
         'total_bruto': sum(i['preco_bruto'] * i['quantidade'] for i in st.session_state.carrinho),
         'desconto_volume_percentual': desconto_vol,
-        'valor_base_total': valor_base_total,
-        'valor_desconto_volume': valor_base_total * desconto_vol,
-        'novo_valor_base': valor_base_total * (1 - desconto_vol)
+        'valor_base_total': valor_base_nao_promo,
+        'valor_desconto_volume': valor_base_nao_promo * desconto_vol,
+        'novo_valor_base': valor_base_nao_promo * (1 - desconto_vol)
     }
 
 # ============================================
@@ -2690,11 +2808,6 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# O RESTO DO CÓDIGO (CARRINHO, PRODUTOS, ETC) CONTINUA IGUAL
-# ============================================
-# ... (todo o restante do código do carrinho, produtos, paginação, rodapé)
-
-# ============================================
 # TELA DO CARRINHO (quando aberto)
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
@@ -2708,31 +2821,48 @@ if st.session_state.get('carrinho_aberto', False):
         st.info("Seu orçamento está vazio. Adicione produtos para continuar.")
         st.stop()
 
-    valor_base_total = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-    desconto_volume_percentual = calcular_desconto_volume(valor_base_total)
-    valor_desconto_volume = valor_base_total * desconto_volume_percentual
-    novo_valor_base = valor_base_total - valor_desconto_volume
+    # Calcula desconto considerando apenas itens NÃO promocionais
+    valor_base_nao_promo = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho if not item.get('eh_promocao', False))
+    desconto_volume_percentual = calcular_desconto_volume(valor_base_nao_promo, False)
+    valor_desconto_volume = valor_base_nao_promo * desconto_volume_percentual
+    novo_valor_base = valor_base_nao_promo - valor_desconto_volume
 
     total_ipi_recalculado = 0
     total_st_recalculado = 0
     total_geral_recalculado = 0
     total_desconto_geral = 0
     total_bruto_geral = 0
+    total_promo = 0
+
+    # Verifica se há itens em promoção
+    itens_promo = [item for item in st.session_state.carrinho if item.get('eh_promocao', False)]
+    tem_promo = len(itens_promo) > 0
+    valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
 
     for idx, item in enumerate(st.session_state.carrinho):
-        ipi_aliquota_efetiva = item['valor_ipi'] / item['preco_final'] if item['preco_final'] > 0 else 0
-        st_aliquota_efetiva = item['valor_st'] / item['preco_final'] if item['preco_final'] > 0 else 0
+        eh_promo = item.get('eh_promocao', False)
         
-        valor_base_item_original = item['preco_final']
-        valor_base_item_com_desconto = valor_base_item_original * (1 - desconto_volume_percentual)
+        if eh_promo:
+            # Itens em promoção NÃO recebem desconto por volume
+            total_promo += item['total_geral']
+            total_ipi_recalculado += item['ipi_total']
+            total_st_recalculado += item['st_total']
+            total_geral_recalculado += item['total_geral']
+        else:
+            ipi_aliquota_efetiva = item['valor_ipi'] / item['preco_final'] if item['preco_final'] > 0 else 0
+            st_aliquota_efetiva = item['valor_st'] / item['preco_final'] if item['preco_final'] > 0 else 0
+            
+            valor_base_item_original = item['preco_final']
+            valor_base_item_com_desconto = valor_base_item_original * (1 - desconto_volume_percentual)
+            
+            novo_ipi_item = valor_base_item_com_desconto * ipi_aliquota_efetiva
+            novo_st_item = valor_base_item_com_desconto * st_aliquota_efetiva
+            novo_total_item = (valor_base_item_com_desconto + novo_ipi_item + novo_st_item) * item['quantidade']
+            
+            total_ipi_recalculado += novo_ipi_item * item['quantidade']
+            total_st_recalculado += novo_st_item * item['quantidade']
+            total_geral_recalculado += novo_total_item
         
-        novo_ipi_item = valor_base_item_com_desconto * ipi_aliquota_efetiva
-        novo_st_item = valor_base_item_com_desconto * st_aliquota_efetiva
-        novo_total_item = (valor_base_item_com_desconto + novo_ipi_item + novo_st_item) * item['quantidade']
-        
-        total_ipi_recalculado += novo_ipi_item * item['quantidade']
-        total_st_recalculado += novo_st_item * item['quantidade']
-        total_geral_recalculado += novo_total_item
         total_desconto_geral += item['valor_desconto'] * item['quantidade']
         total_bruto_geral += item['preco_bruto'] * item['quantidade']
         
@@ -2750,6 +2880,8 @@ if st.session_state.get('carrinho_aberto', False):
             st.markdown(f"*{item['descricao']}*")
             st.markdown(f"🔖 REF: {item['referencia']}")
             st.markdown(f"📦 Família: {item['grupo']}")
+            if eh_promo:
+                st.markdown("🔥 **PROMOÇÃO**")
             if item.get('medidas'):
                 st.markdown(f"📐 {item['medidas']}")
         with c3:
@@ -2758,10 +2890,15 @@ if st.session_state.get('carrinho_aberto', False):
                 st.markdown(f"🎯 *Desconto:* {item['desconto_percentual']*100:.2f}% ({formatar_moeda(item['valor_desconto'])})")
                 st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(item['preco_com_desconto'])}")
             
-            valor_unitario_exibido = valor_base_item_com_desconto
-            st.markdown(f"💰 *Valor unitário:* {formatar_moeda(valor_unitario_exibido)}")
-            if desconto_volume_percentual > 0:
-                st.caption(f"🎉 *Inclui {int(desconto_volume_percentual*100)}% desconto por volume*")
+            if eh_promo:
+                valor_unitario_exibido = item['preco_final']
+                st.markdown(f"💰 *Valor unitário:* {formatar_moeda(valor_unitario_exibido)}")
+                st.caption("🔥 Promoção - sem desconto por volume")
+            else:
+                valor_unitario_exibido = item['preco_final'] * (1 - desconto_volume_percentual)
+                st.markdown(f"💰 *Valor unitário:* {formatar_moeda(valor_unitario_exibido)}")
+                if desconto_volume_percentual > 0:
+                    st.caption(f"🎉 *Inclui {int(desconto_volume_percentual*100)}% desconto por volume*")
             
             col_qtd1, col_qtd2 = st.columns([1, 2])
             with col_qtd1:
@@ -2779,52 +2916,57 @@ if st.session_state.get('carrinho_aberto', False):
                     st.rerun()
             
             with col_qtd2:
-                subtotal_item = valor_base_item_com_desconto * item['quantidade']
+                subtotal_item = valor_unitario_exibido * item['quantidade']
                 st.markdown(f"💎 *Subtotal:* {formatar_moeda(subtotal_item)}")
             
             if item.get('ipi_percentual', 0) > 0:
-                ipi_total_item = novo_ipi_item * item['quantidade']
+                ipi_total_item = (item['valor_ipi'] if eh_promo else novo_ipi_item) * item['quantidade']
                 st.markdown(f"🔷 IPI: {item['ipi_percentual']*100:.2f}% = {formatar_moeda(ipi_total_item)}")
             
             if item.get('st_total', 0) > 0:
-                st_total_item = novo_st_item * item['quantidade']
+                st_total_item = (item['valor_st'] if eh_promo else novo_st_item) * item['quantidade']
                 st.markdown(f"🟣 ST: {formatar_moeda(st_total_item)}")
         with c4:
             st.markdown("*Total Item*")
-            st.markdown(f"### {formatar_moeda(novo_total_item)}")
+            total_item = item['total_geral'] if eh_promo else novo_total_item
+            st.markdown(f"### {formatar_moeda(total_item)}")
             if st.button("🗑️ Remover", key=f"remove_{idx}"):
                 remover_do_carrinho(idx)
                 st.rerun()
         st.markdown("---")
 
-    total_final_com_vol = novo_valor_base + total_ipi_recalculado + total_st_recalculado
+    total_final_com_vol = total_geral_recalculado
+
+    # Exibe aviso sobre itens em promoção
+    if tem_promo:
+        st.info(f"🔥 Itens em promoção ({len(itens_promo)} itens - {formatar_moeda(valor_promo)}) NÃO recebem desconto por volume")
 
     # Exibe mensagem de desconto conforme novas regras
     if desconto_volume_percentual > 0:
         st.markdown(f"""
         <div class='desconto-vol-banner' style='background-color: #E8F5E9; border-left: 4px solid #4CAF50;
                     padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
-            🎉 Parabéns! Você ganhou <strong>{int(desconto_volume_percentual*100)}% de desconto</strong> por volume!<br>
-            Economia de <strong>{formatar_moeda(valor_desconto_volume)}</strong> aplicada sobre o valor base.<br>
+            🎉 Parabéns! Você ganhou <strong>{int(desconto_volume_percentual*100)}% de desconto</strong> por volume nos itens NÃO promocionais!<br>
+            Economia de <strong>{formatar_moeda(valor_desconto_volume)}</strong> aplicada sobre o valor base dos itens NÃO promocionais.<br>
             <small>IPI e ST recalculados proporcionalmente sobre o novo valor base.</small>
         </div>""", unsafe_allow_html=True)
-    elif 1500 - valor_base_total > 0:
+    elif 1500 - valor_base_nao_promo > 0:
         st.markdown(f"""
         <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
                     padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
-            💡 Adicione mais <strong>{formatar_moeda(1500-valor_base_total)}</strong> em valor base e ganhe <strong>10% de desconto</strong>!
+            💡 Adicione mais <strong>{formatar_moeda(1500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>10% de desconto</strong>!
         </div>""", unsafe_allow_html=True)
-    elif 2500 - valor_base_total > 0:
+    elif 2500 - valor_base_nao_promo > 0:
         st.markdown(f"""
         <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
                     padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
-            💡 Adicione mais <strong>{formatar_moeda(2500-valor_base_total)}</strong> em valor base e ganhe <strong>15% de desconto</strong>!
+            💡 Adicione mais <strong>{formatar_moeda(2500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>15% de desconto</strong>!
         </div>""", unsafe_allow_html=True)
-    elif 4000 - valor_base_total > 0:
+    elif 4000 - valor_base_nao_promo > 0:
         st.markdown(f"""
         <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
                     padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
-            💡 Adicione mais <strong>{formatar_moeda(4000-valor_base_total)}</strong> em valor base e ganhe <strong>20% de desconto</strong>!
+            💡 Adicione mais <strong>{formatar_moeda(4000-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>20% de desconto</strong>!
         </div>""", unsafe_allow_html=True)
 
     st.markdown("## 📋 Resumo do Orçamento")
@@ -2848,8 +2990,9 @@ if st.session_state.get('carrinho_aberto', False):
             </div>
             <div class='resumo-line'>
                 <span>📊 Valor Base (p/ desconto volume):</span>
-                <span><strong>{formatar_moeda(valor_base_total)}</strong></span>
+                <span><strong>{formatar_moeda(valor_base_nao_promo)}</strong></span>
             </div>
+            {f"<div class='resumo-line'><span>🔥 Itens em Promoção:</span><span><strong>{formatar_moeda(valor_promo)}</strong></span></div>" if tem_promo else ""}
         </div>
         """, unsafe_allow_html=True)
 
@@ -2895,6 +3038,7 @@ if st.session_state.get('carrinho_aberto', False):
             <span>✅ TOTAL FINAL DO ORÇAMENTO:</span>
             <span><strong style='color:#D32F2F;'>{formatar_moeda(total_final_com_vol)}</strong></span>
         </div>
+        {f"<div class='resumo-line' style='color:#D32F2F;'><span>🔥 Itens em Promoção (sem desconto):</span><span><strong>{formatar_moeda(total_promo)}</strong></span></div>" if tem_promo else ""}
     </div>
     """, unsafe_allow_html=True)
 
@@ -3009,7 +3153,7 @@ if st.session_state.get('carrinho_aberto', False):
                     
                     html_bytes = gerar_html_orcamento(dados_cliente, st.session_state.carrinho, 
                                                       uf_para_calculo, tipo_cliente_str, forma_pagamento,
-                                                      desconto_volume_percentual, valor_base_total, valor_desconto_volume,
+                                                      desconto_volume_percentual, valor_base_nao_promo, valor_desconto_volume,
                                                       total_final_com_vol, total_ipi_recalculado, total_st_recalculado)
                     
                     if html_bytes:
@@ -3045,7 +3189,7 @@ if st.session_state.get('carrinho_aberto', False):
         msg_whatsapp = formatar_mensagem_whatsapp(st.session_state.dados_cliente, uf_selecionada, 
                                                    tipo_cliente_str, forma_pagamento, total_final_com_vol,
                                                    desconto_volume_percentual, valor_desconto_volume,
-                                                   valor_base_total, total_ipi_recalculado, total_st_recalculado)
+                                                   valor_base_nao_promo, total_ipi_recalculado, total_st_recalculado)
         msg_codificada = urllib.parse.quote(msg_whatsapp)
         link_whatsapp = f"https://wa.me/5511930119335?text={msg_codificada}"
         
@@ -3179,11 +3323,12 @@ st.markdown(gerar_botao_desconto_flutuante(), unsafe_allow_html=True)
 if dados_filtrados.empty:
     st.warning("😕 Nenhum produto encontrado.")
 else:
+    # Calcula desconto considerando apenas itens NÃO promocionais no carrinho
     desconto_volume_atual = 0
     valor_base_carrinho = 0
     if st.session_state.carrinho:
-        valor_base_carrinho = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho)
-        desconto_volume_atual = calcular_desconto_volume(valor_base_carrinho)
+        valor_base_carrinho = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho if not item.get('eh_promocao', False))
+        desconto_volume_atual = calcular_desconto_volume(valor_base_carrinho, False)
     
     colunas = st.columns(3)
 
@@ -3221,7 +3366,11 @@ else:
         valor_st = 0.0 if cliente_isento else preco_final * aliquota_st
         valor_total = preco_final + valor_ipi + valor_st
         
-        preco_com_desconto_volume = preco_final * (1 - desconto_volume_atual)
+        # Só aplica desconto por volume se NÃO for promoção
+        if is_promo:
+            preco_com_desconto_volume = preco_final
+        else:
+            preco_com_desconto_volume = preco_final * (1 - desconto_volume_atual)
 
         produto_carrinho = {
             'Referência': produto['Referência'],
@@ -3271,19 +3420,24 @@ else:
             else:
                 st.markdown('<div class="product-detail">📐 <strong>--</strong></div>', unsafe_allow_html=True)
 
-            if desconto_volume_atual > 0:
-                st.markdown(f"💰 *Preço Bruto:* {formatar_moeda(preco_bruto)}")
-                if desconto_percentual > 0:
-                    st.markdown(f"🎯 *Desconto:* {desconto_percentual*100:.2f}% ({formatar_moeda(valor_desconto)})")
-                    st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(preco_com_desconto)}")
-                st.markdown(f"💰 *Valor unitário:* {formatar_moeda(preco_com_desconto_volume)}")
-                st.caption(f"🎉 *Inclui {int(desconto_volume_atual*100)}% desconto por volume acumulado no carrinho*")
-            else:
-                st.markdown(f"💰 *Preço Bruto:* {formatar_moeda(preco_bruto)}")
-                if desconto_percentual > 0:
-                    st.markdown(f"🎯 *Desconto:* {desconto_percentual*100:.2f}% ({formatar_moeda(valor_desconto)})")
-                    st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(preco_com_desconto)}")
+            if is_promo:
+                st.markdown(f"💰 *Preço Promocional:* {formatar_moeda(preco_bruto)}")
                 st.markdown(f"💰 *Valor unitário:* {formatar_moeda(preco_final)}")
+                st.caption("🔥 Promoção - sem desconto por volume")
+            else:
+                if desconto_volume_atual > 0:
+                    st.markdown(f"💰 *Preço Bruto:* {formatar_moeda(preco_bruto)}")
+                    if desconto_percentual > 0:
+                        st.markdown(f"🎯 *Desconto:* {desconto_percentual*100:.2f}% ({formatar_moeda(valor_desconto)})")
+                        st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(preco_com_desconto)}")
+                    st.markdown(f"💰 *Valor unitário:* {formatar_moeda(preco_com_desconto_volume)}")
+                    st.caption(f"🎉 *Inclui {int(desconto_volume_atual*100)}% desconto por volume acumulado no carrinho*")
+                else:
+                    st.markdown(f"💰 *Preço Bruto:* {formatar_moeda(preco_bruto)}")
+                    if desconto_percentual > 0:
+                        st.markdown(f"🎯 *Desconto:* {desconto_percentual*100:.2f}% ({formatar_moeda(valor_desconto)})")
+                        st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(preco_com_desconto)}")
+                    st.markdown(f"💰 *Valor unitário:* {formatar_moeda(preco_final)}")
             
             if ipi_percentual > 0:
                 st.markdown(f"🔷 *IPI:* {ipi_percentual*100:.2f}% = {formatar_moeda(valor_ipi)}")
@@ -3292,27 +3446,27 @@ else:
             
             if cliente_isento:
                 st.markdown(f"🟣 *ST ({uf_selecionada}):* Cliente Não Contribuinte — ST não aplicada")
-                if desconto_volume_atual > 0:
+                if is_promo:
+                    st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(preco_final + valor_ipi)}")
+                else:
                     novo_total_com_desconto = preco_com_desconto_volume + valor_ipi
                     st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(novo_total_com_desconto)}")
-                else:
-                    st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(preco_final + valor_ipi)}")
             elif aliquota_st > 0:
                 st.markdown(f"🟣 *Alíq. ST ({uf_selecionada}):* {aliquota_st*100:.2f}%")
-                if desconto_volume_atual > 0:
+                if is_promo:
+                    st.markdown(f"📊 *Valor ST:* {formatar_moeda(valor_st)}")
+                    st.markdown(f"✅ *TOTAL COM IPI + ST:* {formatar_moeda(valor_total)}")
+                else:
                     novo_total_com_desconto = preco_com_desconto_volume + valor_ipi + valor_st
                     st.markdown(f"📊 *Valor ST:* {formatar_moeda(valor_st)}")
                     st.markdown(f"✅ *TOTAL COM IPI + ST:* {formatar_moeda(novo_total_com_desconto)}")
-                else:
-                    st.markdown(f"📊 *Valor ST:* {formatar_moeda(valor_st)}")
-                    st.markdown(f"✅ *TOTAL COM IPI + ST:* {formatar_moeda(valor_total)}")
             else:
                 st.markdown(f"🟣 *ST ({uf_selecionada}):* Não aplicável")
-                if desconto_volume_atual > 0:
+                if is_promo:
+                    st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(preco_final + valor_ipi)}")
+                else:
                     novo_total_com_desconto = preco_com_desconto_volume + valor_ipi
                     st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(novo_total_com_desconto)}")
-                else:
-                    st.markdown(f"✅ *TOTAL COM IPI:* {formatar_moeda(preco_final + valor_ipi)}")
 
             st.markdown("---")
 
@@ -3342,10 +3496,14 @@ else:
                         produto_carrinho, qtd_atual,
                         preco_bruto, desconto_percentual, valor_desconto,
                         preco_com_desconto, preco_final, valor_ipi, valor_st,
-                        ipi_percentual, aliquota_st, valor_total
+                        ipi_percentual, aliquota_st, valor_total,
+                        eh_promocao=is_promo
                     )
                     if sucesso:
-                        st.success(f"✅ Produto adicionado ao orçamento! Quantidade: {qtd_atual}")
+                        if is_promo:
+                            st.success(f"✅ Produto PROMOCIONAL adicionado ao orçamento! Quantidade: {qtd_atual}")
+                        else:
+                            st.success(f"✅ Produto adicionado ao orçamento! Quantidade: {qtd_atual}")
                         time.sleep(0.5)
                         st.rerun()
 
