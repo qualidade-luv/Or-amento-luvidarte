@@ -1363,13 +1363,13 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ============================================
-# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME - ATUALIZADA
+# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME - CORRIGIDA
 # ============================================
 def calcular_desconto_volume(valor_base):
     """
     Calcula o percentual de desconto por volume baseado no valor total
     
-    NOVAS REGRAS:
+    NOVAS REGRAS (CORRETAS):
     - 10% de desconto para valores >= R$ 1.500,00
     - 15% de desconto para valores >= R$ 2.500,00
     - 20% de desconto para valores >= R$ 4.000,00
@@ -1425,13 +1425,17 @@ def gerar_botao_desconto_flutuante():
             icone = "💰"
             texto_desconto = "0% OFF"
         
+        # Calcular progresso baseado nas novas faixas
         if valor_base_total >= 4000:
             progresso = 100
         elif valor_base_total >= 2500:
+            # Entre 2500 e 4000: 75% a 100%
             progresso = 75 + ((valor_base_total - 2500) / 1500) * 25
         elif valor_base_total >= 1500:
-            progresso = ((valor_base_total - 1500) / 1000) * 75
+            # Entre 1500 e 2500: 50% a 75%
+            progresso = 50 + ((valor_base_total - 1500) / 1000) * 25
         else:
+            # Abaixo de 1500: 0% a 50%
             progresso = (valor_base_total / 1500) * 50
         
         progresso = min(100, max(0, progresso))
