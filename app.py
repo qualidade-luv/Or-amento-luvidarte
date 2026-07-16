@@ -1192,7 +1192,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR CARD DE DESCONTO PROFISSIONAL - CORRIGIDA
+# FUNÇÃO PARA EXIBIR CARD DE DESCONTO - CORRIGIDA
 # ============================================
 
 def exibir_cabecalho_carrinho():
@@ -1208,9 +1208,8 @@ def exibir_cabecalho_carrinho():
     
     resumo_header = calcular_resumo_carrinho()
     
-    # Se não houver itens, mostra carrinho vazio
+    # Se não houver itens, não mostra nada
     if resumo_header['total_itens'] == 0:
-        st.info("🛒 Carrinho vazio")
         return
     
     # Calcula o desconto
@@ -1247,132 +1246,143 @@ def exibir_cabecalho_carrinho():
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD USANDO COLUNAS DO STREAMLIT + CSS
+    # CARD DE DESCONTO - VERSÃO FINAL
     # ============================================
     
-    # CSS para estilizar o card
+    # Monta o texto de promoção
+    promo_text = ""
+    if tem_promo:
+        promo_text = f" 🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} (não entram no desconto)"
+    
+    # CSS do card
     st.markdown("""
     <style>
-    .card-desconto-container {
+    .card-desconto-final {
         background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
         border-radius: 16px;
-        padding: 12px 18px;
-        margin: 10px 0 20px 0;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        padding: 10px 16px;
+        margin: 10px 0 15px 0;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
         border: 1px solid #E8E0D0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
     }
-    .card-desconto-container .info-text {
+    .card-desconto-final .info-left {
         display: flex;
         align-items: center;
         gap: 10px;
         flex-wrap: wrap;
     }
-    .card-desconto-container .info-text .destaque {
+    .card-desconto-final .icone {
+        font-size: 20px;
+        flex-shrink: 0;
+    }
+    .card-desconto-final .txt-desconto {
         font-size: 15px;
         font-weight: 800;
         color: #D32F2F;
     }
-    .card-desconto-container .info-text .base {
+    .card-desconto-final .txt-base {
         font-size: 15px;
         font-weight: 700;
         color: #2E7D32;
     }
-    .card-desconto-container .info-text .falta {
+    .card-desconto-final .txt-faltante {
         font-size: 15px;
         font-weight: 600;
         color: #D32F2F;
     }
-    .card-desconto-container .info-text .promo {
+    .card-desconto-final .txt-promo {
         font-size: 12px;
         font-weight: 600;
         color: #D32F2F;
         background: rgba(211,47,47,0.1);
-        padding: 1px 10px;
+        padding: 2px 10px;
         border-radius: 4px;
     }
-    .card-desconto-container .info-text .sep {
+    .card-desconto-final .sep {
         color: #E0D5C0;
         font-size: 15px;
         font-weight: 300;
     }
-    .card-desconto-container .link-carrinho {
+    .card-desconto-final .link-carrinho {
         font-size: 15px;
         font-weight: 700;
         color: #2E7D32;
         text-decoration: none;
-        padding: 5px 14px;
+        padding: 6px 16px;
         border-radius: 8px;
         background: rgba(46,125,50,0.08);
         transition: all 0.3s ease;
         white-space: nowrap;
+        flex-shrink: 0;
         cursor: pointer;
+        border: none;
         display: inline-block;
     }
-    .card-desconto-container .link-carrinho:hover {
+    .card-desconto-final .link-carrinho:hover {
         background: rgba(46,125,50,0.18);
         transform: translateY(-1px);
     }
-    .card-desconto-container .link-carrinho .icone {
-        margin-right: 6px;
+    .card-desconto-final .link-carrinho:active {
+        transform: translateY(0px);
     }
     @media (max-width: 768px) {
-        .card-desconto-container .info-text {
+        .card-desconto-final {
+            flex-direction: column;
+            align-items: stretch;
             gap: 6px;
         }
-        .card-desconto-container .info-text .destaque,
-        .card-desconto-container .info-text .base,
-        .card-desconto-container .info-text .falta {
+        .card-desconto-final .info-left {
+            gap: 6px;
+        }
+        .card-desconto-final .txt-desconto,
+        .card-desconto-final .txt-base,
+        .card-desconto-final .txt-faltante {
+            font-size: 13px;
+        }
+        .card-desconto-final .link-carrinho {
+            text-align: center;
             font-size: 13px;
         }
     }
     </style>
     """, unsafe_allow_html=True)
     
-    # Container do card
-    with st.container():
-        st.markdown('<div class="card-desconto-container">', unsafe_allow_html=True)
-        
-        # Usando colunas do Streamlit para layout
-        col_info, col_link = st.columns([3, 1])
-        
-        with col_info:
-            # Monta o texto das informações
-            info_parts = [
-                f'<span class="destaque">💎 Desconto: {desconto_texto}</span>',
-                f'<span class="sep">|</span>',
-                f'<span class="base">Base: {valor_base_fmt}</span>',
-                f'<span class="sep">|</span>',
-                f'<span class="falta">{mensagem_faltante}</span>'
-            ]
-            
-            if tem_promo:
-                promo_text = f" 🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
-                info_parts.append(f'<span class="promo">{promo_text}</span>')
-            
-            info_html = '<div class="info-text">' + ' '.join(info_parts) + '</div>'
-            st.markdown(info_html, unsafe_allow_html=True)
-        
-        with col_link:
-            # Link do carrinho usando HTML
-            st.markdown(f'''
-            <a class="link-carrinho" href="?page=carrinho">
-                🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}
-            </a>
-            ''', unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+    # HTML do card
+    st.markdown(f'''
+    <div class="card-desconto-final">
+        <div class="info-left">
+            <span class="icone">💎</span>
+            <span class="txt-desconto">Desconto: {desconto_texto}</span>
+            <span class="sep">|</span>
+            <span class="txt-base">Base: {valor_base_fmt}</span>
+            <span class="sep">|</span>
+            <span class="txt-faltante">{mensagem_faltante}</span>
+            {f'<span class="txt-promo">{promo_text}</span>' if tem_promo else ''}
+        </div>
+        <a class="link-carrinho" href="?page=carrinho">
+            🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}
+        </a>
+    </div>
+    ''', unsafe_allow_html=True)
     
     # Verifica se o link foi clicado
     verificar_abertura_carrinho()
-        
+
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
 # ============================================
 
 def verificar_abertura_carrinho():
+    """Verifica se o carrinho deve ser aberto via parâmetro na URL"""
     query_params = st.query_params
     if query_params.get('page') == 'carrinho':
         st.session_state.carrinho_aberto = True
+        # Remove o parâmetro da URL para não ficar repetindo
         st.query_params.clear()
         st.rerun()
 
@@ -2405,13 +2415,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# EXIBIR CARD DE DESCONTO PROFISSIONAL
-# ============================================
-exibir_cabecalho_carrinho()
-
-st.markdown("---")
-
-# ============================================
 # SIDEBAR COM FILTROS
 # ============================================
 st.sidebar.markdown('<div class="filtro-sidebar">🔍 FILTROS</div>', unsafe_allow_html=True)
@@ -2978,7 +2981,13 @@ if busca_referencia:
 
 total_encontrados = len(dados_filtrados)
 
+# ============================================
+# EXIBIR CARD DE DESCONTO - ABAIXO DO TÍTULO
+# ============================================
 st.markdown(f"## ✨ Produtos Encontrados: {total_encontrados}")
+
+# EXIBE O CARD DE DESCONTO AQUI - DEPOIS DO TÍTULO
+exibir_cabecalho_carrinho()
 
 st.markdown("---")
 
