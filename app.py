@@ -1196,7 +1196,7 @@ def calcular_faltante_para_desconto(valor_base):
 # ============================================
 
 def exibir_cabecalho_carrinho():
-    """Exibe o card de desconto profissional e botão do carrinho"""
+    """Exibe o card de desconto profissional e link do carrinho"""
     
     # FORÇAR RECÁLCULO
     if st.session_state.carrinho:
@@ -1247,45 +1247,55 @@ def exibir_cabecalho_carrinho():
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD USANDO APENAS STREAMLIT - SEM HTML
+    # CARD COM LINK EM NEGRITO
     # ============================================
     
-    # Card com fundo usando container e markdown simples
+    # Monta o texto de promoção
+    promo_text = ""
+    if tem_promo:
+        promo_text = f" 🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} (não entram no desconto)"
+    
+    # CSS do card
     st.markdown("""
     <style>
-    .card-simples {
+    .card-desconto-link {
         background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
         border-radius: 16px;
         padding: 14px 20px;
         margin: 10px 0 20px 0;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         border: 1px solid #E8E0D0;
-    }
-    .card-simples .linha-info {
         display: flex;
         align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
         gap: 10px;
+    }
+    .card-desconto-link .info-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
         flex-wrap: wrap;
     }
-    .card-simples .icone-pequeno {
-        font-size: 24px;
+    .card-desconto-link .icone {
+        font-size: 22px;
     }
-    .card-simples .txt-desconto {
+    .card-desconto-link .txt-desconto {
         font-size: 16px;
         font-weight: 800;
         color: #D32F2F;
     }
-    .card-simples .txt-base {
+    .card-desconto-link .txt-base {
         font-size: 16px;
         font-weight: 700;
         color: #2E7D32;
     }
-    .card-simples .txt-faltante {
+    .card-desconto-link .txt-faltante {
         font-size: 16px;
         font-weight: 600;
         color: #D32F2F;
     }
-    .card-simples .txt-promo {
+    .card-desconto-link .txt-promo {
         font-size: 13px;
         font-weight: 600;
         color: #D32F2F;
@@ -1293,59 +1303,68 @@ def exibir_cabecalho_carrinho():
         padding: 2px 12px;
         border-radius: 4px;
     }
-    .card-simples .separador {
+    .card-desconto-link .separador {
         color: #E0D5C0;
         font-size: 16px;
+        font-weight: 300;
     }
-    .card-simples .botao-area {
-        margin-top: 10px;
+    .card-desconto-link .link-carrinho {
+        font-size: 16px;
+        font-weight: 700;
+        color: #2E7D32;
+        cursor: pointer;
+        text-decoration: none;
+        padding: 6px 16px;
+        border-radius: 8px;
+        background: rgba(46,125,50,0.08);
+        transition: all 0.3s ease;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .card-desconto-link .link-carrinho:hover {
+        background: rgba(46,125,50,0.15);
+        transform: translateY(-1px);
+    }
+    @media (max-width: 768px) {
+        .card-desconto-link {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .card-desconto-link .info-left {
+            gap: 8px;
+        }
+        .card-desconto-link .link-carrinho {
+            text-align: center;
+        }
+        .card-desconto-link .txt-desconto,
+        .card-desconto-link .txt-base,
+        .card-desconto-link .txt-faltante {
+            font-size: 14px;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
     
-    # Container do card
-    with st.container():
-        st.markdown('<div class="card-simples">', unsafe_allow_html=True)
-        
-        # PRIMEIRA LINHA: Ícone + Informações
-        col_icon, col_info = st.columns([1, 10])
-        
-        with col_icon:
-            st.markdown('<div class="icone-pequeno">💎</div>', unsafe_allow_html=True)
-        
-        with col_info:
-            # Monta o texto das informações
-            info_html = f'''
-            <div class="linha-info">
-                <span class="txt-desconto">Desconto: {desconto_texto}</span>
-                <span class="separador">|</span>
-                <span class="txt-base">Base: {valor_base_fmt}</span>
-                <span class="separador">|</span>
-                <span class="txt-faltante">{mensagem_faltante}</span>
-            '''
-            
-            if tem_promo:
-                info_promo_text = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} (não entram no desconto)"
-                info_html += f'<span class="txt-promo">{info_promo_text}</span>'
-            
-            info_html += '</div>'
-            st.markdown(info_html, unsafe_allow_html=True)
-        
-        # SEGUNDA LINHA: Botão do carrinho (Streamlit puro)
-        st.markdown('<div class="botao-area">', unsafe_allow_html=True)
-        
-        # Botão usando Streamlit - FUNCIONA!
-        timestamp = datetime.now().strftime('%H%M%S%f')
-        if st.button(
-            f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-            key=f"btn_carrinho_{timestamp}",
-            use_container_width=True
-        ):
-            st.session_state.carrinho_aberto = True
-            st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    # HTML do card com link
+    st.markdown(f'''
+    <div class="card-desconto-link">
+        <div class="info-left">
+            <span class="icone">💎</span>
+            <span class="txt-desconto">Desconto: {desconto_texto}</span>
+            <span class="separador">|</span>
+            <span class="txt-base">Base: {valor_base_fmt}</span>
+            <span class="separador">|</span>
+            <span class="txt-faltante">{mensagem_faltante}</span>
+            {f'<span class="txt-promo">{promo_text}</span>' if tem_promo else ''}
+        </div>
+        <a class="link-carrinho" onclick="window.location.reload();" href="?page=carrinho">
+            🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}
+        </a>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    # Verifica se o link foi clicado via parâmetro na URL
+    verificar_abertura_carrinho()
         
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
