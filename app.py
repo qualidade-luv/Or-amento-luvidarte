@@ -26,6 +26,7 @@ from email import encoders
 import os
 import traceback
 import random
+from streamlit.components.v1 import html as st_html
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
@@ -1433,7 +1434,13 @@ def calcular_faltante_para_desconto_para_carrinho(carrinho):
     else:
         return 0, 0
 
+# ============================================
+# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM ST_COMPONENTS
+# ============================================
+
 def gerar_botao_desconto_flutuante():
+    """Gera o HTML do balão de desconto usando st.components.v1.html"""
+    
     if st.session_state.carrinho:
         # Usa a nova função que considera apenas itens NÃO promocionais
         itens_promo = [item for item in st.session_state.carrinho if item.get('eh_promocao', False)]
@@ -1508,170 +1515,163 @@ def gerar_botao_desconto_flutuante():
         </div>
         """
     
-    # CORREÇÃO: Usar aspas duplas no HTML e escapar corretamente
     html = f'''
-    <style>
-    @keyframes slideInRight {{
-        from {{ transform: translateX(100%); opacity: 0; }}
-        to {{ transform: translateX(0); opacity: 1; }}
-    }}
-    
-    @keyframes pulse {{
-        0% {{ transform: scale(1); }}
-        50% {{ transform: scale(1.05); }}
-        100% {{ transform: scale(1); }}
-    }}
-    
-    .desconto-float {{
-        position: fixed;
-        bottom: 100px;
-        right: 20px;
-        z-index: 99999;
-        animation: slideInRight 0.5s ease-out;
-        cursor: pointer;
-    }}
-    
-    .desconto-card {{
-        background: linear-gradient(135deg, #FFF, #F5F5F5);
-        border-radius: 16px;
-        padding: 12px 18px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        border-left: 4px solid {cor};
-        min-width: 280px;
-        max-width: 320px;
-        transition: all 0.3s ease;
-    }}
-    
-    .desconto-card:hover {{
-        transform: translateY(-5px);
-        box-shadow: 0 12px 28px rgba(0,0,0,0.2);
-    }}
-    
-    .desconto-header {{
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 10px;
-    }}
-    
-    .desconto-icon {{
-        font-size: 28px;
-        animation: pulse 2s infinite;
-    }}
-    
-    .desconto-title {{
-        font-size: 14px;
-        font-weight: bold;
-        color: #333;
-        margin: 0;
-    }}
-    
-    .desconto-message {{
-        font-size: 12px;
-        color: #555;
-        margin: 8px 0;
-        line-height: 1.4;
-    }}
-    
-    .desconto-value {{
-        font-size: 18px;
-        font-weight: bold;
-        color: {cor};
-        margin: 5px 0;
-    }}
-    
-    .progress-bar-container {{
-        background-color: #E0E0E0;
-        border-radius: 10px;
-        height: 8px;
-        margin: 10px 0;
-        overflow: hidden;
-    }}
-    
-    .progress-bar-fill {{
-        background: linear-gradient(90deg, {cor}, #FF9800);
-        width: {progresso}%;
-        height: 100%;
-        border-radius: 10px;
-        transition: width 0.5s ease;
-    }}
-    
-    .progress-labels {{
-        display: flex;
-        justify-content: space-between;
-        font-size: 9px;
-        color: #666;
-        margin-top: 5px;
-    }}
-    
-    .close-btn {{
-        position: absolute;
-        top: 5px;
-        right: 10px;
-        background: none;
-        border: none;
-        font-size: 16px;
-        cursor: pointer;
-        color: #999;
-        transition: color 0.2s;
-    }}
-    
-    .close-btn:hover {{
-        color: #333;
-    }}
-    
-    @media (max-width: 768px) {{
-        .desconto-card {{
-            min-width: 260px;
-            padding: 10px 15px;
-        }}
-        .desconto-float {{
-            bottom: 90px;
-            right: 10px;
-        }}
-    }}
-    </style>
-    
-    <div class="desconto-float" id="descontoFloat">
-        <div class="desconto-card">
-            <button class="close-btn" onclick="document.getElementById('descontoFloat').style.display='none'">✕</button>
-            <div class="desconto-header">
-                <div class="desconto-icon">{icone}</div>
-                <div>
-                    <div class="desconto-title">💎 DESCONTO POR VOLUME</div>
-                    <div class="desconto-value">{texto_desconto}</div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @keyframes slideInRight {{
+                from {{ transform: translateX(100%); opacity: 0; }}
+                to {{ transform: translateX(0); opacity: 1; }}
+            }}
+            
+            @keyframes pulse {{
+                0% {{ transform: scale(1); }}
+                50% {{ transform: scale(1.05); }}
+                100% {{ transform: scale(1); }}
+            }}
+            
+            .desconto-float {{
+                position: fixed;
+                bottom: 100px;
+                right: 20px;
+                z-index: 99999;
+                animation: slideInRight 0.5s ease-out;
+                cursor: pointer;
+            }}
+            
+            .desconto-card {{
+                background: linear-gradient(135deg, #FFF, #F5F5F5);
+                border-radius: 16px;
+                padding: 12px 18px;
+                box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+                border-left: 4px solid {cor};
+                min-width: 280px;
+                max-width: 320px;
+                transition: all 0.3s ease;
+                position: relative;
+            }}
+            
+            .desconto-card:hover {{
+                transform: translateY(-5px);
+                box-shadow: 0 12px 28px rgba(0,0,0,0.2);
+            }}
+            
+            .desconto-header {{
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 10px;
+            }}
+            
+            .desconto-icon {{
+                font-size: 28px;
+                animation: pulse 2s infinite;
+            }}
+            
+            .desconto-title {{
+                font-size: 14px;
+                font-weight: bold;
+                color: #333;
+                margin: 0;
+            }}
+            
+            .desconto-message {{
+                font-size: 12px;
+                color: #555;
+                margin: 8px 0;
+                line-height: 1.4;
+            }}
+            
+            .desconto-value {{
+                font-size: 18px;
+                font-weight: bold;
+                color: {cor};
+                margin: 5px 0;
+            }}
+            
+            .progress-bar-container {{
+                background-color: #E0E0E0;
+                border-radius: 10px;
+                height: 8px;
+                margin: 10px 0;
+                overflow: hidden;
+            }}
+            
+            .progress-bar-fill {{
+                background: linear-gradient(90deg, {cor}, #FF9800);
+                width: {progresso}%;
+                height: 100%;
+                border-radius: 10px;
+                transition: width 0.5s ease;
+            }}
+            
+            .progress-labels {{
+                display: flex;
+                justify-content: space-between;
+                font-size: 9px;
+                color: #666;
+                margin-top: 5px;
+            }}
+            
+            .close-btn {{
+                position: absolute;
+                top: 5px;
+                right: 10px;
+                background: none;
+                border: none;
+                font-size: 16px;
+                cursor: pointer;
+                color: #999;
+                transition: color 0.2s;
+            }}
+            
+            .close-btn:hover {{
+                color: #333;
+            }}
+            
+            @media (max-width: 768px) {{
+                .desconto-card {{
+                    min-width: 260px;
+                    padding: 10px 15px;
+                }}
+                .desconto-float {{
+                    bottom: 90px;
+                    right: 10px;
+                }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="desconto-float" id="descontoFloat">
+            <div class="desconto-card">
+                <button class="close-btn" onclick="document.getElementById('descontoFloat').style.display='none'">✕</button>
+                <div class="desconto-header">
+                    <div class="desconto-icon">{icone}</div>
+                    <div>
+                        <div class="desconto-title">💎 DESCONTO POR VOLUME</div>
+                        <div class="desconto-value">{texto_desconto}</div>
+                    </div>
+                </div>
+                <div class="desconto-message">{mensagem}</div>
+                {badge_promo}
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill"></div>
+                </div>
+                <div class="progress-labels">
+                    <span>💰 R$ 0</span>
+                    <span>🎯 10% (R$ 1.500)</span>
+                    <span>🏅 15% (R$ 2.500)</span>
+                    <span>🏆 20% (R$ 4.000)</span>
                 </div>
             </div>
-            <div class="desconto-message">{mensagem}</div>
-            {badge_promo}
-            <div class="progress-bar-container">
-                <div class="progress-bar-fill"></div>
-            </div>
-            <div class="progress-labels">
-                <span>💰 R$ 0</span>
-                <span>🎯 10% (R$ 1.500)</span>
-                <span>🏅 15% (R$ 2.500)</span>
-                <span>🏆 20% (R$ 4.000)</span>
-            </div>
         </div>
-    </div>
+    </body>
+    </html>
     '''
     
     return html
-
-# NA CHAMADA DA FUNÇÃO, usar st.markdown com unsafe_allow_html=True
-# st.markdown(gerar_botao_desconto_flutuante(), unsafe_allow_html=True)
-
-def calcular_faltante_para_desconto(valor_base):
-    """Calcula quanto falta para atingir a próxima faixa de desconto"""
-    if valor_base < 1500:
-        return 1500 - valor_base, 10
-    elif valor_base < 2500:
-        return 2500 - valor_base, 15
-    elif valor_base < 4000:
-        return 4000 - valor_base, 20
-    else:
-        return 0, 0
 
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
@@ -3317,9 +3317,10 @@ with ci4:
 st.markdown("---")
 
 # ============================================
-# BOTÃO FLUTUANTE DE DESCONTO
+# BOTÃO FLUTUANTE DE DESCONTO - USANDO st.components.v1.html
 # ============================================
-st.markdown(gerar_botao_desconto_flutuante(), unsafe_allow_html=True)
+# Renderiza o balão de desconto usando components.html para evitar escape do HTML
+st_html(gerar_botao_desconto_flutuante(), height=200)
 
 # ============================================
 # GRID DE PRODUTOS
