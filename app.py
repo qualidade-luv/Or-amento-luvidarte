@@ -31,16 +31,9 @@ import random
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
 # ============================================
 
-# Desabilitar warnings de SSL (se necessário)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Configurar timeout global
 socket.setdefaulttimeout(30)
-
-# Configurações de sessão - tempo limite (em segundos)
-SESSION_TIMEOUT = 1800  # 30 minutos
-
-# Configurar timezone do Brasil
+SESSION_TIMEOUT = 1800
 TIMEZONE_BR = pytz.timezone('America/Sao_Paulo')
 
 # ============================================
@@ -248,7 +241,7 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         return False, str(e)
 
 # ============================================
-# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS
+# SISTEMA DE NOTIFICAÇÕES
 # ============================================
 
 def carregar_notificacoes_google_sheets():
@@ -1199,7 +1192,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR CARD DE DESCONTO PROFISSIONAL
+# FUNÇÃO PARA EXIBIR CARD DE DESCONTO PROFISSIONAL - CORRIGIDA
 # ============================================
 
 def exibir_cabecalho_carrinho():
@@ -1215,15 +1208,23 @@ def exibir_cabecalho_carrinho():
     
     resumo_header = calcular_resumo_carrinho()
     
+    # Se não houver itens, mostra carrinho vazio
+    if resumo_header['total_itens'] == 0:
+        st.markdown("""
+        <div style="background: #f5f5f5; border-radius: 12px; padding: 12px 20px; margin: 10px 0; border: 1px dashed #ccc;">
+            <span style="color: #666; font-size: 14px; font-weight: 500;">🛒 Carrinho vazio</span>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
     # Calcula o desconto
     valor_base_nao_promo = 0
     itens_promo = []
-    if st.session_state.carrinho:
-        for item in st.session_state.carrinho:
-            if not item.get('eh_promocao', False):
-                valor_base_nao_promo += item['preco_final'] * item['quantidade']
-            else:
-                itens_promo.append(item)
+    for item in st.session_state.carrinho:
+        if not item.get('eh_promocao', False):
+            valor_base_nao_promo += item['preco_final'] * item['quantidade']
+        else:
+            itens_promo.append(item)
     
     tem_promo = len(itens_promo) > 0
     valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
@@ -1261,280 +1262,79 @@ def exibir_cabecalho_carrinho():
     if tem_promo:
         info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
     
-    # CSS DO CARD PROFISSIONAL
-    st.markdown("""
-    <style>
-    /* CARD DE DESCONTO PROFISSIONAL */
-    .discount-card {
-        background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
-        border-radius: 16px;
-        padding: 20px 25px;
-        margin: 15px 0 20px 0;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        border: 1px solid #E8E0D0;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 15px;
-        transition: all 0.3s ease;
-    }
+    total_fmt_header = formatar_moeda(resumo_header['total_geral'])
+    valor_base_fmt = formatar_moeda(valor_base_nao_promo)
+    qtd_itens = resumo_header['total_itens']
     
-    .discount-card:hover {
-        box-shadow: 0 6px 30px rgba(0,0,0,0.12);
-        transform: translateY(-2px);
-    }
+    # Determina cores
+    cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
+    cor_progresso = "linear-gradient(90deg, #FF9800, #F44336)" if desconto_percentual > 0 else "linear-gradient(90deg, #9E9E9E, #BDBDBD)"
     
-    .discount-card .discount-left {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        flex-wrap: wrap;
-        flex: 1;
-        min-width: 200px;
-    }
-    
-    .discount-card .discount-icon {
-        font-size: 32px;
-        background: linear-gradient(135deg, #FF9800, #F57C00);
-        width: 50px;
-        height: 50px;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        flex-shrink: 0;
-    }
-    
-    .discount-card .discount-info {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-    }
-    
-    .discount-card .discount-percent {
-        font-size: 22px;
-        font-weight: 800;
-        color: #D32F2F;
-        line-height: 1.2;
-    }
-    
-    .discount-card .discount-percent span {
-        background: rgba(211, 47, 47, 0.1);
-        padding: 2px 12px;
-        border-radius: 6px;
-        display: inline-block;
-    }
-    
-    .discount-card .discount-detail {
-        font-size: 14px;
-        color: #555;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-    
-    .discount-card .discount-detail .label {
-        color: #888;
-        font-weight: 500;
-    }
-    
-    .discount-card .discount-detail .value {
-        font-weight: 700;
-        color: #2E7D32;
-        background: rgba(46, 125, 50, 0.08);
-        padding: 2px 10px;
-        border-radius: 4px;
-    }
-    
-    .discount-card .discount-detail .faltante-text {
-        font-weight: 600;
-        color: #D32F2F;
-        background: rgba(211, 47, 47, 0.08);
-        padding: 2px 10px;
-        border-radius: 4px;
-    }
-    
-    .discount-card .discount-progress {
-        flex: 0 0 180px;
-        min-width: 120px;
-    }
-    
-    .discount-card .discount-progress .progress-track {
-        width: 100%;
-        height: 6px;
-        background: #E8E0D0;
-        border-radius: 4px;
-        overflow: hidden;
-        margin-top: 6px;
-    }
-    
-    .discount-card .discount-progress .progress-fill {
-        height: 100%;
-        border-radius: 4px;
-        transition: width 0.8s ease;
-        background: linear-gradient(90deg, #FF9800, #F44336);
-    }
-    
-    .discount-card .discount-progress .progress-label {
-        display: flex;
-        justify-content: space-between;
-        font-size: 11px;
-        color: #888;
-        font-weight: 500;
-    }
-    
-    .discount-card .discount-promo {
-        font-size: 12px;
-        color: #D32F2F;
-        background: rgba(211, 47, 47, 0.08);
-        padding: 2px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        white-space: nowrap;
-    }
-    
-    .discount-card .cart-btn-wrapper {
-        flex-shrink: 0;
-    }
-    
-    .discount-card .cart-btn-wrapper .stButton button {
-        background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
-        color: white !important;
-        border: none !important;
-        padding: 12px 28px !important;
-        border-radius: 12px !important;
-        font-weight: 700 !important;
-        font-size: 15px !important;
-        cursor: pointer !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 15px rgba(46, 125, 50, 0.25) !important;
-        white-space: nowrap !important;
-    }
-    
-    .discount-card .cart-btn-wrapper .stButton button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 25px rgba(46, 125, 50, 0.35) !important;
-    }
-    
-    .discount-card .cart-btn-wrapper .stButton button .badge {
-        background: #FF6B6B;
-        color: white;
-        border-radius: 50%;
-        padding: 1px 8px;
-        font-size: 12px;
-        font-weight: 700;
-        margin-left: 6px;
-    }
-    
-    .cart-empty-card {
-        background: #f5f5f5;
-        border-radius: 12px;
-        padding: 12px 20px;
-        margin: 10px 0;
-        color: #666;
-        font-size: 14px;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        border: 1px dashed #ccc;
-    }
-    
-    @media (max-width: 768px) {
-        .discount-card {
-            padding: 15px 18px;
-            flex-direction: column;
-            align-items: stretch;
-        }
-        .discount-card .discount-left {
-            min-width: unset;
-        }
-        .discount-card .discount-progress {
-            flex: 1;
-        }
-        .discount-card .cart-btn-wrapper .stButton button {
-            width: 100%;
-            justify-content: center;
-            padding: 10px 20px !important;
-            font-size: 13px !important;
-        }
-        .discount-card .discount-icon {
-            width: 40px;
-            height: 40px;
-            font-size: 20px;
-        }
-        .discount-card .discount-percent {
-            font-size: 18px;
-        }
-        .discount-card .discount-detail {
-            font-size: 12px;
-        }
-    }
-    </style>
+    # HTML do card - ESTRUTURA SIMPLIFICADA E CORRIGIDA
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #FFFFFF, #FFF8E1); 
+                border-radius: 16px; 
+                padding: 18px 22px; 
+                margin: 12px 0 20px 0; 
+                box-shadow: 0 4px 20px rgba(0,0,0,0.08); 
+                border: 1px solid #E8E0D0;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;">
+        
+        <!-- Lado esquerdo - informações do desconto -->
+        <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 200px; flex-wrap: wrap;">
+            <div style="background: linear-gradient(135deg, {cor_desconto}, {cor_desconto}dd); 
+                        width: 44px; height: 44px; border-radius: 12px; 
+                        display: flex; align-items: center; justify-content: center; 
+                        font-size: 22px; flex-shrink: 0;">
+                💎
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="font-size: 20px; font-weight: 800; color: #D32F2F; line-height: 1.2;">
+                    Desconto: {desconto_texto}
+                </div>
+                <div style="font-size: 13px; color: #555; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="color: #888; font-weight: 500;">Base:</span>
+                    <span style="font-weight: 700; color: #2E7D32; background: rgba(46,125,50,0.08); padding: 1px 10px; border-radius: 4px;">{valor_base_fmt}</span>
+                    <span style="color: #ccc;">|</span>
+                    <span style="font-weight: 600; color: #D32F2F; background: rgba(211,47,47,0.08); padding: 1px 10px; border-radius: 4px;">{mensagem_faltante}</span>
+                    {f'<span style="font-size: 12px; color: #D32F2F; background: rgba(211,47,47,0.08); padding: 1px 12px; border-radius: 4px; font-weight: 600;">{info_promo}</span>' if tem_promo else ''}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Barra de progresso -->
+        <div style="flex: 0 0 160px; min-width: 100px;">
+            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888; font-weight: 500;">
+                <span>0%</span>
+                <span>{int(progresso)}%</span>
+                <span>100%</span>
+            </div>
+            <div style="width: 100%; height: 5px; background: #E8E0D0; border-radius: 4px; overflow: hidden; margin-top: 3px;">
+                <div style="width: {progresso}%; height: 100%; border-radius: 4px; transition: width 0.8s ease; background: {cor_progresso};"></div>
+            </div>
+        </div>
+        
+        <!-- Botão do carrinho -->
+        <div style="flex-shrink: 0;">
     """, unsafe_allow_html=True)
     
-    # Exibe o card
-    if resumo_header['total_itens'] > 0:
-        total_fmt_header = formatar_moeda(resumo_header['total_geral'])
-        valor_base_fmt = formatar_moeda(valor_base_nao_promo)
-        qtd_itens = resumo_header['total_itens']
-        
-        # Determina cores
-        cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
-        cor_progresso = "linear-gradient(90deg, #FF9800, #F44336)" if desconto_percentual > 0 else "linear-gradient(90deg, #9E9E9E, #BDBDBD)"
-        
-        # HTML do card
-        st.markdown(f'''
-        <div class="discount-card">
-            <div class="discount-left">
-                <div class="discount-icon" style="background: linear-gradient(135deg, {cor_desconto}, {cor_desconto}dd);">
-                    💎
-                </div>
-                <div class="discount-info">
-                    <div class="discount-percent">
-                        <span>Desconto: {desconto_texto}</span>
-                    </div>
-                    <div class="discount-detail">
-                        <span class="label">Base:</span>
-                        <span class="value">{valor_base_fmt}</span>
-                        <span style="color:#ccc;margin:0 4px;">|</span>
-                        <span class="faltante-text">{mensagem_faltante}</span>
-                        {f'<span class="discount-promo">{info_promo}</span>' if tem_promo else ''}
-                    </div>
-                </div>
-            </div>
-            <div class="discount-progress">
-                <div class="progress-label">
-                    <span>0%</span>
-                    <span>{int(progresso)}%</span>
-                    <span>100%</span>
-                </div>
-                <div class="progress-track">
-                    <div class="progress-fill" style="width: {progresso}%; background: {cor_progresso};"></div>
-                </div>
-            </div>
-            <div class="cart-btn-wrapper">
-        ''', unsafe_allow_html=True)
-        
-        # Botão do carrinho
-        timestamp = datetime.now().strftime('%H%M%S%f')
-        if st.button(
-            f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-            key=f"btn_carrinho_header_{timestamp}",
-            use_container_width=True
-        ):
-            abrir_carrinho()
-        
-        st.markdown('</div></div>', unsafe_allow_html=True)
-    else:
-        st.markdown('''
-        <div class="cart-empty-card">
-            🛒 Carrinho vazio
+    # Botão do carrinho
+    timestamp = datetime.now().strftime('%H%M%S%f')
+    if st.button(
+        f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
+        key=f"btn_carrinho_header_{timestamp}",
+        use_container_width=True
+    ):
+        abrir_carrinho()
+    
+    st.markdown("""
         </div>
-        ''', unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
 
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
