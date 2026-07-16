@@ -1675,7 +1675,7 @@ def exibir_botao_carrinho_profissional():
                 </div>
             </div>
             <div>
-                <a href="?page=carrinho" class="cart-link" style="font-weight: 700 !important; text-decoration: none !important;">
+                <a href="?page=carrinho" class="cart-link">
                     <span class="cart-icon">🛒</span>
                     <span>Meu Carrinho</span>
                     <span class="badge-link">{resumo_header['total_itens']}</span>
@@ -3328,10 +3328,6 @@ with ci4:
         st.info(f"📦 *Família:* {grupo_escolhido}")
 
 st.markdown("---")
-
-# ============================================
-# REMOVIDO O BOTÃO FLUTUANTE - AGORA EXIBIDO AO LADO DO CARRINHO
-# ============================================
 
 # ============================================
 # GRID DE PRODUTOS
