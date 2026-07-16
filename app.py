@@ -1252,7 +1252,7 @@ def exibir_cabecalho_carrinho():
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD COM INFORMAÇÕES DE PROMOÇÃO
+    # CARD COM INFORMAÇÕES DE PROMOÇÃO - SEM COLUNAS VAZIAS
     # ============================================
     
     # Container principal
@@ -1307,7 +1307,7 @@ def exibir_cabecalho_carrinho():
         white-space: nowrap;
     }}
     .card-desconto-header .texto-promo {{
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         color: #D32F2F;
         background: rgba(211,47,47,0.1);
@@ -1371,18 +1371,16 @@ def exibir_cabecalho_carrinho():
             <div class="btn-wrapper">
     """, unsafe_allow_html=True)
     
-    # Botão do carrinho - USANDO st.button com a função correta
+    # Botão do carrinho - SEM COLUNAS VAZIAS
     timestamp = datetime.now().strftime('%H%M%S%f')
-    col_btn, col_empty = st.columns([1, 0])
-    with col_btn:
-        if st.button(
-            f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-            key=f"btn_carrinho_header_{timestamp}",
-            use_container_width=True
-        ):
-            # Forçar abertura do carrinho
-            st.session_state.carrinho_aberto = True
-            st.rerun()
+    if st.button(
+        f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
+        key=f"btn_carrinho_header_{timestamp}",
+        use_container_width=False
+    ):
+        # Forçar abertura do carrinho
+        st.session_state.carrinho_aberto = True
+        st.rerun()
     
     # Fecha o card
     st.markdown("""
