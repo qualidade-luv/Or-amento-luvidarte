@@ -1503,12 +1503,13 @@ def gerar_botao_desconto_flutuante():
     badge_promo = ""
     if tem_promo:
         badge_promo = f"""
-        <div style='background-color: #D32F2F; color: white; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; display: inline-block; margin-top: 5px;'>
+        <div style="background-color: #D32F2F; color: white; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; display: inline-block; margin-top: 5px;">
             🔥 {len(itens_promo)} item(ns) em promoção (sem desconto por volume)
         </div>
         """
     
-    html = f"""
+    # CORREÇÃO: Usar aspas duplas no HTML e escapar corretamente
+    html = f'''
     <style>
     @keyframes slideInRight {{
         from {{ transform: translateX(100%); opacity: 0; }}
@@ -1654,9 +1655,12 @@ def gerar_botao_desconto_flutuante():
             </div>
         </div>
     </div>
-    """
+    '''
     
     return html
+
+# NA CHAMADA DA FUNÇÃO, usar st.markdown com unsafe_allow_html=True
+# st.markdown(gerar_botao_desconto_flutuante(), unsafe_allow_html=True)
 
 def calcular_faltante_para_desconto(valor_base):
     """Calcula quanto falta para atingir a próxima faixa de desconto"""
