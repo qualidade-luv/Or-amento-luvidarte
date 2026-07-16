@@ -1407,17 +1407,17 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR BOTÃO DO CARRINHO PROFISSIONAL
+# FUNÇÃO PARA EXIBIR BOTÃO DO CARRINHO E BALÃO DE DESCONTO
 # ============================================
 
 def exibir_botao_carrinho_profissional():
-    """Exibe o botão do carrinho com design profissional"""
+    """Exibe o botão do carrinho com design profissional e balão de desconto ao lado"""
     resumo_header = calcular_resumo_carrinho()
     
     # CSS para o botão do carrinho
     st.markdown("""
     <style>
-    .cart-button-container {
+    .cart-header-container {
         display: flex;
         justify-content: flex-end;
         align-items: center;
@@ -1433,7 +1433,7 @@ def exibir_botao_carrinho_profissional():
         background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
         color: white !important;
         border: none !important;
-        padding: 12px 28px !important;
+        padding: 12px 24px !important;
         border-radius: 12px !important;
         font-weight: 700 !important;
         font-size: 14px !important;
@@ -1441,13 +1441,14 @@ def exibir_botao_carrinho_profissional():
         transition: all 0.3s ease !important;
         display: inline-flex !important;
         align-items: center !important;
-        gap: 12px !important;
+        gap: 10px !important;
         box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3) !important;
         text-decoration: none !important;
         position: relative !important;
         overflow: hidden !important;
         border: none !important;
         outline: none !important;
+        font-family: inherit !important;
     }
     
     .cart-button:hover {
@@ -1478,11 +1479,11 @@ def exibir_botao_carrinho_profissional():
     }
     
     .cart-button .cart-icon {
-        font-size: 20px;
+        font-size: 18px;
     }
     
     .cart-button .cart-total {
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 700;
     }
     
@@ -1512,34 +1513,75 @@ def exibir_botao_carrinho_profissional():
         gap: 8px;
     }
     
-    .desconto-mini-badge {
+    /* Balão de desconto estilo profissional */
+    .desconto-balao {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 12px;
         background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
-        padding: 8px 16px;
+        padding: 8px 18px;
         border-radius: 12px;
         border-left: 4px solid #FF9800;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         font-size: 13px;
         font-weight: 600;
         color: #E65100;
         white-space: nowrap;
+        transition: all 0.3s ease;
     }
     
-    .desconto-mini-badge .percent {
-        font-size: 16px;
+    .desconto-balao:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+    }
+    
+    .desconto-balao .percent {
+        font-size: 18px;
         font-weight: 800;
         color: #D32F2F;
+        background: rgba(211, 47, 47, 0.1);
+        padding: 2px 10px;
+        border-radius: 8px;
     }
     
-    .desconto-mini-badge .value {
+    .desconto-balao .value {
         font-size: 14px;
         font-weight: 700;
         color: #2E7D32;
+        background: rgba(46, 125, 50, 0.08);
+        padding: 2px 10px;
+        border-radius: 8px;
+    }
+    
+    .desconto-balao .icon {
+        font-size: 20px;
+    }
+    
+    .desconto-balao .separator {
+        color: #E0E0E0;
+        font-weight: 300;
+    }
+    
+    /* Progresso mini */
+    .progress-mini {
+        width: 80px;
+        height: 4px;
+        background: #E0E0E0;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 0 4px;
+    }
+    
+    .progress-mini-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
     }
     
     @media (max-width: 768px) {
+        .cart-header-container {
+            gap: 10px;
+        }
         .cart-button {
             padding: 10px 16px !important;
             font-size: 12px !important;
@@ -1552,12 +1594,16 @@ def exibir_botao_carrinho_profissional():
         .cart-button .cart-total {
             font-size: 12px !important;
         }
-        .desconto-mini-badge {
+        .desconto-balao {
             font-size: 11px !important;
             padding: 6px 12px !important;
+            gap: 8px !important;
         }
-        .desconto-mini-badge .percent {
-            font-size: 13px !important;
+        .desconto-balao .percent {
+            font-size: 14px !important;
+        }
+        .progress-mini {
+            width: 50px !important;
         }
     }
     </style>
@@ -1574,20 +1620,34 @@ def exibir_botao_carrinho_profissional():
     desconto_texto = f"{int(desconto_percentual * 100)}% OFF"
     cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
     
+    # Calcula progresso
+    if valor_base_nao_promo >= 4000:
+        progresso = 100
+    elif valor_base_nao_promo >= 2500:
+        progresso = 75 + ((valor_base_nao_promo - 2500) / 1500) * 25
+    elif valor_base_nao_promo >= 1500:
+        progresso = 50 + ((valor_base_nao_promo - 1500) / 1000) * 25
+    else:
+        progresso = (valor_base_nao_promo / 1500) * 50
+    progresso = min(100, max(0, progresso))
+    
     # Container com botão do carrinho e badge de desconto
     if resumo_header['total_itens'] > 0:
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         
         st.markdown(f'''
-        <div class="cart-button-container">
-            <div class="desconto-mini-badge" style="border-left-color: {cor_desconto};">
-                <span>💎</span>
+        <div class="cart-header-container">
+            <div class="desconto-balao" style="border-left-color: {cor_desconto};">
+                <span class="icon">💎</span>
                 <span>Desconto: <span class="percent">{desconto_texto}</span></span>
-                <span>|</span>
+                <span class="separator">|</span>
                 <span>Base: <span class="value">{formatar_moeda(valor_base_nao_promo)}</span></span>
+                <div class="progress-mini">
+                    <div class="progress-mini-fill" style="width: {progresso}%; background: linear-gradient(90deg, {cor_desconto}, #FF9800);"></div>
+                </div>
             </div>
             <div class="cart-button-wrapper">
-                <button onclick="window.location.href='?carrinho=abrir'" class="cart-button">
+                <button onclick="window.location.href='?page=carrinho'" class="cart-button">
                     <span class="cart-icon">🛒</span>
                     <span>Meu Carrinho</span>
                     <span class="badge">{resumo_header['total_itens']}</span>
@@ -1599,17 +1659,17 @@ def exibir_botao_carrinho_profissional():
         
         # Verifica se o carrinho deve ser aberto via query params
         query_params = st.query_params
-        if query_params.get('carrinho') == 'abrir':
+        if query_params.get('page') == 'carrinho':
             st.session_state.carrinho_aberto = True
             st.query_params.clear()
             st.rerun()
     else:
         st.markdown(f'''
-        <div class="cart-button-container">
-            <div class="desconto-mini-badge" style="border-left-color: #9E9E9E; opacity: 0.6;">
-                <span>💎</span>
+        <div class="cart-header-container">
+            <div class="desconto-balao" style="border-left-color: #9E9E9E; opacity: 0.5;">
+                <span class="icon">💎</span>
                 <span>Desconto: <span class="percent">0% OFF</span></span>
-                <span>|</span>
+                <span class="separator">|</span>
                 <span>Base: <span class="value">R$ 0,00</span></span>
             </div>
             <div class="cart-empty">
@@ -2051,6 +2111,20 @@ if 'cliente_isento' not in st.session_state:
     st.session_state.cliente_isento = False
 if 'ultimo_hash_notificacoes' not in st.session_state:
     st.session_state.ultimo_hash_notificacoes = None
+
+# ============================================
+# VERIFICAR ABERTURA DO CARRINHO VIA URL
+# ============================================
+
+def verificar_abertura_carrinho():
+    """Verifica se o carrinho deve ser aberto via parâmetro na URL"""
+    query_params = st.query_params
+    if query_params.get('page') == 'carrinho':
+        st.session_state.carrinho_aberto = True
+        st.query_params.clear()
+        st.rerun()
+
+verificar_abertura_carrinho()
 
 # ============================================
 # FUNÇÕES PARA CONTROLAR CARRINHO
