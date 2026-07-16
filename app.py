@@ -1414,7 +1414,54 @@ def exibir_botao_carrinho_profissional():
     """Exibe o botão do carrinho como link em negrito e balão de desconto com informações detalhadas"""
     resumo_header = calcular_resumo_carrinho()
     
-    # CSS para o botão do carrinho e balão
+    # Calcula o desconto para exibir no badge
+    valor_base_nao_promo = 0
+    itens_promo = []
+    if st.session_state.carrinho:
+        for item in st.session_state.carrinho:
+            if not item.get('eh_promocao', False):
+                valor_base_nao_promo += item['preco_final'] * item['quantidade']
+            else:
+                itens_promo.append(item)
+    
+    tem_promo = len(itens_promo) > 0
+    valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
+    
+    desconto_percentual = calcular_desconto_volume(valor_base_nao_promo, False)
+    faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_nao_promo)
+    desconto_texto = f"{int(desconto_percentual * 100)}% OFF"
+    cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
+    
+    # Calcula progresso
+    if valor_base_nao_promo >= 4000:
+        progresso = 100
+    elif valor_base_nao_promo >= 2500:
+        progresso = 75 + ((valor_base_nao_promo - 2500) / 1500) * 25
+    elif valor_base_nao_promo >= 1500:
+        progresso = 50 + ((valor_base_nao_promo - 1500) / 1000) * 25
+    else:
+        progresso = (valor_base_nao_promo / 1500) * 50
+    progresso = min(100, max(0, progresso))
+    
+    # Monta mensagem do faltante
+    if desconto_percentual == 0.20:
+        mensagem_faltante = "🏆 Desconto máximo!"
+    elif desconto_percentual == 0.15:
+        mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para 20%"
+    elif desconto_percentual == 0.10:
+        mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para 15%"
+    else:
+        if faltante > 0:
+            mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para {prox_desconto}%"
+        else:
+            mensagem_faltante = "Adicione produtos NÃO promocionais"
+    
+    # Monta informação de promoção
+    info_promo = ""
+    if tem_promo:
+        info_promo = f" <span class='promo-info'>🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}</span>"
+    
+    # CSS - Usando st.markdown com unsafe_allow_html=True
     st.markdown("""
     <style>
     .cart-header-container {
@@ -1487,7 +1534,6 @@ def exibir_botao_carrinho_profissional():
         gap: 8px;
     }
     
-    /* Balão de desconto estilo profissional */
     .desconto-balao {
         display: inline-flex;
         align-items: center;
@@ -1495,7 +1541,7 @@ def exibir_botao_carrinho_profissional():
         background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
         padding: 6px 14px;
         border-radius: 10px;
-        border-left: 4px solid #FF9800;
+        border-left: 4px solid """ + cor_desconto + """;
         box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         font-size: 12px;
         font-weight: 600;
@@ -1558,7 +1604,6 @@ def exibir_botao_carrinho_profissional():
         gap: 4px;
     }
     
-    /* Progresso mini */
     .progress-mini {
         width: 60px;
         height: 4px;
@@ -1611,57 +1656,11 @@ def exibir_botao_carrinho_profissional():
     </style>
     """, unsafe_allow_html=True)
     
-    # Calcula o desconto para exibir no badge
-    valor_base_nao_promo = 0
-    itens_promo = []
-    if st.session_state.carrinho:
-        for item in st.session_state.carrinho:
-            if not item.get('eh_promocao', False):
-                valor_base_nao_promo += item['preco_final'] * item['quantidade']
-            else:
-                itens_promo.append(item)
-    
-    tem_promo = len(itens_promo) > 0
-    valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
-    
-    desconto_percentual = calcular_desconto_volume(valor_base_nao_promo, False)
-    faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_nao_promo)
-    desconto_texto = f"{int(desconto_percentual * 100)}% OFF"
-    cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
-    
-    # Calcula progresso
-    if valor_base_nao_promo >= 4000:
-        progresso = 100
-    elif valor_base_nao_promo >= 2500:
-        progresso = 75 + ((valor_base_nao_promo - 2500) / 1500) * 25
-    elif valor_base_nao_promo >= 1500:
-        progresso = 50 + ((valor_base_nao_promo - 1500) / 1000) * 25
-    else:
-        progresso = (valor_base_nao_promo / 1500) * 50
-    progresso = min(100, max(0, progresso))
-    
-    # Monta mensagem do faltante
-    if desconto_percentual == 0.20:
-        mensagem_faltante = "🏆 Desconto máximo!"
-    elif desconto_percentual == 0.15:
-        mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para 20%"
-    elif desconto_percentual == 0.10:
-        mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para 15%"
-    else:
-        if faltante > 0:
-            mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para {prox_desconto}%"
-        else:
-            mensagem_faltante = "Adicione produtos NÃO promocionais"
-    
-    # Monta informação de promoção - SEMPRE DEFINIDA
-    info_promo = ""
-    if tem_promo:
-        info_promo = f"<span class='promo-info'>🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}</span>"
-    
     # Container com botão do carrinho e badge de desconto
     if resumo_header['total_itens'] > 0:
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         
+        # Usando HTML puro com st.markdown
         html_content = f'''
         <div class="cart-header-container">
             <div class="desconto-balao" style="border-left-color: {cor_desconto};">
