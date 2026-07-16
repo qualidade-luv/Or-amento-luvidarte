@@ -1210,11 +1210,7 @@ def exibir_cabecalho_carrinho():
     
     # Se não houver itens, mostra carrinho vazio
     if resumo_header['total_itens'] == 0:
-        st.markdown("""
-        <div style="background: #f5f5f5; border-radius: 12px; padding: 12px 20px; margin: 10px 0; border: 1px dashed #ccc;">
-            <span style="color: #666; font-size: 14px; font-weight: 500;">🛒 Carrinho vazio</span>
-        </div>
-        """, unsafe_allow_html=True)
+        st.info("🛒 Carrinho vazio")
         return
     
     # Calcula o desconto
@@ -1257,167 +1253,85 @@ def exibir_cabecalho_carrinho():
         else:
             mensagem_faltante = "Adicione produtos NÃO promocionais"
     
-    # Monta informação de promoção
-    info_promo = ""
-    if tem_promo:
-        info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
-    
     total_fmt_header = formatar_moeda(resumo_header['total_geral'])
     valor_base_fmt = formatar_moeda(valor_base_nao_promo)
     qtd_itens = resumo_header['total_itens']
     
-    # Determina cores
-    cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
-    cor_progresso = "linear-gradient(90deg, #FF9800, #F44336)" if desconto_percentual > 0 else "linear-gradient(90deg, #9E9E9E, #BDBDBD)"
-    
     # ============================================
-    # CARD USANDO COLUNAS DO STREAMLIT - MAIS ESTÁVEL
+    # CARD SIMPLES USANDO APENAS STREAMLIT
     # ============================================
     
-    # CSS para o card
-    st.markdown(f"""
-    <style>
-    .card-desconto {{
-        background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
-        border-radius: 16px;
-        padding: 16px 20px;
-        margin: 12px 0 20px 0;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        border: 1px solid #E8E0D0;
-    }}
-    .card-desconto .icone {{
-        background: linear-gradient(135deg, {cor_desconto}, {cor_desconto}dd);
-        width: 44px;
-        height: 44px;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 22px;
-        flex-shrink: 0;
-    }}
-    .card-desconto .titulo {{
-        font-size: 20px;
-        font-weight: 800;
-        color: #D32F2F;
-        line-height: 1.2;
-    }}
-    .card-desconto .detalhes {{
-        font-size: 13px;
-        color: #555;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-    }}
-    .card-desconto .detalhes .rotulo {{
-        color: #888;
-        font-weight: 500;
-    }}
-    .card-desconto .detalhes .valor {{
-        font-weight: 700;
-        color: #2E7D32;
-        background: rgba(46,125,50,0.08);
-        padding: 1px 10px;
-        border-radius: 4px;
-    }}
-    .card-desconto .detalhes .faltante {{
-        font-weight: 600;
-        color: #D32F2F;
-        background: rgba(211,47,47,0.08);
-        padding: 1px 10px;
-        border-radius: 4px;
-    }}
-    .card-desconto .detalhes .promo {{
-        font-size: 12px;
-        color: #D32F2F;
-        background: rgba(211,47,47,0.08);
-        padding: 1px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-    }}
-    .card-desconto .progresso {{
-        width: 100%;
-        height: 5px;
-        background: #E8E0D0;
-        border-radius: 4px;
-        overflow: hidden;
-        margin-top: 4px;
-    }}
-    .card-desconto .progresso-preenchido {{
-        width: {progresso}%;
-        height: 100%;
-        border-radius: 4px;
-        transition: width 0.8s ease;
-        background: {cor_progresso};
-    }}
-    .card-desconto .labels-progresso {{
-        display: flex;
-        justify-content: space-between;
-        font-size: 10px;
-        color: #888;
-        font-weight: 500;
-    }}
-    .card-desconto .divisoria {{
-        border-top: 1px solid #F0E8D8;
-        margin: 10px 0 8px 0;
-    }}
-    @media (max-width: 768px) {{
-        .card-desconto .info-wrap {{
-            flex-wrap: wrap;
-        }}
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # CARD USANDO COLUNAS
+    # Container com fundo
     with st.container():
-        st.markdown('<div class="card-desconto">', unsafe_allow_html=True)
+        # Fundo do card
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin: 10px 0 20px 0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            border: 1px solid #E8E0D0;
+        ">
+        """, unsafe_allow_html=True)
         
-        # Linha 1: Ícone + Informações + Botão
-        col_icon, col_info, col_btn = st.columns([1, 4, 2])
+        # Linha 1: Ícone e informações
+        col1, col2 = st.columns([1, 5])
         
-        with col_icon:
-            st.markdown('<div class="icone">💎</div>', unsafe_allow_html=True)
-        
-        with col_info:
-            st.markdown(f'''
-            <div class="titulo">Desconto: {desconto_texto}</div>
-            <div class="detalhes">
-                <span class="rotulo">Base:</span>
-                <span class="valor">{valor_base_fmt}</span>
-                <span style="color: #ccc;">|</span>
-                <span class="faltante">{mensagem_faltante}</span>
-                {f'<span class="promo">{info_promo}</span>' if tem_promo else ''}
+        with col1:
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #FF9800, #F57C00);
+                width: 44px;
+                height: 44px;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 22px;
+            ">
+                💎
             </div>
-            ''', unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
         
-        with col_btn:
-            timestamp = datetime.now().strftime('%H%M%S%f')
-            if st.button(
-                f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-                key=f"btn_carrinho_header_{timestamp}",
-                use_container_width=True
-            ):
-                abrir_carrinho()
+        with col2:
+            st.markdown(f"""
+            <div style="font-size: 20px; font-weight: 800; color: #D32F2F;">
+                Desconto: {desconto_texto}
+            </div>
+            <div style="font-size: 13px; color: #555; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span style="color: #888;">Base:</span>
+                <span style="font-weight: 700; color: #2E7D32; background: rgba(46,125,50,0.08); padding: 2px 12px; border-radius: 4px;">{valor_base_fmt}</span>
+                <span style="color: #ccc;">|</span>
+                <span style="font-weight: 600; color: #D32F2F; background: rgba(211,47,47,0.08); padding: 2px 12px; border-radius: 4px;">{mensagem_faltante}</span>
+            </div>
+            """, unsafe_allow_html=True)
         
-        # Linha 2: Barra de progresso
-        st.markdown('<div class="divisoria"></div>', unsafe_allow_html=True)
+        # Linha 2: Botão do carrinho
+        timestamp = datetime.now().strftime('%H%M%S%f')
+        if st.button(
+            f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
+            key=f"btn_carrinho_header_{timestamp}",
+            use_container_width=True
+        ):
+            abrir_carrinho()
         
-        col_prog_left, col_prog, col_prog_right = st.columns([1, 2, 1])
-        with col_prog:
-            st.markdown(f'''
-            <div class="labels-progresso">
+        # Linha 3: Barra de progresso
+        st.markdown(f"""
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #F0E8D8;">
+            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888; font-weight: 500;">
                 <span>0%</span>
                 <span>{int(progresso)}%</span>
                 <span>100%</span>
             </div>
-            <div class="progresso">
-                <div class="progresso-preenchido"></div>
+            <div style="width: 100%; height: 6px; background: #E8E0D0; border-radius: 4px; overflow: hidden; margin-top: 4px;">
+                <div style="width: {progresso}%; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #FF9800, #F44336); transition: width 0.8s ease;"></div>
             </div>
-            ''', unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
         
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Fecha o container do card
+        st.markdown("</div>", unsafe_allow_html=True)
         
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
