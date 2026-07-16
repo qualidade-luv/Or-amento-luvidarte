@@ -1270,28 +1270,39 @@ def exibir_cabecalho_carrinho():
     cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
     cor_progresso = "linear-gradient(90deg, #FF9800, #F44336)" if desconto_percentual > 0 else "linear-gradient(90deg, #9E9E9E, #BDBDBD)"
     
-    # HTML do card - ESTRUTURA SIMPLIFICADA E CORRIGIDA
+    # HTML do card - ESTRUTURA SIMPLES E CORRIGIDA
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #FFFFFF, #FFF8E1); 
-                border-radius: 16px; 
-                padding: 18px 22px; 
-                margin: 12px 0 20px 0; 
-                box-shadow: 0 4px 20px rgba(0,0,0,0.08); 
-                border: 1px solid #E8E0D0;
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                justify-content: space-between;
-                gap: 12px;">
-        
-        <!-- Lado esquerdo - informações do desconto -->
+    <div style="
+        background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
+        border-radius: 16px;
+        padding: 18px 22px;
+        margin: 12px 0 20px 0;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid #E8E0D0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+    ">
+        <!-- Lado esquerdo -->
         <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 200px; flex-wrap: wrap;">
-            <div style="background: linear-gradient(135deg, {cor_desconto}, {cor_desconto}dd); 
-                        width: 44px; height: 44px; border-radius: 12px; 
-                        display: flex; align-items: center; justify-content: center; 
-                        font-size: 22px; flex-shrink: 0;">
+            <!-- Ícone -->
+            <div style="
+                background: linear-gradient(135deg, {cor_desconto}, {cor_desconto}dd);
+                width: 44px;
+                height: 44px;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 22px;
+                flex-shrink: 0;
+            ">
                 💎
             </div>
+            
+            <!-- Informações -->
             <div style="display: flex; flex-direction: column; gap: 2px;">
                 <div style="font-size: 20px; font-weight: 800; color: #D32F2F; line-height: 1.2;">
                     Desconto: {desconto_texto}
@@ -1318,7 +1329,7 @@ def exibir_cabecalho_carrinho():
             </div>
         </div>
         
-        <!-- Botão do carrinho -->
+        <!-- Botão -->
         <div style="flex-shrink: 0;">
     """, unsafe_allow_html=True)
     
