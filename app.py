@@ -1247,13 +1247,13 @@ def exibir_cabecalho_carrinho():
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD USANDO APENAS STREAMLIT - SEM HTML COMPLEXO
+    # CARD USANDO APENAS STREAMLIT - SEM HTML
     # ============================================
     
-    # CSS apenas para estilização
+    # Card com fundo usando container e markdown simples
     st.markdown("""
     <style>
-    .card-desconto-simples {
+    .card-simples {
         background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
         border-radius: 16px;
         padding: 14px 20px;
@@ -1261,39 +1261,31 @@ def exibir_cabecalho_carrinho():
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         border: 1px solid #E8E0D0;
     }
-    .card-desconto-simples .info-row {
+    .card-simples .linha-info {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         flex-wrap: wrap;
     }
-    .card-desconto-simples .icone {
-        background: linear-gradient(135deg, #FF9800, #F57C00);
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 18px;
-        flex-shrink: 0;
+    .card-simples .icone-pequeno {
+        font-size: 24px;
     }
-    .card-desconto-simples .texto-desconto {
+    .card-simples .txt-desconto {
         font-size: 16px;
         font-weight: 800;
         color: #D32F2F;
     }
-    .card-desconto-simples .texto-base {
+    .card-simples .txt-base {
         font-size: 16px;
         font-weight: 700;
         color: #2E7D32;
     }
-    .card-desconto-simples .texto-faltante {
+    .card-simples .txt-faltante {
         font-size: 16px;
         font-weight: 600;
         color: #D32F2F;
     }
-    .card-desconto-simples .texto-promo {
+    .card-simples .txt-promo {
         font-size: 13px;
         font-weight: 600;
         color: #D32F2F;
@@ -1301,61 +1293,52 @@ def exibir_cabecalho_carrinho():
         padding: 2px 12px;
         border-radius: 4px;
     }
-    .card-desconto-simples .separador {
+    .card-simples .separador {
         color: #E0D5C0;
         font-size: 16px;
-        font-weight: 300;
     }
-    .card-desconto-simples .btn-area {
-        margin-left: auto;
-        flex-shrink: 0;
-    }
-    @media (max-width: 768px) {
-        .card-desconto-simples .info-row {
-            flex-direction: column;
-            align-items: stretch;
-        }
-        .card-desconto-simples .btn-area {
-            margin-left: 0;
-        }
-        .card-desconto-simples .btn-area button {
-            width: 100% !important;
-        }
+    .card-simples .botao-area {
+        margin-top: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
     
-    # Card usando container e colunas do Streamlit
+    # Container do card
     with st.container():
-        st.markdown('<div class="card-desconto-simples">', unsafe_allow_html=True)
+        st.markdown('<div class="card-simples">', unsafe_allow_html=True)
         
-        # Linha com ícone e informações
-        col1, col2 = st.columns([1, 6])
+        # PRIMEIRA LINHA: Ícone + Informações
+        col_icon, col_info = st.columns([1, 10])
         
-        with col1:
-            st.markdown('<div class="icone">💎</div>', unsafe_allow_html=True)
+        with col_icon:
+            st.markdown('<div class="icone-pequeno">💎</div>', unsafe_allow_html=True)
         
-        with col2:
-            # Texto com as informações
-            info_text = f"""<span class="texto-desconto">Desconto: {desconto_texto}</span>
-            <span class="separador">|</span>
-            <span class="texto-base">Base: {valor_base_fmt}</span>
-            <span class="separador">|</span>
-            <span class="texto-faltante">{mensagem_faltante}</span>"""
+        with col_info:
+            # Monta o texto das informações
+            info_html = f'''
+            <div class="linha-info">
+                <span class="txt-desconto">Desconto: {desconto_texto}</span>
+                <span class="separador">|</span>
+                <span class="txt-base">Base: {valor_base_fmt}</span>
+                <span class="separador">|</span>
+                <span class="txt-faltante">{mensagem_faltante}</span>
+            '''
             
             if tem_promo:
-                info_text += f' <span class="texto-promo">{info_promo}</span>'
+                info_promo_text = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} (não entram no desconto)"
+                info_html += f'<span class="txt-promo">{info_promo_text}</span>'
             
-            st.markdown(f'<div class="info-row">{info_text}</div>', unsafe_allow_html=True)
+            info_html += '</div>'
+            st.markdown(info_html, unsafe_allow_html=True)
         
-        # Linha do botão (separada)
-        st.markdown('<div style="margin-top: 10px;">', unsafe_allow_html=True)
+        # SEGUNDA LINHA: Botão do carrinho (Streamlit puro)
+        st.markdown('<div class="botao-area">', unsafe_allow_html=True)
         
-        # Botão do carrinho - USANDO APENAS STREAMLIT
+        # Botão usando Streamlit - FUNCIONA!
         timestamp = datetime.now().strftime('%H%M%S%f')
         if st.button(
             f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-            key=f"btn_carrinho_header_{timestamp}",
+            key=f"btn_carrinho_{timestamp}",
             use_container_width=True
         ):
             st.session_state.carrinho_aberto = True
