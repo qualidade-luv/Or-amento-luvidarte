@@ -1407,11 +1407,11 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR BOTÃO DO CARRINHO E BALÃO DE DESCONTO - CORRIGIDA DEFINITIVA
+# FUNÇÃO PARA EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO (ABAIXO DO AVISO LEGAL)
 # ============================================
 
-def exibir_botao_carrinho_profissional():
-    """Exibe o botão do carrinho como link em negrito e balão de desconto com informações detalhadas"""
+def exibir_cabecalho_carrinho():
+    """Exibe o balão de desconto e botão do carrinho abaixo do aviso legal"""
     resumo_header = calcular_resumo_carrinho()
     
     # Calcula o desconto para exibir no badge
@@ -1447,29 +1447,94 @@ def exibir_botao_carrinho_profissional():
     if desconto_percentual == 0.20:
         mensagem_faltante = "🏆 Desconto máximo!"
     elif desconto_percentual == 0.15:
-        mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para 20%"
+        mensagem_faltante = f"Faltam R$ {faltante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " para 20%"
     elif desconto_percentual == 0.10:
-        mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para 15%"
+        mensagem_faltante = f"Faltam R$ {faltante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " para 15%"
     else:
         if faltante > 0:
-            mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para {prox_desconto}%"
+            mensagem_faltante = f"Faltam R$ {faltante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + f" para {prox_desconto}%"
         else:
             mensagem_faltante = "Adicione produtos NÃO promocionais"
     
     # Monta informação de promoção
     info_promo = ""
     if tem_promo:
-        info_promo = f" <span class='promo-info'>🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}</span>"
+        info_promo = f" 🔥 {len(itens_promo)} promo(s): R$ {valor_promo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     
-    # CSS - Usando st.markdown com unsafe_allow_html=True
+    # CSS
     st.markdown("""
     <style>
-    .cart-header-container {
+    .carrinho-header {
         display: flex;
-        justify-content: flex-end;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
+        padding: 10px 20px;
+        border-radius: 12px;
+        border-left: 4px solid #FF9800;
+        margin: 10px 0;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .carrinho-header .info {
+        display: flex;
         align-items: center;
         gap: 15px;
         flex-wrap: wrap;
+        font-size: 13px;
+        color: #E65100;
+        font-weight: 600;
+    }
+    
+    .carrinho-header .info .percent {
+        font-size: 18px;
+        font-weight: 800;
+        color: #D32F2F;
+        background: rgba(211, 47, 47, 0.1);
+        padding: 2px 10px;
+        border-radius: 6px;
+    }
+    
+    .carrinho-header .info .value {
+        font-size: 14px;
+        font-weight: 700;
+        color: #2E7D32;
+        background: rgba(46, 125, 50, 0.08);
+        padding: 2px 10px;
+        border-radius: 6px;
+    }
+    
+    .carrinho-header .info .faltante {
+        font-size: 12px;
+        color: #D32F2F;
+        font-weight: 700;
+        background: rgba(211, 47, 47, 0.08);
+        padding: 2px 10px;
+        border-radius: 6px;
+    }
+    
+    .carrinho-header .info .promo-info {
+        font-size: 11px;
+        color: #D32F2F;
+        font-weight: 600;
+        background: rgba(211, 47, 47, 0.1);
+        padding: 2px 10px;
+        border-radius: 6px;
+    }
+    
+    .carrinho-header .progress-mini {
+        width: 80px;
+        height: 4px;
+        background: #E0E0E0;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .carrinho-header .progress-mini-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
     }
     
     .cart-link {
@@ -1532,96 +1597,25 @@ def exibir_botao_carrinho_profissional():
         display: flex;
         align-items: center;
         gap: 8px;
-    }
-    
-    .desconto-balao {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
-        padding: 6px 14px;
-        border-radius: 10px;
-        border-left: 4px solid """ + cor_desconto + """;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-        font-size: 12px;
-        font-weight: 600;
-        color: #E65100;
-        white-space: nowrap;
-        transition: all 0.3s ease;
-        flex-wrap: wrap;
-    }
-    
-    .desconto-balao:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.12);
-    }
-    
-    .desconto-balao .percent {
-        font-size: 16px;
-        font-weight: 800;
-        color: #D32F2F;
-        background: rgba(211, 47, 47, 0.1);
-        padding: 2px 8px;
-        border-radius: 6px;
-    }
-    
-    .desconto-balao .value {
-        font-size: 13px;
-        font-weight: 700;
-        color: #2E7D32;
-        background: rgba(46, 125, 50, 0.08);
-        padding: 2px 8px;
-        border-radius: 6px;
-    }
-    
-    .desconto-balao .icon {
-        font-size: 18px;
-    }
-    
-    .desconto-balao .separator {
-        color: #E0E0E0;
-        font-weight: 300;
-    }
-    
-    .desconto-balao .faltante {
-        font-size: 11px;
-        color: #D32F2F;
-        font-weight: 700;
-        background: rgba(211, 47, 47, 0.08);
-        padding: 2px 8px;
-        border-radius: 6px;
-    }
-    
-    .desconto-balao .promo-info {
-        font-size: 10px;
-        color: #D32F2F;
-        font-weight: 600;
-        background: rgba(211, 47, 47, 0.1);
-        padding: 2px 8px;
-        border-radius: 6px;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-    }
-    
-    .progress-mini {
-        width: 60px;
-        height: 4px;
-        background: #E0E0E0;
-        border-radius: 4px;
-        overflow: hidden;
-        margin: 0 4px;
-    }
-    
-    .progress-mini-fill {
-        height: 100%;
-        border-radius: 4px;
-        transition: width 0.5s ease;
+        padding: 10px 20px;
+        background: #f5f5f5;
+        border-radius: 12px;
+        margin: 10px 0;
     }
     
     @media (max-width: 768px) {
-        .cart-header-container {
+        .carrinho-header {
+            padding: 8px 12px;
+        }
+        .carrinho-header .info {
+            font-size: 11px;
             gap: 8px;
+        }
+        .carrinho-header .info .percent {
+            font-size: 14px;
+        }
+        .carrinho-header .progress-mini {
+            width: 50px;
         }
         .cart-link {
             padding: 6px 12px !important;
@@ -1635,42 +1629,25 @@ def exibir_botao_carrinho_profissional():
         .cart-link .cart-total {
             font-size: 12px !important;
         }
-        .desconto-balao {
-            font-size: 10px !important;
-            padding: 5px 10px !important;
-            gap: 6px !important;
-        }
-        .desconto-balao .percent {
-            font-size: 13px !important;
-        }
-        .progress-mini {
-            width: 40px !important;
-        }
-        .desconto-balao .faltante {
-            font-size: 9px !important;
-        }
-        .desconto-balao .promo-info {
-            font-size: 9px !important;
-        }
     }
     </style>
     """, unsafe_allow_html=True)
     
-    # Container com botão do carrinho e badge de desconto
+    # Container com balão de desconto e botão do carrinho
     if resumo_header['total_itens'] > 0:
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
+        valor_base_fmt = formatar_moeda(valor_base_nao_promo)
         
-        # Usando HTML puro com st.markdown
         html_content = f'''
-        <div class="cart-header-container">
-            <div class="desconto-balao" style="border-left-color: {cor_desconto};">
-                <span class="icon">💎</span>
+        <div class="carrinho-header">
+            <div class="info">
+                <span>💎</span>
                 <span>Desconto: <span class="percent">{desconto_texto}</span></span>
-                <span class="separator">|</span>
-                <span>Base: <span class="value">{formatar_moeda(valor_base_nao_promo)}</span></span>
-                <span class="separator">|</span>
-                <span>{mensagem_faltante}</span>
-                {info_promo}
+                <span>|</span>
+                <span>Base: <span class="value">{valor_base_fmt}</span></span>
+                <span>|</span>
+                <span class="faltante">{mensagem_faltante}</span>
+                {f'<span class="promo-info">{info_promo}</span>' if tem_promo else ''}
                 <div class="progress-mini">
                     <div class="progress-mini-fill" style="width: {progresso}%; background: linear-gradient(90deg, {cor_desconto}, #FF9800);"></div>
                 </div>
@@ -1696,18 +1673,8 @@ def exibir_botao_carrinho_profissional():
             st.rerun()
     else:
         html_content = '''
-        <div class="cart-header-container">
-            <div class="desconto-balao" style="border-left-color: #9E9E9E; opacity: 0.5;">
-                <span class="icon">💎</span>
-                <span>Desconto: <span class="percent">0% OFF</span></span>
-                <span class="separator">|</span>
-                <span>Base: <span class="value">R$ 0,00</span></span>
-                <span class="separator">|</span>
-                <span>Adicione produtos NÃO promocionais</span>
-            </div>
-            <div class="cart-empty">
-                🛒 Carrinho vazio
-            </div>
+        <div class="cart-empty">
+            🛒 Carrinho vazio
         </div>
         '''
         
@@ -2747,6 +2714,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# ============================================
+# EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO ABAIXO DO AVISO LEGAL
+# ============================================
+exibir_cabecalho_carrinho()
+
 st.markdown("---")
 
 # ============================================
@@ -3290,15 +3262,9 @@ if busca_referencia:
 total_encontrados = len(dados_filtrados)
 
 # ============================================
-# HEADER COM LINK DO CARRINHO PROFISSIONAL
+# HEADER COM TÍTULO
 # ============================================
-col_titulo, col_link = st.columns([3, 1])
-
-with col_titulo:
-    st.markdown(f"## ✨ Produtos Encontrados: {total_encontrados}")
-
-with col_link:
-    exibir_botao_carrinho_profissional()
+st.markdown(f"## ✨ Produtos Encontrados: {total_encontrados}")
 
 st.markdown("---")
 
