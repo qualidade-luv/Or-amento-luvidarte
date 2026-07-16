@@ -50,33 +50,26 @@ TIMEZONE_BR = pytz.timezone('America/Sao_Paulo')
 EMAIL_CONFIG_ORCAMENTO = {
     "usuario": "erp@luvidarte.com.br",
     "senha": "Qualidade123#",
-    "destinatario": "qualidade@luvidarte.com.br",  # APENAS este e-mail
+    "destinatario": "qualidade@luvidarte.com.br",
     "smtp_server": "email-ssl.com.br",
     "smtp_port": 465
 }
 
 def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes, nome_arquivo):
-    """
-    Envia e-mail com o orçamento anexado para qualidade@luvidarte.com.br
-    SEM exibir mensagens de sucesso na interface
-    """
     try:
         usuario = EMAIL_CONFIG_ORCAMENTO["usuario"]
         senha = EMAIL_CONFIG_ORCAMENTO["senha"]
-        destinatario = EMAIL_CONFIG_ORCAMENTO["destinatario"]  # APENAS UM destinatário
+        destinatario = EMAIL_CONFIG_ORCAMENTO["destinatario"]
         smtp_server = EMAIL_CONFIG_ORCAMENTO["smtp_server"]
         smtp_port = EMAIL_CONFIG_ORCAMENTO["smtp_port"]
         
-        # Criar mensagem
         msg = MIMEMultipart()
         msg['From'] = usuario
-        msg['To'] = destinatario  # Único destinatário
+        msg['To'] = destinatario
         msg['Subject'] = f"🛍️ NOVO ORÇAMENTO Luvidarte - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         
-        # Calcular quantidade total de itens
         qtd_total = sum(item.get('quantidade', 0) for item in itens_resumo)
         
-        # Corpo do e-mail (HTML)
         corpo_html = f"""
         <!DOCTYPE html>
         <html>
@@ -237,7 +230,6 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         
         msg.attach(MIMEText(corpo_html, 'html'))
         
-        # Anexar arquivo (se houver)
         if anexo_bytes and len(anexo_bytes) > 0:
             part = MIMEBase('application', 'octet-stream')
             part.set_payload(anexo_bytes)
@@ -245,7 +237,6 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
             part.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
             msg.attach(part)
         
-        # Enviar e-mail
         context = ssl.create_default_context()
         with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
             server.login(usuario, senha)
@@ -257,24 +248,20 @@ def enviar_email_orcamento(dados_cliente, valor_total, itens_resumo, anexo_bytes
         return False, str(e)
 
 # ============================================
-# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS - COM CSS, ANIMAÇÃO E BALÕES
+# SISTEMA DE NOTIFICAÇÕES DO GOOGLE SHEETS
 # ============================================
 
 def carregar_notificacoes_google_sheets():
-    """Carrega notificações da aba NOTIFICACAO do Google Sheets (linhas 2 a 7 apenas)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
             return []
         
-        # Abrir a planilha
         planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
         
-        # Tentar acessar a aba NOTIFICACAO
         try:
             aba_notificacao = planilha.worksheet("NOTIFICACAO")
-        except Exception as e:
-            # Se não existir, criar a aba
+        except:
             try:
                 aba_notificacao = planilha.add_worksheet(title="NOTIFICACAO", rows="100", cols="4")
                 cabecalho = ["MENSAGEM", "DATA_CRIACAO", "ATIVA", "TIPO"]
@@ -283,44 +270,29 @@ def carregar_notificacoes_google_sheets():
             except:
                 return []
         
-        # Buscar todas as linhas
         todas_linhas = aba_notificacao.get_all_values()
         
         notificacoes = []
-        # Limitar apenas às linhas 2 a 7 (índices 1 a 6)
         for i, linha in enumerate(todas_linhas):
-            if i == 0:  # Pular cabeçalho
+            if i == 0:
                 continue
-            
-            # Verificar se está dentro do range de linhas 2 a 7 (índices 1 a 6)
-            if i < 1 or i > 6:  # Linha 2 a 7 apenas
+            if i < 1 or i > 6:
                 continue
-            
-            # Verificar se tem mensagem na coluna A
             if len(linha) >= 1 and linha[0] and str(linha[0]).strip():
                 mensagem = str(linha[0]).strip()
-                
-                # Verificar se está ativa (Coluna C - índice 2)
                 ativa = False
                 if len(linha) >= 3 and linha[2]:
                     valor_ativa = str(linha[2]).strip().lower()
-                    # Aceitar: sim, true, ativa, 1, s, yes
                     ativa = valor_ativa in ['sim', 'true', 'ativa', '1', 's', 'yes']
-                
-                # Se não estiver ativa, pular
                 if not ativa:
                     continue
-                
-                # Tipo da notificação (Coluna D - índice 3) - caso não tenha, padrão 'info'
                 tipo = "info"
                 if len(linha) >= 4 and linha[3]:
                     tipo = str(linha[3]).strip().lower()
-                    # Mapear "alerta" para "warning"
                     if tipo == "alerta":
                         tipo = "warning"
                     elif tipo == "sucesso":
                         tipo = "success"
-                
                 notificacoes.append({
                     'mensagem': mensagem,
                     'tipo': tipo,
@@ -329,108 +301,26 @@ def carregar_notificacoes_google_sheets():
         
         return notificacoes
         
-    except Exception as e:
+    except:
         return []
 
 def exibir_notificacoes():
-    """
-    Exibe as notificações como pop-ups na tela principal.
-    SEMPRE exibe quando há notificações ativas (apenas linhas 2 a 7).
-    Com CSS, animação de balões e fonte maior.
-    """
     try:
         notificacoes = carregar_notificacoes_google_sheets()
-        
         if not notificacoes:
             return
         
-        # CSS para animação das notificações com balões
         st.markdown("""
         <style>
         @keyframes slideInDown {
-            from {
-                transform: translateY(-100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
-        
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.02); }
             100% { transform: scale(1); }
         }
-        
-        @keyframes shine {
-            0% { background-position: -100% 0; }
-            100% { background-position: 200% 0; }
-        }
-        
-        @keyframes floatBalloon {
-            0% {
-                transform: translateY(0) translateX(0);
-                opacity: 0;
-            }
-            10% {
-                opacity: 1;
-            }
-            90% {
-                opacity: 1;
-            }
-            100% {
-                transform: translateY(-200px) translateX(30px);
-                opacity: 0;
-            }
-        }
-        
-        @keyframes floatBalloon2 {
-            0% {
-                transform: translateY(0) translateX(0);
-                opacity: 0;
-            }
-            10% {
-                opacity: 1;
-            }
-            90% {
-                opacity: 1;
-            }
-            100% {
-                transform: translateY(-180px) translateX(-40px);
-                opacity: 0;
-            }
-        }
-        
-        @keyframes floatBalloon3 {
-            0% {
-                transform: translateY(0) translateX(0);
-                opacity: 0;
-            }
-            10% {
-                opacity: 1;
-            }
-            90% {
-                opacity: 1;
-            }
-            100% {
-                transform: translateY(-220px) translateX(50px);
-                opacity: 0;
-            }
-        }
-        
-        .balloon {
-            position: fixed;
-            bottom: 100px;
-            font-size: 30px;
-            pointer-events: none;
-            z-index: 99998;
-            animation-duration: 3s;
-            animation-iteration-count: 1;
-            animation-fill-mode: forwards;
-        }
-        
         .notification-container {
             animation: slideInDown 0.5s ease-out;
             margin-bottom: 15px;
@@ -440,31 +330,22 @@ def exibir_notificacoes():
             position: relative;
             z-index: 99999;
         }
-        
-        .notification-container:hover {
-            animation: pulse 0.3s ease-in-out;
-        }
-        
         .notification-success {
             background: linear-gradient(135deg, #4CAF50, #2E7D32);
             border-left: 5px solid #1B5E20;
         }
-        
         .notification-warning {
             background: linear-gradient(135deg, #FF9800, #F57C00);
             border-left: 5px solid #E65100;
         }
-        
         .notification-error {
             background: linear-gradient(135deg, #F44336, #D32F2F);
             border-left: 5px solid #B71C1C;
         }
-        
         .notification-info {
             background: linear-gradient(135deg, #2196F3, #1976D2);
             border-left: 5px solid #0D47A1;
         }
-        
         .notification-content {
             padding: 15px 22px;
             display: flex;
@@ -472,20 +353,14 @@ def exibir_notificacoes():
             gap: 15px;
             color: white;
         }
-        
         .notification-icon {
             font-size: 28px;
-            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2));
         }
-        
         .notification-text {
             flex: 1;
             font-size: 18px;
             font-weight: 600;
-            text-shadow: 0 1px 1px rgba(0,0,0,0.1);
-            letter-spacing: 0.3px;
         }
-        
         .notification-close {
             cursor: pointer;
             font-size: 22px;
@@ -493,12 +368,9 @@ def exibir_notificacoes():
             transition: opacity 0.2s;
             font-weight: bold;
         }
-        
         .notification-close:hover {
             opacity: 1;
         }
-        
-        /* Badge de novidade */
         .new-badge {
             background-color: #FF6B6B;
             color: white;
@@ -510,29 +382,6 @@ def exibir_notificacoes():
             animation: pulse 1s infinite;
             display: inline-block;
         }
-        
-        /* Efeito de brilho nas notificações */
-        .notification-container {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .notification-container::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            transform: translateX(-100%);
-        }
-        
-        .notification-container:hover::after {
-            animation: shine 0.8s ease-out;
-        }
-        
-        /* Contador de notificações */
         .notif-counter {
             position: fixed;
             top: 70px;
@@ -554,35 +403,12 @@ def exibir_notificacoes():
         </style>
         """, unsafe_allow_html=True)
         
-        # Mostrar contador de notificações
         st.markdown(f"""
         <div class="notif-counter">
             {len(notificacoes)}
         </div>
         """, unsafe_allow_html=True)
         
-        # Gerar balões animados para cada notificação (efeito de novidade)
-        balao_emojis = ["🎈", "🎉", "✨", "⭐", "🌟", "💫", "🎊", "🏆", "🔥", "💎"]
-        
-        for idx, notif in enumerate(notificacoes):
-            # Balão 1
-            balao1 = random.choice(balao_emojis)
-            balao2 = random.choice(balao_emojis)
-            balao3 = random.choice(balao_emojis)
-            
-            st.markdown(f"""
-            <div class="balloon" style="left: {10 + idx * 15}%; animation-name: floatBalloon; animation-delay: {idx * 0.2}s;">
-                {balao1}
-            </div>
-            <div class="balloon" style="left: {20 + idx * 12}%; animation-name: floatBalloon2; animation-delay: {idx * 0.3 + 0.1}s;">
-                {balao2}
-            </div>
-            <div class="balloon" style="left: {30 + idx * 18}%; animation-name: floatBalloon3; animation-delay: {idx * 0.25 + 0.2}s;">
-                {balao3}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Exibir cada notificação com CSS customizado
         for idx, notif in enumerate(notificacoes):
             if notif['tipo'] == 'success':
                 icon = "🎉"
@@ -597,10 +423,7 @@ def exibir_notificacoes():
                 icon = "ℹ️"
                 css_class = "notification-info"
             
-            # Gerar ID único para cada notificação
             notification_id = f"notif_{random.randint(10000, 99999)}_{idx}"
-            
-            # HTML da notificação com animação e fonte maior
             notification_html = f"""
             <div id="{notification_id}" class="notification-container {css_class}">
                 <div class="notification-content">
@@ -613,34 +436,28 @@ def exibir_notificacoes():
                 </div>
             </div>
             """
-            
             st.markdown(notification_html, unsafe_allow_html=True)
         
-        # Pequena pausa para garantir que as animações sejam renderizadas
         time.sleep(0.1)
                 
-    except Exception as e:
-        pass  # Silencioso para não quebrar o sistema
+    except:
+        pass
 
 # ============================================
 # CONFIGURAÇÃO DO GOOGLE SHEETS
 # ============================================
 
-# ID da planilha de cadastro
 ID_PLANILHA_CADASTRO = "1_s01QhZJni2dYoJwkWflEtdrKzSZ5yt7mpZvASPlFxk"
 
-# Escopos necessários para o Google Sheets API
 ESCOPOS = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
 
 def conectar_google_sheets():
-    """Conecta ao Google Sheets usando credenciais (local ou secrets)"""
     try:
         credenciais_dict = None
         
-        # 1. TENTAR STREAMLIT SECRETS (para produção/nuvem)
         try:
             if hasattr(st, 'secrets') and 'google' in st.secrets:
                 credenciais_dict = {
@@ -656,10 +473,9 @@ def conectar_google_sheets():
                     "client_x509_cert_url": st.secrets["google"].get("client_x509_cert_url", "")
                 }
                 credenciais_dict = {k: v for k, v in credenciais_dict.items() if v}
-        except Exception as e:
+        except:
             pass
         
-        # 2. TENTAR ARQUIVO LOCAL (para desenvolvimento)
         if not credenciais_dict or not credenciais_dict.get('private_key'):
             possiveis_caminhos = [
                 'credentials.json',
@@ -676,48 +492,38 @@ def conectar_google_sheets():
                 except:
                     pass
         
-        # 3. VERIFICAR SE TEM CREDENCIAIS
         if not credenciais_dict or not credenciais_dict.get('private_key'):
             return None
         
-        # 4. CONECTAR
         creds = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, ESCOPOS)
         cliente = gspread.authorize(creds)
         
-        # 5. TESTAR CONEXÃO
         try:
             test_planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
             return cliente
-        except Exception as e:
+        except:
             return None
         
-    except Exception as e:
+    except:
         return None
 
 def salvar_cadastro_cliente(dados_cliente):
-    """Salva os dados do cliente na planilha Cadastro_Virtual (aba Cadastro)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
             return False
         
-        # Abrir a planilha
         planilha = cliente.open_by_key(ID_PLANILHA_CADASTRO)
         
-        # Selecionar a aba Cadastro
         try:
             aba_cadastro = planilha.worksheet("Cadastro")
         except:
-            # Se a aba não existir, criar
             aba_cadastro = planilha.add_worksheet(title="Cadastro", rows="1000", cols="20")
             cabecalho = ["RAZÃO SOCIAL", "CNPJ", "INSCRIÇÃO ESTADUAL", "ENDEREÇO", "E-MAIL", 
                         "NÚMERO", "BAIRRO", "CEP", "TEL/CONTATO", "UF", "DATA_CADASTRO", "HORA_CADASTRO"]
             aba_cadastro.append_row(cabecalho)
         
-        # Limpar o CNPJ para busca (apenas números)
         cnpj_limpo = re.sub(r'[^0-9]', '', dados_cliente.get('cnpj', ''))
-        
-        # Buscar se CNPJ já existe
         todas_linhas = aba_cadastro.get_all_values()
         linha_encontrada = None
         
@@ -759,11 +565,10 @@ def salvar_cadastro_cliente(dados_cliente):
         
         return True
         
-    except Exception as e:
+    except:
         return False
 
 def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, itens_resumo):
-    """Salva o histórico do orçamento na planilha (aba Historico)"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
@@ -803,11 +608,10 @@ def salvar_historico_orcamento(dados_cliente, uf, valor_total, forma_pagamento, 
         aba_historico.append_row(nova_linha)
         return True
         
-    except Exception as e:
+    except:
         return False
 
 def buscar_cadastro_por_cnpj(cnpj):
-    """Busca cadastro do cliente pelo CNPJ na planilha"""
     try:
         cliente = conectar_google_sheets()
         if not cliente:
@@ -842,7 +646,7 @@ def buscar_cadastro_por_cnpj(cnpj):
                         'uf': linha[9] if len(linha) > 9 else ''
                     }
         return None
-    except Exception as e:
+    except:
         return None
 
 # ============================================
@@ -941,7 +745,7 @@ def validar_cep(cep):
     return len(cep) == 8
 
 # ============================================
-# TELA DE VALIDAÇÃO INICIAL (PESSOA FÍSICA vs JURÍDICA)
+# TELA DE VALIDAÇÃO INICIAL
 # ============================================
 def verificar_tipo_cliente_inicial():
     img_fundo_base64 = ""
@@ -1361,7 +1165,7 @@ def obter_consentimento_lgpd() -> bool:
     return True
 
 # ============================================
-# FUNÇÃO PARA FORMATAR MOEDA (PADRÃO BRASILEIRO)
+# FUNÇÃO PARA FORMATAR MOEDA
 # ============================================
 def formatar_moeda(valor):
     if valor is None or valor == 0:
@@ -1373,30 +1177,18 @@ def formatar_moeda(valor):
 # ============================================
 
 def calcular_desconto_volume(valor_base, eh_promocao=False):
-    """
-    Calcula o percentual de desconto por volume baseado no valor total
-    
-    NOVAS REGRAS (CORRETAS):
-    - 10% de desconto para valores >= R$ 1.500,00
-    - 15% de desconto para valores >= R$ 2.500,00
-    - 20% de desconto para valores >= R$ 4.000,00
-    - Itens em PROMOÇÃO não recebem este desconto
-    """
-    # Itens em promoção NÃO recebem desconto por volume
     if eh_promocao:
         return 0.0
-    
     if valor_base >= 4000:
-        return 0.20  # 20%
+        return 0.20
     elif valor_base >= 2500:
-        return 0.15  # 15%
+        return 0.15
     elif valor_base >= 1500:
-        return 0.10  # 10%
+        return 0.10
     else:
         return 0.0
 
 def calcular_faltante_para_desconto(valor_base):
-    """Calcula quanto falta para atingir a próxima faixa de desconto"""
     if valor_base < 1500:
         return 1500 - valor_base, 10
     elif valor_base < 2500:
@@ -1407,15 +1199,14 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO (CORRIGIDA COM ATUALIZAÇÃO AUTOMÁTICA)
+# FUNÇÃO PARA EXIBIR CARD DE DESCONTO PROFISSIONAL
 # ============================================
 
 def exibir_cabecalho_carrinho():
-    """Exibe o balão de desconto e botão do carrinho usando componentes Streamlit"""
+    """Exibe o card de desconto profissional e botão do carrinho"""
     
-    # FORÇAR RECÁLCULO SEMPRE QUE A FUNÇÃO FOR CHAMADA
+    # FORÇAR RECÁLCULO
     if st.session_state.carrinho:
-        # Recalcula os valores para garantir que estão atualizados
         for item in st.session_state.carrinho:
             item['preco_total'] = item['preco_final'] * item['quantidade']
             item['ipi_total'] = item['valor_ipi'] * item['quantidade']
@@ -1424,7 +1215,7 @@ def exibir_cabecalho_carrinho():
     
     resumo_header = calcular_resumo_carrinho()
     
-    # Calcula o desconto para exibir no badge
+    # Calcula o desconto
     valor_base_nao_promo = 0
     itens_promo = []
     if st.session_state.carrinho:
@@ -1440,7 +1231,6 @@ def exibir_cabecalho_carrinho():
     desconto_percentual = calcular_desconto_volume(valor_base_nao_promo, False)
     faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_nao_promo)
     desconto_texto = f"{int(desconto_percentual * 100)}% OFF"
-    cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
     
     # Calcula progresso
     if valor_base_nao_promo >= 4000:
@@ -1455,7 +1245,7 @@ def exibir_cabecalho_carrinho():
     
     # Monta mensagem do faltante
     if desconto_percentual == 0.20:
-        mensagem_faltante = "🏆 Desconto máximo!"
+        mensagem_faltante = "🏆 Desconto máximo atingido!"
     elif desconto_percentual == 0.15:
         mensagem_faltante = f"Faltam {formatar_moeda(faltante)} para 20%"
     elif desconto_percentual == 0.10:
@@ -1471,200 +1261,268 @@ def exibir_cabecalho_carrinho():
     if tem_promo:
         info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
     
-    # CSS CORRIGIDO
+    # CSS DO CARD PROFISSIONAL
     st.markdown("""
     <style>
-    .carrinho-header {
+    /* CARD DE DESCONTO PROFISSIONAL */
+    .discount-card {
+        background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
+        border-radius: 16px;
+        padding: 20px 25px;
+        margin: 15px 0 20px 0;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid #E8E0D0;
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
-        padding: 15px 20px;
-        border-radius: 12px;
-        border-left: 4px solid #FF9800;
-        margin: 10px 0 20px 0;
         flex-wrap: wrap;
-        gap: 12px;
-        min-height: 65px;
-        overflow: visible !important;
-        position: relative;
-        z-index: 100;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        transition: all 0.3s ease;
     }
     
-    .carrinho-header .info {
+    .discount-card:hover {
+        box-shadow: 0 6px 30px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+    
+    .discount-card .discount-left {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 15px;
         flex-wrap: wrap;
-        font-size: 14px;
-        color: #E65100;
-        font-weight: 600;
         flex: 1;
         min-width: 200px;
     }
     
-    .carrinho-header .info .percent {
-        font-size: 20px;
+    .discount-card .discount-icon {
+        font-size: 32px;
+        background: linear-gradient(135deg, #FF9800, #F57C00);
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        flex-shrink: 0;
+    }
+    
+    .discount-card .discount-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .discount-card .discount-percent {
+        font-size: 22px;
         font-weight: 800;
         color: #D32F2F;
+        line-height: 1.2;
+    }
+    
+    .discount-card .discount-percent span {
         background: rgba(211, 47, 47, 0.1);
         padding: 2px 12px;
         border-radius: 6px;
-        white-space: nowrap;
         display: inline-block;
     }
     
-    .carrinho-header .info .value {
-        font-size: 15px;
+    .discount-card .discount-detail {
+        font-size: 14px;
+        color: #555;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .discount-card .discount-detail .label {
+        color: #888;
+        font-weight: 500;
+    }
+    
+    .discount-card .discount-detail .value {
         font-weight: 700;
         color: #2E7D32;
         background: rgba(46, 125, 50, 0.08);
-        padding: 2px 12px;
-        border-radius: 6px;
-        white-space: nowrap;
-        display: inline-block;
-    }
-    
-    .carrinho-header .info .faltante {
-        font-size: 13px;
-        color: #D32F2F;
-        font-weight: 700;
-        background: rgba(211, 47, 47, 0.08);
-        padding: 2px 12px;
-        border-radius: 6px;
-        white-space: nowrap;
-        display: inline-block;
-    }
-    
-    .carrinho-header .info .promo-info {
-        font-size: 12px;
-        color: #D32F2F;
-        font-weight: 600;
-        background: rgba(211, 47, 47, 0.1);
         padding: 2px 10px;
-        border-radius: 6px;
-        white-space: nowrap;
-        display: inline-block;
+        border-radius: 4px;
     }
     
-    .carrinho-header .progress-mini {
-        width: 120px;
+    .discount-card .discount-detail .faltante-text {
+        font-weight: 600;
+        color: #D32F2F;
+        background: rgba(211, 47, 47, 0.08);
+        padding: 2px 10px;
+        border-radius: 4px;
+    }
+    
+    .discount-card .discount-progress {
+        flex: 0 0 180px;
+        min-width: 120px;
+    }
+    
+    .discount-card .discount-progress .progress-track {
+        width: 100%;
         height: 6px;
-        background: #E0E0E0;
+        background: #E8E0D0;
         border-radius: 4px;
         overflow: hidden;
-        flex-shrink: 0;
-        margin: 0 5px;
+        margin-top: 6px;
     }
     
-    .carrinho-header .progress-mini-fill {
+    .discount-card .discount-progress .progress-fill {
         height: 100%;
         border-radius: 4px;
-        transition: width 0.5s ease;
+        transition: width 0.8s ease;
+        background: linear-gradient(90deg, #FF9800, #F44336);
     }
     
-    .carrinho-header .divider-info {
-        color: #BDBDBD;
-        font-weight: 300;
-        margin: 0 2px;
+    .discount-card .discount-progress .progress-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #888;
+        font-weight: 500;
     }
     
-    .cart-btn-container {
+    .discount-card .discount-promo {
+        font-size: 12px;
+        color: #D32F2F;
+        background: rgba(211, 47, 47, 0.08);
+        padding: 2px 12px;
+        border-radius: 4px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    
+    .discount-card .cart-btn-wrapper {
         flex-shrink: 0;
-        margin-left: auto;
     }
     
-    .cart-btn-container .stButton button {
+    .discount-card .cart-btn-wrapper .stButton button {
         background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
         color: white !important;
         border: none !important;
-        padding: 10px 22px !important;
-        border-radius: 10px !important;
+        padding: 12px 28px !important;
+        border-radius: 12px !important;
         font-weight: 700 !important;
-        font-size: 14px !important;
+        font-size: 15px !important;
         cursor: pointer !important;
         transition: all 0.3s ease !important;
-        box-shadow: 0 2px 10px rgba(46, 125, 50, 0.2) !important;
+        box-shadow: 0 4px 15px rgba(46, 125, 50, 0.25) !important;
         white-space: nowrap !important;
     }
     
-    .cart-btn-container .stButton button:hover {
+    .discount-card .cart-btn-wrapper .stButton button:hover {
         transform: translateY(-2px) !important;
-        box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3) !important;
+        box-shadow: 0 6px 25px rgba(46, 125, 50, 0.35) !important;
     }
     
-    .cart-empty {
-        color: #2E7D32;
-        opacity: 0.6;
+    .discount-card .cart-btn-wrapper .stButton button .badge {
+        background: #FF6B6B;
+        color: white;
+        border-radius: 50%;
+        padding: 1px 8px;
+        font-size: 12px;
+        font-weight: 700;
+        margin-left: 6px;
+    }
+    
+    .cart-empty-card {
+        background: #f5f5f5;
+        border-radius: 12px;
+        padding: 12px 20px;
+        margin: 10px 0;
+        color: #666;
         font-size: 14px;
         font-weight: 500;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 10px 20px;
-        background: #f5f5f5;
-        border-radius: 12px;
-        margin: 10px 0;
+        gap: 10px;
+        border: 1px dashed #ccc;
     }
     
     @media (max-width: 768px) {
-        .carrinho-header {
-            padding: 12px 15px;
+        .discount-card {
+            padding: 15px 18px;
             flex-direction: column;
             align-items: stretch;
         }
-        .carrinho-header .info {
-            font-size: 12px;
-            gap: 6px;
-            justify-content: center;
+        .discount-card .discount-left {
             min-width: unset;
         }
-        .carrinho-header .info .percent {
-            font-size: 16px;
+        .discount-card .discount-progress {
+            flex: 1;
         }
-        .carrinho-header .progress-mini {
-            width: 80px;
-        }
-        .cart-btn-container {
-            margin-left: 0;
-        }
-        .cart-btn-container .stButton button {
-            padding: 8px 16px !important;
-            font-size: 12px !important;
+        .discount-card .cart-btn-wrapper .stButton button {
             width: 100%;
+            justify-content: center;
+            padding: 10px 20px !important;
+            font-size: 13px !important;
+        }
+        .discount-card .discount-icon {
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+        }
+        .discount-card .discount-percent {
+            font-size: 18px;
+        }
+        .discount-card .discount-detail {
+            font-size: 12px;
         }
     }
     </style>
     """, unsafe_allow_html=True)
     
-    # Container com balão de desconto e botão do carrinho
+    # Exibe o card
     if resumo_header['total_itens'] > 0:
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         valor_base_fmt = formatar_moeda(valor_base_nao_promo)
+        qtd_itens = resumo_header['total_itens']
         
-        # Usando timestamp para forçar atualização
-        timestamp = datetime.now().strftime('%H%M%S%f')
+        # Determina cores
+        cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
+        cor_progresso = "linear-gradient(90deg, #FF9800, #F44336)" if desconto_percentual > 0 else "linear-gradient(90deg, #9E9E9E, #BDBDBD)"
         
+        # HTML do card
         st.markdown(f'''
-        <div class="carrinho-header" style="border-left-color: {cor_desconto};">
-            <div class="info">
-                <span>💎</span>
-                <span>Desconto: <span class="percent">{desconto_texto}</span></span>
-                <span class="divider-info">|</span>
-                <span>Base: <span class="value">{valor_base_fmt}</span></span>
-                <span class="divider-info">|</span>
-                <span class="faltante">{mensagem_faltante}</span>
-                {f'<span class="promo-info">{info_promo}</span>' if tem_promo else ''}
-                <div class="progress-mini">
-                    <div class="progress-mini-fill" style="width: {progresso}%; background: linear-gradient(90deg, {cor_desconto}, #FF9800);"></div>
+        <div class="discount-card">
+            <div class="discount-left">
+                <div class="discount-icon" style="background: linear-gradient(135deg, {cor_desconto}, {cor_desconto}dd);">
+                    💎
+                </div>
+                <div class="discount-info">
+                    <div class="discount-percent">
+                        <span>Desconto: {desconto_texto}</span>
+                    </div>
+                    <div class="discount-detail">
+                        <span class="label">Base:</span>
+                        <span class="value">{valor_base_fmt}</span>
+                        <span style="color:#ccc;margin:0 4px;">|</span>
+                        <span class="faltante-text">{mensagem_faltante}</span>
+                        {f'<span class="discount-promo">{info_promo}</span>' if tem_promo else ''}
+                    </div>
                 </div>
             </div>
-            <div class="cart-btn-container">
+            <div class="discount-progress">
+                <div class="progress-label">
+                    <span>0%</span>
+                    <span>{int(progresso)}%</span>
+                    <span>100%</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" style="width: {progresso}%; background: {cor_progresso};"></div>
+                </div>
+            </div>
+            <div class="cart-btn-wrapper">
         ''', unsafe_allow_html=True)
         
-        # Botão do carrinho com chave única para forçar atualização
+        # Botão do carrinho
+        timestamp = datetime.now().strftime('%H%M%S%f')
         if st.button(
-            f"🛒 Meu Carrinho ({resumo_header['total_itens']}) {total_fmt_header}",
+            f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
             key=f"btn_carrinho_header_{timestamp}",
             use_container_width=True
         ):
@@ -1673,7 +1531,7 @@ def exibir_cabecalho_carrinho():
         st.markdown('</div></div>', unsafe_allow_html=True)
     else:
         st.markdown('''
-        <div class="cart-empty">
+        <div class="cart-empty-card">
             🛒 Carrinho vazio
         </div>
         ''', unsafe_allow_html=True)
@@ -1683,7 +1541,6 @@ def exibir_cabecalho_carrinho():
 # ============================================
 
 def verificar_abertura_carrinho():
-    """Verifica se o carrinho deve ser aberto via parâmetro na URL"""
     query_params = st.query_params
     if query_params.get('page') == 'carrinho':
         st.session_state.carrinho_aberto = True
@@ -1724,7 +1581,6 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     data_geracao = formatar_data_brasil()
     id_documento = hashlib.sha256(f"{dados_cliente.get('cnpj', '')}{data_geracao}".encode()).hexdigest()[:8]
     
-    # Verifica se há itens em promoção
     itens_promo = [item for item in itens_carrinho if item.get('eh_promocao', False)]
     tem_promo = len(itens_promo) > 0
     valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
@@ -1825,7 +1681,6 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
     for item in itens_carrinho:
         eh_promo = item.get('eh_promocao', False)
         
-        # Se for promoção, não aplica desconto por volume
         if eh_promo:
             valor_base_item = item['preco_final']
             valor_com_desconto_item = valor_base_item
@@ -1920,7 +1775,6 @@ def formatar_mensagem_whatsapp(dados_cliente, uf, tipo_cliente, forma_pagamento,
                                 desconto_volume_percentual, valor_desconto_volume, valor_base_total,
                                 total_ipi, total_st):
     
-    # Verifica se há itens em promoção
     itens_promo = [item for item in st.session_state.carrinho if item.get('eh_promocao', False)]
     tem_promo = len(itens_promo) > 0
     valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
@@ -2023,10 +1877,9 @@ def carregar_imagem_fundo_base64():
             return None
 
 # ============================================
-# CONFIGURAÇÃO DA PÁGINA - PRIMEIRO E MAIS IMPORTANTE!
+# CONFIGURAÇÃO DA PÁGINA
 # ============================================
 
-# ESTE É O PRIMEIRO COMANDO STREAMLIT EXECUTADO!
 favicon = carregar_logo_favicon()
 if favicon:
     st.set_page_config(
@@ -2042,22 +1895,18 @@ else:
     )
 
 # ============================================
-# EXECUÇÃO PRINCIPAL - SÓ DEPOIS DO set_page_config!
+# EXECUÇÃO PRINCIPAL
 # ============================================
 
-# Verificar tipo de cliente
 if 'acesso_autorizado' not in st.session_state:
     verificar_tipo_cliente_inicial()
     st.stop()
 
-# EXIBIR NOTIFICAÇÕES - AGORA DEPOIS DO set_page_config!
 exibir_notificacoes()
 
-# Verificar consentimento LGPD
 if not obter_consentimento_lgpd():
     st.stop()
 
-# Restaurar padding normal após aceitar LGPD
 st.markdown("""
 <style>
 .main {
@@ -2069,7 +1918,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Verificar timeout da sessão
 limpar_dados_sensiveis()
 
 if st.session_state.get('cnpj_validado'):
@@ -2123,16 +1971,13 @@ if 'cliente_isento' not in st.session_state:
     st.session_state.cliente_isento = False
 if 'ultimo_hash_notificacoes' not in st.session_state:
     st.session_state.ultimo_hash_notificacoes = None
-
-# ============================================
-# FORÇAR ATUALIZAÇÃO DO BALÃO DE DESCONTO - WATCHDOG
-# ============================================
-
-# Verifica se houve atualização no carrinho
 if '_ultima_atualizacao' not in st.session_state:
     st.session_state._ultima_atualizacao = datetime.now()
 
-# Se o carrinho mudou, força atualização
+# ============================================
+# FORÇAR ATUALIZAÇÃO DO CARD DE DESCONTO
+# ============================================
+
 if st.session_state.carrinho:
     for item in st.session_state.carrinho:
         item['preco_total'] = item['preco_final'] * item['quantidade']
@@ -2282,7 +2127,7 @@ def recalcular_todo_carrinho(uf, cliente_isento, forma_pagamento,
         item['eh_promocao'] = is_promo
 
 # ============================================
-# FUNÇÕES DO CARRINHO (CORRIGIDA COM ATUALIZAÇÃO)
+# FUNÇÕES DO CARRINHO
 # ============================================
 def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
                            valor_desconto, preco_com_desconto, preco_final,
@@ -2295,7 +2140,6 @@ def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
             item['ipi_total'] = item['valor_ipi'] * item['quantidade']
             item['st_total'] = item['valor_st'] * item['quantidade']
             item['total_geral'] = (item['preco_final'] + item['valor_ipi'] + item['valor_st']) * item['quantidade']
-            # FORÇA ATUALIZAÇÃO
             st.session_state._ultima_atualizacao = datetime.now()
             return True
     st.session_state.carrinho.append({
@@ -2322,8 +2166,6 @@ def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
         'imagem_url': produto.get('imagem_url', ''),
         'eh_promocao': eh_promocao
     })
-    
-    # FORÇA ATUALIZAÇÃO
     st.session_state._ultima_atualizacao = datetime.now()
     return True
 
@@ -2344,7 +2186,6 @@ def calcular_resumo_carrinho():
         return {'total_itens': 0, 'total_geral': 0.0, 'total_ipi': 0.0,
                 'total_st': 0.0, 'total_desconto': 0.0, 'total_bruto': 0.0}
     
-    # Calcula desconto considerando apenas itens NÃO promocionais
     valor_base_nao_promo = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho if not item.get('eh_promocao', False))
     desconto_vol = calcular_desconto_volume(valor_base_nao_promo, False)
     
@@ -2354,7 +2195,6 @@ def calcular_resumo_carrinho():
     
     for item in st.session_state.carrinho:
         if item.get('eh_promocao', False):
-            # Itens em promoção NÃO recebem desconto por volume
             total_com_desconto += item['total_geral']
             total_ipi += item['valor_ipi'] * item['quantidade']
             total_st += item['valor_st'] * item['quantidade']
@@ -2558,7 +2398,7 @@ def buscar_desconto(icms: float, forma_pagamento: str, df_desconto: pd.DataFrame
     return 0.0
 
 # ============================================
-# CSS GLOBAL COMPLETO COM IMAGEM DE FUNDO
+# CSS GLOBAL
 # ============================================
 
 img_fundo_base64 = carregar_imagem_fundo_base64()
@@ -2736,14 +2576,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO ABAIXO DO AVISO LEGAL
+# EXIBIR CARD DE DESCONTO PROFISSIONAL
 # ============================================
 exibir_cabecalho_carrinho()
 
 st.markdown("---")
 
 # ============================================
-# SIDEBAR COM TÍTULO "FILTROS"
+# SIDEBAR COM FILTROS
 # ============================================
 st.sidebar.markdown('<div class="filtro-sidebar">🔍 FILTROS</div>', unsafe_allow_html=True)
 
@@ -2838,7 +2678,7 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO (quando aberto)
+# TELA DO CARRINHO
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
     st.markdown("# 🛒 Meu Orçamento Virtual")
@@ -2851,7 +2691,6 @@ if st.session_state.get('carrinho_aberto', False):
         st.info("Seu orçamento está vazio. Adicione produtos para continuar.")
         st.stop()
 
-    # Calcula desconto considerando apenas itens NÃO promocionais
     valor_base_nao_promo = sum(item['preco_final'] * item['quantidade'] for item in st.session_state.carrinho if not item.get('eh_promocao', False))
     desconto_volume_percentual = calcular_desconto_volume(valor_base_nao_promo, False)
     valor_desconto_volume = valor_base_nao_promo * desconto_volume_percentual
@@ -2864,7 +2703,6 @@ if st.session_state.get('carrinho_aberto', False):
     total_bruto_geral = 0
     total_promo = 0
 
-    # Verifica se há itens em promoção
     itens_promo = [item for item in st.session_state.carrinho if item.get('eh_promocao', False)]
     tem_promo = len(itens_promo) > 0
     valor_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_promo) if tem_promo else 0
@@ -2873,7 +2711,6 @@ if st.session_state.get('carrinho_aberto', False):
         eh_promo = item.get('eh_promocao', False)
         
         if eh_promo:
-            # Itens em promoção NÃO recebem desconto por volume
             total_promo += item['total_geral']
             total_ipi_recalculado += item['ipi_total']
             total_st_recalculado += item['st_total']
@@ -2967,11 +2804,9 @@ if st.session_state.get('carrinho_aberto', False):
 
     total_final_com_vol = total_geral_recalculado
 
-    # Exibe aviso sobre itens em promoção
     if tem_promo:
         st.info(f"🔥 Itens em promoção ({len(itens_promo)} itens - {formatar_moeda(valor_promo)}) NÃO recebem desconto por volume")
 
-    # BALÃO DE DESCONTO CORRIGIDO - NO CARRINHO
     if desconto_volume_percentual > 0:
         st.markdown(f"""
         <div style="background-color: #E8F5E9; border-left: 4px solid #4CAF50;
@@ -3228,7 +3063,6 @@ if st.session_state.get('carrinho_aberto', False):
                             salvar_historico_orcamento(dados_cliente, uf_selecionada, total_final_com_vol, 
                                                       forma_pagamento, st.session_state.carrinho)
                         
-                        # ENVIO DE E-MAIL - SEM MENSAGEM DE SUCESSO VISÍVEL
                         with st.spinner("📧 Processando..."):
                             sucesso_email, msg_email = enviar_email_orcamento(
                                 dados_cliente, 
@@ -3315,9 +3149,6 @@ if busca_referencia:
 
 total_encontrados = len(dados_filtrados)
 
-# ============================================
-# HEADER COM TÍTULO
-# ============================================
 st.markdown(f"## ✨ Produtos Encontrados: {total_encontrados}")
 
 st.markdown("---")
@@ -3360,7 +3191,6 @@ st.markdown("---")
 if dados_filtrados.empty:
     st.warning("😕 Nenhum produto encontrado.")
 else:
-    # Calcula desconto considerando apenas itens NÃO promocionais no carrinho
     desconto_volume_atual = 0
     valor_base_carrinho = 0
     if st.session_state.carrinho:
@@ -3403,7 +3233,6 @@ else:
         valor_st = 0.0 if cliente_isento else preco_final * aliquota_st
         valor_total = preco_final + valor_ipi + valor_st
         
-        # Só aplica desconto por volume se NÃO for promoção
         if is_promo:
             preco_com_desconto_volume = preco_final
         else:
@@ -3537,9 +3366,7 @@ else:
                         eh_promocao=is_promo
                     )
                     if sucesso:
-                        # RESETAR A QUANTIDADE PARA 1 APÓS ADICIONAR
                         st.session_state.quantidades[qtd_key] = 1
-                        # FORÇAR RECARREGAMENTO IMEDIATO
                         st.rerun()
 
             st.markdown("---")
@@ -3595,13 +3422,11 @@ st.markdown("""
     </div>
 </div>""", unsafe_allow_html=True)
 
-# CONTATOS PRINCIPAIS
 st.markdown("""
 <div class='contact-footer'>
     📞 (11) 4676-9000 | 💬 (11) 93011-9335 | ✉️ sac@luvidarte.com.br
 </div>""", unsafe_allow_html=True)
 
-# NOVA LINHA COM E-MAILS DE VENDAS E SUPORTE
 st.markdown("""
 <div style='text-align: center; padding: 10px; font-size: 13px; color: #555; background-color: #f9f9f9; border-radius: 8px; margin: 10px 0;'>
     <strong>📧 E-mails para contato comercial:</strong><br>
@@ -3610,7 +3435,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# LGPD
 st.markdown("""
 <div style='text-align: center; padding: 15px; margin-top: 10px; border-top: 1px solid #ddd;'>
     <p style='font-size: 12px; color: #666;'>
