@@ -1407,11 +1407,22 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO (CORRIGIDA)
+# FUNÇÃO PARA EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO (CORRIGIDA COM ATUALIZAÇÃO AUTOMÁTICA)
 # ============================================
 
 def exibir_cabecalho_carrinho():
     """Exibe o balão de desconto e botão do carrinho usando componentes Streamlit"""
+    
+    # FORÇAR RECÁLCULO SEMPRE QUE A FUNÇÃO FOR CHAMADA
+    if st.session_state.carrinho:
+        # Recalcula os valores para garantir que estão atualizados
+        for item in st.session_state.carrinho:
+            # Garante que os cálculos estão corretos
+            item['preco_total'] = item['preco_final'] * item['quantidade']
+            item['ipi_total'] = item['valor_ipi'] * item['quantidade']
+            item['st_total'] = item['valor_st'] * item['quantidade']
+            item['total_geral'] = (item['preco_final'] + item['valor_ipi'] + item['valor_st']) * item['quantidade']
+    
     resumo_header = calcular_resumo_carrinho()
     
     # Calcula o desconto para exibir no badge
@@ -2254,7 +2265,7 @@ def recalcular_todo_carrinho(uf, cliente_isento, forma_pagamento,
         item['eh_promocao'] = is_promo
 
 # ============================================
-# FUNÇÕES DO CARRINHO
+# FUNÇÕES DO CARRINHO (CORRIGIDA COM ATUALIZAÇÃO)
 # ============================================
 def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
                            valor_desconto, preco_com_desconto, preco_final,
@@ -2292,6 +2303,9 @@ def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
         'imagem_url': produto.get('imagem_url', ''),
         'eh_promocao': eh_promocao
     })
+    
+    # FORÇAR ATUALIZAÇÃO DO CARRINHO
+    st.session_state.filtros_anteriores = None
     return True
 
 def remover_do_carrinho(indice):
@@ -2936,9 +2950,7 @@ if st.session_state.get('carrinho_aberto', False):
     if tem_promo:
         st.info(f"🔥 Itens em promoção ({len(itens_promo)} itens - {formatar_moeda(valor_promo)}) NÃO recebem desconto por volume")
 
-    # ============================================
     # BALÃO DE DESCONTO CORRIGIDO - NO CARRINHO
-    # ============================================
     if desconto_volume_percentual > 0:
         st.markdown(f"""
         <div style="background-color: #E8F5E9; border-left: 4px solid #4CAF50;
@@ -3504,11 +3516,9 @@ else:
                         eh_promocao=is_promo
                     )
                     if sucesso:
-                        if is_promo:
-                            st.success(f"✅ Produto PROMOCIONAL adicionado ao orçamento! Quantidade: {qtd_atual}")
-                        else:
-                            st.success(f"✅ Produto adicionado ao orçamento! Quantidade: {qtd_atual}")
-                        time.sleep(0.5)
+                        # RESETAR A QUANTIDADE PARA 1 APÓS ADICIONAR
+                        st.session_state.quantidades[qtd_key] = 1
+                        # FORÇAR RECARREGAMENTO IMEDIATO
                         st.rerun()
 
             st.markdown("---")
