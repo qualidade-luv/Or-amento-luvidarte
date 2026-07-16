@@ -1242,12 +1242,17 @@ def exibir_cabecalho_carrinho():
         else:
             mensagem_faltante = "Adicione produtos NÃO promocionais"
     
+    # Monta informação de promoção
+    info_promo = ""
+    if tem_promo:
+        info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} (não entram no desconto)"
+    
     total_fmt_header = formatar_moeda(resumo_header['total_geral'])
     valor_base_fmt = formatar_moeda(valor_base_nao_promo)
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD SEM BARRA DE PROGRESSO
+    # CARD COM INFORMAÇÕES DE PROMOÇÃO
     # ============================================
     
     # Container principal
@@ -1301,6 +1306,15 @@ def exibir_cabecalho_carrinho():
         color: #D32F2F;
         white-space: nowrap;
     }}
+    .card-desconto-header .texto-promo {{
+        font-size: 14px;
+        font-weight: 600;
+        color: #D32F2F;
+        background: rgba(211,47,47,0.1);
+        padding: 2px 12px;
+        border-radius: 4px;
+        white-space: nowrap;
+    }}
     .card-desconto-header .btn-wrapper {{
         margin-left: auto;
         flex-shrink: 0;
@@ -1309,10 +1323,10 @@ def exibir_cabecalho_carrinho():
         background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
         color: white !important;
         border: none !important;
-        padding: 6px 16px !important;
-        border-radius: 8px !important;
+        padding: 8px 20px !important;
+        border-radius: 10px !important;
         font-weight: 700 !important;
-        font-size: 13px !important;
+        font-size: 14px !important;
         cursor: pointer !important;
         transition: all 0.3s ease !important;
         box-shadow: 0 4px 15px rgba(46, 125, 50, 0.25) !important;
@@ -1339,6 +1353,9 @@ def exibir_cabecalho_carrinho():
         .card-desconto-header .texto-faltante {{
             font-size: 14px;
         }}
+        .card-desconto-header .texto-promo {{
+            font-size: 12px;
+        }}
     }}
     </style>
     
@@ -1350,17 +1367,22 @@ def exibir_cabecalho_carrinho():
             <span class="texto-base">Base: {valor_base_fmt}</span>
             <span class="separador">|</span>
             <span class="texto-faltante">{mensagem_faltante}</span>
+            {f'<span class="texto-promo">{info_promo}</span>' if tem_promo else ''}
             <div class="btn-wrapper">
     """, unsafe_allow_html=True)
     
-    # Botão do carrinho
+    # Botão do carrinho - USANDO st.button com a função correta
     timestamp = datetime.now().strftime('%H%M%S%f')
-    if st.button(
-        f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-        key=f"btn_carrinho_header_{timestamp}",
-        use_container_width=True
-    ):
-        abrir_carrinho()
+    col_btn, col_empty = st.columns([1, 0])
+    with col_btn:
+        if st.button(
+            f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
+            key=f"btn_carrinho_header_{timestamp}",
+            use_container_width=True
+        ):
+            # Forçar abertura do carrinho
+            st.session_state.carrinho_aberto = True
+            st.rerun()
     
     # Fecha o card
     st.markdown("""
