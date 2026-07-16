@@ -1407,11 +1407,11 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM ST.MARKDOWN
+# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM ST.COMPONENTS
 # ============================================
 
 def gerar_botao_desconto_flutuante_html():
-    """Gera o HTML do balão de desconto com position:fixed para ficar fixo na tela"""
+    """Gera o HTML do balão de desconto com position:fixed"""
     
     # Calcula o valor base considerando apenas itens NÃO promocionais
     valor_base_total = 0
@@ -1480,114 +1480,200 @@ def gerar_botao_desconto_flutuante_html():
         </div>
         """
     
-    # HTML com position:fixed para ficar sempre visível
+    # HTML completo com position:fixed
     html = f'''
-    <div id="descontoFloat" style="
-        position: fixed !important;
-        bottom: 85px !important;
-        right: 20px !important;
-        z-index: 999999 !important;
-        max-width: 340px !important;
-        min-width: 280px !important;
-        animation: slideInRight 0.5s ease-out !important;
-        cursor: pointer !important;
-    ">
-        <div style="
-            background: linear-gradient(135deg, #FFFFFF, #F8F9FA) !important;
-            border-radius: 16px !important;
-            padding: 14px 20px !important;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
-            border-left: 5px solid {cor} !important;
-            transition: all 0.3s ease !important;
-            position: relative !important;
-        ">
-            <button onclick="document.getElementById('descontoFloat').style.display='none'" style="
-                position: absolute !important;
-                top: 8px !important;
-                right: 12px !important;
-                background: none !important;
-                border: none !important;
-                font-size: 18px !important;
-                cursor: pointer !important;
-                color: #999 !important;
-                transition: color 0.2s !important;
-                padding: 0 !important;
-                line-height: 1 !important;
-            " onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">✕</button>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ 
+                margin: 0; 
+                padding: 0; 
+                overflow: hidden;
+                background: transparent;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            }}
             
-            <div style="display: flex !important; align-items: center !important; gap: 12px !important; margin-bottom: 10px !important;">
-                <div style="font-size: 32px !important; animation: pulse 2s infinite !important;">{icone}</div>
-                <div>
-                    <div style="font-size: 13px !important; font-weight: bold !important; color: #555 !important; margin: 0 !important; text-transform: uppercase; letter-spacing: 0.5px;">💎 DESCONTO POR VOLUME</div>
-                    <div style="font-size: 20px !important; font-weight: bold !important; color: {cor} !important; margin: 2px 0 !important;">{texto_desconto}</div>
+            @keyframes slideInRight {{
+                from {{ transform: translateX(100%); opacity: 0; }}
+                to {{ transform: translateX(0); opacity: 1; }}
+            }}
+            
+            @keyframes pulse {{
+                0% {{ transform: scale(1); }}
+                50% {{ transform: scale(1.05); }}
+                100% {{ transform: scale(1); }}
+            }}
+            
+            .desconto-float {{
+                position: fixed;
+                bottom: 85px;
+                right: 20px;
+                z-index: 999999;
+                animation: slideInRight 0.5s ease-out;
+                cursor: pointer;
+                max-width: 340px;
+                min-width: 280px;
+                transition: transform 0.3s ease;
+            }}
+            
+            .desconto-float:hover {{
+                transform: translateY(-5px);
+            }}
+            
+            .desconto-card {{
+                background: linear-gradient(135deg, #FFFFFF, #F8F9FA);
+                border-radius: 16px;
+                padding: 14px 20px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                border-left: 5px solid {cor};
+                position: relative;
+            }}
+            
+            .close-btn {{
+                position: absolute;
+                top: 8px;
+                right: 12px;
+                background: none;
+                border: none;
+                font-size: 18px;
+                cursor: pointer;
+                color: #999;
+                transition: color 0.2s;
+                padding: 0;
+                line-height: 1;
+            }}
+            
+            .close-btn:hover {{
+                color: #333;
+            }}
+            
+            .desconto-header {{
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 10px;
+            }}
+            
+            .desconto-icon {{
+                font-size: 32px;
+                animation: pulse 2s infinite;
+            }}
+            
+            .desconto-title {{
+                font-size: 13px;
+                font-weight: bold;
+                color: #555;
+                margin: 0;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }}
+            
+            .desconto-value {{
+                font-size: 20px;
+                font-weight: bold;
+                color: {cor};
+                margin: 2px 0;
+            }}
+            
+            .desconto-message {{
+                font-size: 13px;
+                color: #444;
+                margin: 8px 0;
+                line-height: 1.5;
+            }}
+            
+            .desconto-message small {{
+                font-size: 11px;
+                color: #888;
+            }}
+            
+            .progress-bar-container {{
+                background-color: #E9ECEF;
+                border-radius: 10px;
+                height: 8px;
+                margin: 12px 0 8px 0;
+                overflow: hidden;
+            }}
+            
+            .progress-bar-fill {{
+                background: linear-gradient(90deg, {cor}, #FF9800);
+                width: {progresso}%;
+                height: 100%;
+                border-radius: 10px;
+                transition: width 0.6s ease;
+            }}
+            
+            .progress-labels {{
+                display: flex;
+                justify-content: space-between;
+                font-size: 9px;
+                color: #888;
+                margin-top: 4px;
+            }}
+            
+            .promo-badge {{
+                background-color: #D32F2F;
+                color: white;
+                padding: 2px 10px;
+                border-radius: 12px;
+                font-size: 10px;
+                font-weight: bold;
+                display: inline-block;
+                margin-top: 5px;
+            }}
+            
+            @media (max-width: 768px) {{
+                .desconto-float {{
+                    bottom: 75px;
+                    right: 10px;
+                    min-width: 260px;
+                    max-width: 290px;
+                }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="desconto-float" id="descontoFloat">
+            <div class="desconto-card">
+                <button class="close-btn" onclick="document.getElementById('descontoFloat').style.display='none'">✕</button>
+                
+                <div class="desconto-header">
+                    <div class="desconto-icon">{icone}</div>
+                    <div>
+                        <div class="desconto-title">💎 DESCONTO POR VOLUME</div>
+                        <div class="desconto-value">{texto_desconto}</div>
+                    </div>
+                </div>
+                
+                <div class="desconto-message">{mensagem}</div>
+                
+                {badge_promo}
+                
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill"></div>
+                </div>
+                
+                <div class="progress-labels">
+                    <span>💰 R$ 0</span>
+                    <span>🎯 10% (R$ 1.500)</span>
+                    <span>🏅 15% (R$ 2.500)</span>
+                    <span>🏆 20% (R$ 4.000)</span>
                 </div>
             </div>
-            
-            <div style="font-size: 13px !important; color: #444 !important; margin: 8px 0 !important; line-height: 1.5 !important;">{mensagem}</div>
-            
-            {badge_promo}
-            
-            <div style="background-color: #E9ECEF !important; border-radius: 10px !important; height: 8px !important; margin: 12px 0 8px 0 !important; overflow: hidden !important;">
-                <div style="background: linear-gradient(90deg, {cor}, #FF9800) !important; width: {progresso}% !important; height: 100% !important; border-radius: 10px !important; transition: width 0.6s ease !important;"></div>
-            </div>
-            
-            <div style="display: flex !important; justify-content: space-between !important; font-size: 9px !important; color: #888 !important; margin-top: 4px !important;">
-                <span>💰 R$ 0</span>
-                <span>🎯 10% (R$ 1.500)</span>
-                <span>🏅 15% (R$ 2.500)</span>
-                <span>🏆 20% (R$ 4.000)</span>
-            </div>
         </div>
-    </div>
-    
-    <style>
-        @keyframes slideInRight {{
-            from {{ transform: translateX(100%); opacity: 0; }}
-            to {{ transform: translateX(0); opacity: 1; }}
-        }}
-        @keyframes pulse {{
-            0% {{ transform: scale(1); }}
-            50% {{ transform: scale(1.05); }}
-            100% {{ transform: scale(1); }}
-        }}
-        
-        #descontoFloat:hover {{
-            transform: translateY(-5px) !important;
-            transition: transform 0.3s ease !important;
-        }}
-        
-        @media (max-width: 768px) {{
-            #descontoFloat {{
-                bottom: 75px !important;
-                right: 10px !important;
-                min-width: 260px !important;
-                max-width: 290px !important;
-            }}
-        }}
-        
-        /* Ajuste para não sobrepor o botão do WhatsApp */
-        .whatsapp-float-fixed {{
-            position: fixed !important;
-            bottom: 20px !important;
-            right: 20px !important;
-            z-index: 999990 !important;
-        }}
-        
-        @media (max-width: 768px) {{
-            .whatsapp-float-fixed {{
-                bottom: 15px !important;
-                right: 15px !important;
-            }}
-        }}
-    </style>
+    </body>
+    </html>
     '''
     
     return html
 
 def exibir_botao_desconto_flutuante():
-    """Exibe o botão flutuante de desconto usando st.markdown com unsafe_allow_html=True"""
-    st.markdown(gerar_botao_desconto_flutuante_html(), unsafe_allow_html=True)
-
+    """Exibe o botão flutuante de desconto usando st.components.v1.html"""
+    from streamlit.components.v1 import html as st_html
+    st_html(gerar_botao_desconto_flutuante_html(), height=220)
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
