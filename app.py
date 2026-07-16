@@ -1417,7 +1417,6 @@ def exibir_cabecalho_carrinho():
     if st.session_state.carrinho:
         # Recalcula os valores para garantir que estão atualizados
         for item in st.session_state.carrinho:
-            # Garante que os cálculos estão corretos
             item['preco_total'] = item['preco_final'] * item['quantidade']
             item['ipi_total'] = item['valor_ipi'] * item['quantidade']
             item['st_total'] = item['valor_st'] * item['quantidade']
@@ -1472,7 +1471,7 @@ def exibir_cabecalho_carrinho():
     if tem_promo:
         info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
     
-    # CSS CORRIGIDO - com overflow visível e melhor espaçamento
+    # CSS CORRIGIDO
     st.markdown("""
     <style>
     .carrinho-header {
@@ -1643,7 +1642,9 @@ def exibir_cabecalho_carrinho():
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         valor_base_fmt = formatar_moeda(valor_base_nao_promo)
         
-        # HTML CORRIGIDO - estrutura mais limpa
+        # Usando timestamp para forçar atualização
+        timestamp = datetime.now().strftime('%H%M%S%f')
+        
         st.markdown(f'''
         <div class="carrinho-header" style="border-left-color: {cor_desconto};">
             <div class="info">
@@ -1661,10 +1662,10 @@ def exibir_cabecalho_carrinho():
             <div class="cart-btn-container">
         ''', unsafe_allow_html=True)
         
-        # Botão do carrinho usando Streamlit
+        # Botão do carrinho com chave única para forçar atualização
         if st.button(
             f"🛒 Meu Carrinho ({resumo_header['total_itens']}) {total_fmt_header}",
-            key="btn_carrinho_header",
+            key=f"btn_carrinho_header_{timestamp}",
             use_container_width=True
         ):
             abrir_carrinho()
@@ -2124,6 +2125,22 @@ if 'ultimo_hash_notificacoes' not in st.session_state:
     st.session_state.ultimo_hash_notificacoes = None
 
 # ============================================
+# FORÇAR ATUALIZAÇÃO DO BALÃO DE DESCONTO - WATCHDOG
+# ============================================
+
+# Verifica se houve atualização no carrinho
+if '_ultima_atualizacao' not in st.session_state:
+    st.session_state._ultima_atualizacao = datetime.now()
+
+# Se o carrinho mudou, força atualização
+if st.session_state.carrinho:
+    for item in st.session_state.carrinho:
+        item['preco_total'] = item['preco_final'] * item['quantidade']
+        item['ipi_total'] = item['valor_ipi'] * item['quantidade']
+        item['st_total'] = item['valor_st'] * item['quantidade']
+        item['total_geral'] = (item['preco_final'] + item['valor_ipi'] + item['valor_st']) * item['quantidade']
+
+# ============================================
 # VERIFICAR ABERTURA DO CARRINHO VIA URL
 # ============================================
 verificar_abertura_carrinho()
@@ -2278,6 +2295,8 @@ def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
             item['ipi_total'] = item['valor_ipi'] * item['quantidade']
             item['st_total'] = item['valor_st'] * item['quantidade']
             item['total_geral'] = (item['preco_final'] + item['valor_ipi'] + item['valor_st']) * item['quantidade']
+            # FORÇA ATUALIZAÇÃO
+            st.session_state._ultima_atualizacao = datetime.now()
             return True
     st.session_state.carrinho.append({
         'referencia': produto['Referência'],
@@ -2304,19 +2323,21 @@ def adicionar_ao_carrinho(produto, quantidade, preco_bruto, desconto_percentual,
         'eh_promocao': eh_promocao
     })
     
-    # FORÇAR ATUALIZAÇÃO DO CARRINHO
-    st.session_state.filtros_anteriores = None
+    # FORÇA ATUALIZAÇÃO
+    st.session_state._ultima_atualizacao = datetime.now()
     return True
 
 def remover_do_carrinho(indice):
     if 0 <= indice < len(st.session_state.carrinho):
         st.session_state.carrinho.pop(indice)
+        st.session_state._ultima_atualizacao = datetime.now()
 
 def limpar_carrinho():
     st.session_state.carrinho = []
     st.session_state.mostrar_formulario_cliente = False
     st.session_state.mostrar_botoes_envio = False
     st.session_state.html_bytes = None
+    st.session_state._ultima_atualizacao = datetime.now()
 
 def calcular_resumo_carrinho():
     if not st.session_state.carrinho:
