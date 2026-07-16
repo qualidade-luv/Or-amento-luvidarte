@@ -1247,21 +1247,21 @@ def exibir_cabecalho_carrinho():
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD COM LINK EM NEGRITO
+    # CARD COM LINK - VERSÃO SIMPLIFICADA
     # ============================================
     
     # Monta o texto de promoção
     promo_text = ""
     if tem_promo:
-        promo_text = f" 🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} (não entram no desconto)"
+        promo_text = f" 🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
     
-    # CSS do card
-    st.markdown("""
+    # CSS e HTML do card em UM ÚNICO markdown
+    st.markdown(f"""
     <style>
-    .card-desconto-link {
+    .card-desconto-link {{
         background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
         border-radius: 16px;
-        padding: 14px 20px;
+        padding: 12px 18px;
         margin: 10px 0 20px 0;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         border: 1px solid #E8E0D0;
@@ -1269,101 +1269,90 @@ def exibir_cabecalho_carrinho():
         align-items: center;
         justify-content: space-between;
         flex-wrap: wrap;
-        gap: 10px;
-    }
-    .card-desconto-link .info-left {
+        gap: 8px;
+    }}
+    .card-desconto-link .esquerda {{
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         flex-wrap: wrap;
-    }
-    .card-desconto-link .icone {
-        font-size: 22px;
-    }
-    .card-desconto-link .txt-desconto {
-        font-size: 16px;
+    }}
+    .card-desconto-link .icone {{
+        font-size: 20px;
+    }}
+    .card-desconto-link .destaque {{
+        font-size: 15px;
         font-weight: 800;
         color: #D32F2F;
-    }
-    .card-desconto-link .txt-base {
-        font-size: 16px;
+    }}
+    .card-desconto-link .base {{
+        font-size: 15px;
         font-weight: 700;
         color: #2E7D32;
-    }
-    .card-desconto-link .txt-faltante {
-        font-size: 16px;
+    }}
+    .card-desconto-link .falta {{
+        font-size: 15px;
         font-weight: 600;
         color: #D32F2F;
-    }
-    .card-desconto-link .txt-promo {
-        font-size: 13px;
+    }}
+    .card-desconto-link .promo {{
+        font-size: 12px;
         font-weight: 600;
         color: #D32F2F;
         background: rgba(211,47,47,0.1);
-        padding: 2px 12px;
+        padding: 1px 10px;
         border-radius: 4px;
-    }
-    .card-desconto-link .separador {
+    }}
+    .card-desconto-link .sep {{
         color: #E0D5C0;
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 300;
-    }
-    .card-desconto-link .link-carrinho {
-        font-size: 16px;
+    }}
+    .card-desconto-link .link-carrinho {{
+        font-size: 15px;
         font-weight: 700;
         color: #2E7D32;
-        cursor: pointer;
         text-decoration: none;
-        padding: 6px 16px;
+        padding: 5px 14px;
         border-radius: 8px;
         background: rgba(46,125,50,0.08);
         transition: all 0.3s ease;
         white-space: nowrap;
         flex-shrink: 0;
-    }
-    .card-desconto-link .link-carrinho:hover {
-        background: rgba(46,125,50,0.15);
+        cursor: pointer;
+    }}
+    .card-desconto-link .link-carrinho:hover {{
+        background: rgba(46,125,50,0.18);
         transform: translateY(-1px);
-    }
-    @media (max-width: 768px) {
-        .card-desconto-link {
+    }}
+    @media (max-width: 768px) {{
+        .card-desconto-link {{
             flex-direction: column;
             align-items: stretch;
-        }
-        .card-desconto-link .info-left {
-            gap: 8px;
-        }
-        .card-desconto-link .link-carrinho {
+        }}
+        .card-desconto-link .link-carrinho {{
             text-align: center;
-        }
-        .card-desconto-link .txt-desconto,
-        .card-desconto-link .txt-base,
-        .card-desconto-link .txt-faltante {
-            font-size: 14px;
-        }
-    }
+        }}
+    }}
     </style>
-    """, unsafe_allow_html=True)
     
-    # HTML do card com link
-    st.markdown(f'''
     <div class="card-desconto-link">
-        <div class="info-left">
+        <div class="esquerda">
             <span class="icone">💎</span>
-            <span class="txt-desconto">Desconto: {desconto_texto}</span>
-            <span class="separador">|</span>
-            <span class="txt-base">Base: {valor_base_fmt}</span>
-            <span class="separador">|</span>
-            <span class="txt-faltante">{mensagem_faltante}</span>
-            {f'<span class="txt-promo">{promo_text}</span>' if tem_promo else ''}
+            <span class="destaque">Desconto: {desconto_texto}</span>
+            <span class="sep">|</span>
+            <span class="base">Base: {valor_base_fmt}</span>
+            <span class="sep">|</span>
+            <span class="falta">{mensagem_faltante}</span>
+            {f'<span class="promo">{promo_text}</span>' if tem_promo else ''}
         </div>
-        <a class="link-carrinho" onclick="window.location.reload();" href="?page=carrinho">
+        <a class="link-carrinho" href="?page=carrinho">
             🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}
         </a>
     </div>
-    ''', unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
     
-    # Verifica se o link foi clicado via parâmetro na URL
+    # Verifica se o link foi clicado
     verificar_abertura_carrinho()
         
 # ============================================
