@@ -1461,7 +1461,7 @@ def exibir_cabecalho_carrinho():
     if tem_promo:
         info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
     
-    # CSS melhorado para o balão
+    # CSS CORRIGIDO - com overflow visível e melhor espaçamento
     st.markdown("""
     <style>
     .carrinho-header {
@@ -1469,23 +1469,28 @@ def exibir_cabecalho_carrinho():
         justify-content: space-between;
         align-items: center;
         background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
-        padding: 12px 20px;
+        padding: 15px 20px;
         border-radius: 12px;
         border-left: 4px solid #FF9800;
-        margin: 10px 0;
+        margin: 10px 0 20px 0;
         flex-wrap: wrap;
-        gap: 10px;
-        min-height: 60px;
+        gap: 12px;
+        min-height: 65px;
+        overflow: visible !important;
+        position: relative;
+        z-index: 100;
     }
     
     .carrinho-header .info {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         flex-wrap: wrap;
         font-size: 14px;
         color: #E65100;
         font-weight: 600;
+        flex: 1;
+        min-width: 200px;
     }
     
     .carrinho-header .info .percent {
@@ -1496,6 +1501,7 @@ def exibir_cabecalho_carrinho():
         padding: 2px 12px;
         border-radius: 6px;
         white-space: nowrap;
+        display: inline-block;
     }
     
     .carrinho-header .info .value {
@@ -1506,6 +1512,7 @@ def exibir_cabecalho_carrinho():
         padding: 2px 12px;
         border-radius: 6px;
         white-space: nowrap;
+        display: inline-block;
     }
     
     .carrinho-header .info .faltante {
@@ -1516,6 +1523,7 @@ def exibir_cabecalho_carrinho():
         padding: 2px 12px;
         border-radius: 6px;
         white-space: nowrap;
+        display: inline-block;
     }
     
     .carrinho-header .info .promo-info {
@@ -1526,15 +1534,17 @@ def exibir_cabecalho_carrinho():
         padding: 2px 10px;
         border-radius: 6px;
         white-space: nowrap;
+        display: inline-block;
     }
     
     .carrinho-header .progress-mini {
-        width: 100px;
+        width: 120px;
         height: 6px;
         background: #E0E0E0;
         border-radius: 4px;
         overflow: hidden;
         flex-shrink: 0;
+        margin: 0 5px;
     }
     
     .carrinho-header .progress-mini-fill {
@@ -1543,40 +1553,34 @@ def exibir_cabecalho_carrinho():
         transition: width 0.5s ease;
     }
     
-    .cart-btn-container {
-        flex-shrink: 0;
+    .carrinho-header .divider-info {
+        color: #BDBDBD;
+        font-weight: 300;
+        margin: 0 2px;
     }
     
-    .cart-btn {
+    .cart-btn-container {
+        flex-shrink: 0;
+        margin-left: auto;
+    }
+    
+    .cart-btn-container .stButton button {
         background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
         color: white !important;
         border: none !important;
-        padding: 8px 20px !important;
+        padding: 10px 22px !important;
         border-radius: 10px !important;
         font-weight: 700 !important;
         font-size: 14px !important;
         cursor: pointer !important;
         transition: all 0.3s ease !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        gap: 10px !important;
         box-shadow: 0 2px 10px rgba(46, 125, 50, 0.2) !important;
+        white-space: nowrap !important;
     }
     
-    .cart-btn:hover {
+    .cart-btn-container .stButton button:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3) !important;
-    }
-    
-    .cart-btn .badge-btn {
-        background: #FF6B6B;
-        color: white;
-        border-radius: 50%;
-        padding: 1px 8px;
-        font-size: 11px;
-        font-weight: 700;
-        min-width: 20px;
-        text-align: center;
     }
     
     .cart-empty {
@@ -1593,15 +1597,9 @@ def exibir_cabecalho_carrinho():
         margin: 10px 0;
     }
     
-    .divider-info {
-        color: #BDBDBD;
-        font-weight: 300;
-        margin: 0 2px;
-    }
-    
     @media (max-width: 768px) {
         .carrinho-header {
-            padding: 10px 12px;
+            padding: 12px 15px;
             flex-direction: column;
             align-items: stretch;
         }
@@ -1609,23 +1607,21 @@ def exibir_cabecalho_carrinho():
             font-size: 12px;
             gap: 6px;
             justify-content: center;
+            min-width: unset;
         }
         .carrinho-header .info .percent {
             font-size: 16px;
         }
         .carrinho-header .progress-mini {
-            width: 60px;
+            width: 80px;
         }
-        .cart-btn {
-            padding: 6px 14px !important;
+        .cart-btn-container {
+            margin-left: 0;
+        }
+        .cart-btn-container .stButton button {
+            padding: 8px 16px !important;
             font-size: 12px !important;
             width: 100%;
-            justify-content: center;
-        }
-        .cart-btn .badge-btn {
-            font-size: 10px !important;
-            min-width: 18px !important;
-            padding: 1px 6px !important;
         }
     }
     </style>
@@ -1636,7 +1632,7 @@ def exibir_cabecalho_carrinho():
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         valor_base_fmt = formatar_moeda(valor_base_nao_promo)
         
-        # Usando HTML puro para evitar problemas de layout
+        # HTML CORRIGIDO - estrutura mais limpa
         st.markdown(f'''
         <div class="carrinho-header" style="border-left-color: {cor_desconto};">
             <div class="info">
