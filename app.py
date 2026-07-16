@@ -1407,11 +1407,11 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO (ABAIXO DO AVISO LEGAL)
+# FUNÇÃO PARA EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO (USANDO STREAMLIT)
 # ============================================
 
 def exibir_cabecalho_carrinho():
-    """Exibe o balão de desconto e botão do carrinho abaixo do aviso legal"""
+    """Exibe o balão de desconto e botão do carrinho usando componentes Streamlit"""
     resumo_header = calcular_resumo_carrinho()
     
     # Calcula o desconto para exibir no badge
@@ -1447,19 +1447,19 @@ def exibir_cabecalho_carrinho():
     if desconto_percentual == 0.20:
         mensagem_faltante = "🏆 Desconto máximo!"
     elif desconto_percentual == 0.15:
-        mensagem_faltante = f"Faltam R$ {faltante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " para 20%"
+        mensagem_faltante = f"Faltam {formatar_moeda(faltante)} para 20%"
     elif desconto_percentual == 0.10:
-        mensagem_faltante = f"Faltam R$ {faltante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " para 15%"
+        mensagem_faltante = f"Faltam {formatar_moeda(faltante)} para 15%"
     else:
         if faltante > 0:
-            mensagem_faltante = f"Faltam R$ {faltante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + f" para {prox_desconto}%"
+            mensagem_faltante = f"Faltam {formatar_moeda(faltante)} para {prox_desconto}%"
         else:
             mensagem_faltante = "Adicione produtos NÃO promocionais"
     
     # Monta informação de promoção
     info_promo = ""
     if tem_promo:
-        info_promo = f" 🔥 {len(itens_promo)} promo(s): R$ {valor_promo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
     
     # CSS
     st.markdown("""
@@ -1537,32 +1537,29 @@ def exibir_cabecalho_carrinho():
         transition: width 0.5s ease;
     }
     
-    .cart-link {
+    .cart-btn {
+        background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
+        color: white !important;
+        border: none !important;
+        padding: 8px 20px !important;
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        cursor: pointer !important;
+        transition: all 0.3s ease !important;
         display: inline-flex !important;
         align-items: center !important;
-        gap: 8px !important;
-        background: none !important;
-        border: none !important;
-        padding: 8px 16px !important;
-        font-weight: 700 !important;
-        font-size: 15px !important;
-        color: #1B5E20 !important;
-        cursor: pointer !important;
-        text-decoration: none !important;
-        transition: all 0.3s ease !important;
-        border-radius: 8px !important;
-        background: rgba(27, 94, 32, 0.08) !important;
-        font-family: inherit !important;
-        line-height: normal !important;
+        gap: 10px !important;
+        box-shadow: 0 2px 10px rgba(46, 125, 50, 0.2) !important;
     }
     
-    .cart-link:hover {
-        background: rgba(27, 94, 32, 0.15) !important;
-        transform: translateY(-1px) !important;
+    .cart-btn:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3) !important;
     }
     
-    .cart-link .badge-link {
-        background: #D32F2F;
+    .cart-btn .badge-btn {
+        background: #FF6B6B;
         color: white;
         border-radius: 50%;
         padding: 1px 8px;
@@ -1570,23 +1567,6 @@ def exibir_cabecalho_carrinho():
         font-weight: 700;
         min-width: 20px;
         text-align: center;
-        animation: pulse-badge 1.5s infinite;
-    }
-    
-    @keyframes pulse-badge {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); }
-    }
-    
-    .cart-link .cart-icon {
-        font-size: 18px;
-    }
-    
-    .cart-link .cart-total {
-        font-size: 14px;
-        font-weight: 700;
-        color: #2E7D32;
     }
     
     .cart-empty {
@@ -1617,17 +1597,14 @@ def exibir_cabecalho_carrinho():
         .carrinho-header .progress-mini {
             width: 50px;
         }
-        .cart-link {
-            padding: 6px 12px !important;
-            font-size: 13px !important;
+        .cart-btn {
+            padding: 6px 14px !important;
+            font-size: 12px !important;
         }
-        .cart-link .badge-link {
+        .cart-btn .badge-btn {
             font-size: 10px !important;
             min-width: 18px !important;
             padding: 1px 6px !important;
-        }
-        .cart-link .cart-total {
-            font-size: 12px !important;
         }
     }
     </style>
@@ -1638,47 +1615,41 @@ def exibir_cabecalho_carrinho():
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         valor_base_fmt = formatar_moeda(valor_base_nao_promo)
         
-        html_content = f'''
-        <div class="carrinho-header">
-            <div class="info">
-                <span>💎</span>
-                <span>Desconto: <span class="percent">{desconto_texto}</span></span>
-                <span>|</span>
-                <span>Base: <span class="value">{valor_base_fmt}</span></span>
-                <span>|</span>
-                <span class="faltante">{mensagem_faltante}</span>
-                {f'<span class="promo-info">{info_promo}</span>' if tem_promo else ''}
-                <div class="progress-mini">
-                    <div class="progress-mini-fill" style="width: {progresso}%; background: linear-gradient(90deg, {cor_desconto}, #FF9800);"></div>
+        # Usando colunas para layout
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            st.markdown(f'''
+            <div class="carrinho-header" style="border-left-color: {cor_desconto};">
+                <div class="info">
+                    <span>💎</span>
+                    <span>Desconto: <span class="percent">{desconto_texto}</span></span>
+                    <span>|</span>
+                    <span>Base: <span class="value">{valor_base_fmt}</span></span>
+                    <span>|</span>
+                    <span class="faltante">{mensagem_faltante}</span>
+                    {f'<span class="promo-info">{info_promo}</span>' if tem_promo else ''}
+                    <div class="progress-mini">
+                        <div class="progress-mini-fill" style="width: {progresso}%; background: linear-gradient(90deg, {cor_desconto}, #FF9800);"></div>
+                    </div>
                 </div>
             </div>
-            <div>
-                <a href="?page=carrinho" class="cart-link">
-                    <span class="cart-icon">🛒</span>
-                    <span>Meu Carrinho</span>
-                    <span class="badge-link">{resumo_header['total_itens']}</span>
-                    <span class="cart-total">{total_fmt_header}</span>
-                </a>
-            </div>
-        </div>
-        '''
+            ''', unsafe_allow_html=True)
         
-        st.markdown(html_content, unsafe_allow_html=True)
-        
-        # Verifica se o carrinho deve ser aberto via query params
-        query_params = st.query_params
-        if query_params.get('page') == 'carrinho':
-            st.session_state.carrinho_aberto = True
-            st.query_params.clear()
-            st.rerun()
+        with col2:
+            # Botão do carrinho usando Streamlit
+            if st.button(
+                f"🛒 Meu Carrinho ({resumo_header['total_itens']}) {total_fmt_header}",
+                key="btn_carrinho_header",
+                use_container_width=True
+            ):
+                abrir_carrinho()
     else:
-        html_content = '''
+        st.markdown('''
         <div class="cart-empty">
             🛒 Carrinho vazio
         </div>
-        '''
-        
-        st.markdown(html_content, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
 
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
