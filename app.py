@@ -1369,70 +1369,6 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ============================================
-# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME - CORRIGIDA
-# ============================================
-
-def calcular_desconto_volume(valor_base, eh_promocao=False):
-    """
-    Calcula o percentual de desconto por volume baseado no valor total
-    
-    NOVAS REGRAS (CORRETAS):
-    - 10% de desconto para valores >= R$ 1.500,00
-    - 15% de desconto para valores >= R$ 2.500,00
-    - 20% de desconto para valores >= R$ 4.000,00
-    - Itens em PROMOÇÃO não recebem este desconto
-    """
-    # Itens em promoção NÃO recebem desconto por volume
-    if eh_promocao:
-        return 0.0
-    
-    if valor_base >= 4000:
-        return 0.20  # 20%
-    elif valor_base >= 2500:
-        return 0.15  # 15%
-    elif valor_base >= 1500:
-        return 0.10  # 10%
-    else:
-        return 0.0
-
-def calcular_desconto_volume_para_carrinho(carrinho):
-    """
-    Calcula o desconto por volume considerando apenas itens NÃO PROMOCIONAIS
-    Itens em promoção NÃO entram no cálculo do valor base para desconto
-    """
-    # Soma apenas o valor dos itens NÃO promocionais
-    valor_base_nao_promo = 0
-    for item in carrinho:
-        if not item.get('eh_promocao', False):
-            valor_base_nao_promo += item['preco_final'] * item['quantidade']
-    
-    # Calcula desconto baseado apenas no valor de itens não promocionais
-    if valor_base_nao_promo >= 4000:
-        return 0.20
-    elif valor_base_nao_promo >= 2500:
-        return 0.15
-    elif valor_base_nao_promo >= 1500:
-        return 0.10
-    else:
-        return 0.0
-
-def calcular_faltante_para_desconto_para_carrinho(carrinho):
-    """Calcula quanto falta para atingir a próxima faixa de desconto considerando apenas itens NÃO promocionais"""
-    # Soma apenas o valor dos itens NÃO promocionais
-    valor_base_nao_promo = 0
-    for item in carrinho:
-        if not item.get('eh_promocao', False):
-            valor_base_nao_promo += item['preco_final'] * item['quantidade']
-    
-    if valor_base_nao_promo < 1500:
-        return 1500 - valor_base_nao_promo, 10
-    elif valor_base_nao_promo < 2500:
-        return 2500 - valor_base_nao_promo, 15
-    elif valor_base_nao_promo < 4000:
-        return 4000 - valor_base_nao_promo, 20
-    else:
-        return 0, 0
-
 # ============================================
 # FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME - CORRIGIDA
 # ============================================
@@ -1472,7 +1408,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM CSS INLINE E POSITION FIXED
+# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM ST.MARKDOWN
 # ============================================
 
 def gerar_botao_desconto_flutuante_html():
@@ -1497,31 +1433,31 @@ def gerar_botao_desconto_flutuante_html():
     if desconto_percentual == 0.20:
         mensagem = f"🏆 PARABÉNS! Você atingiu 20% de desconto máximo em itens NÃO promocionais!"
         if tem_promo:
-            mensagem += f" (Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)"
+            mensagem += f"<br><small>(Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)</small>"
         cor = "#FF9800"
         icone = "🏆"
         texto_desconto = "20% OFF"
     elif desconto_percentual == 0.15:
-        mensagem = f"✅ Você já tem 15% de desconto em itens NÃO promocionais! Faltam {formatar_moeda(faltante)} para 20%"
+        mensagem = f"✅ Você já tem 15% de desconto em itens NÃO promocionais!<br>Faltam <strong>{formatar_moeda(faltante)}</strong> para 20%"
         if tem_promo:
-            mensagem += f" (Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)"
+            mensagem += f"<br><small>(Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)</small>"
         cor = "#4CAF50"
         icone = "🎯"
         texto_desconto = "15% OFF"
     elif desconto_percentual == 0.10:
-        mensagem = f"✅ Você já tem 10% de desconto em itens NÃO promocionais! Faltam {formatar_moeda(faltante)} para 15%"
+        mensagem = f"✅ Você já tem 10% de desconto em itens NÃO promocionais!<br>Faltam <strong>{formatar_moeda(faltante)}</strong> para 15%"
         if tem_promo:
-            mensagem += f" (Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)"
+            mensagem += f"<br><small>(Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)</small>"
         cor = "#2196F3"
         icone = "📈"
         texto_desconto = "10% OFF"
     else:
         if faltante > 0:
-            mensagem = f"📈 Adicione mais {formatar_moeda(faltante)} em itens NÃO promocionais e ganhe {prox_desconto}% de desconto!"
+            mensagem = f"📈 Adicione mais <strong>{formatar_moeda(faltante)}</strong> em itens NÃO promocionais e ganhe <strong>{prox_desconto}%</strong> de desconto!"
         else:
             mensagem = f"💰 Adicione produtos NÃO promocionais para ganhar desconto por volume!"
         if tem_promo:
-            mensagem += f" (Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)"
+            mensagem += f"<br><small>(Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)</small>"
         cor = "#9E9E9E"
         icone = "💰"
         texto_desconto = "0% OFF"
@@ -1545,55 +1481,58 @@ def gerar_botao_desconto_flutuante_html():
         </div>
         """
     
-    # HTML com CSS inline e position:fixed
+    # HTML com position:fixed para ficar sempre visível
     html = f'''
     <div id="descontoFloat" style="
         position: fixed !important;
         bottom: 85px !important;
         right: 20px !important;
-        z-index: 99999 !important;
-        max-width: 320px !important;
+        z-index: 999999 !important;
+        max-width: 340px !important;
         min-width: 280px !important;
         animation: slideInRight 0.5s ease-out !important;
         cursor: pointer !important;
     ">
         <div style="
-            background: linear-gradient(135deg, #FFF, #F5F5F5) !important;
+            background: linear-gradient(135deg, #FFFFFF, #F8F9FA) !important;
             border-radius: 16px !important;
-            padding: 12px 18px !important;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important;
-            border-left: 4px solid {cor} !important;
+            padding: 14px 20px !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
+            border-left: 5px solid {cor} !important;
             transition: all 0.3s ease !important;
             position: relative !important;
         ">
             <button onclick="document.getElementById('descontoFloat').style.display='none'" style="
                 position: absolute !important;
-                top: 5px !important;
-                right: 10px !important;
+                top: 8px !important;
+                right: 12px !important;
                 background: none !important;
                 border: none !important;
-                font-size: 16px !important;
+                font-size: 18px !important;
                 cursor: pointer !important;
                 color: #999 !important;
-            ">✕</button>
+                transition: color 0.2s !important;
+                padding: 0 !important;
+                line-height: 1 !important;
+            " onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">✕</button>
             
-            <div style="display: flex !important; align-items: center !important; gap: 10px !important; margin-bottom: 10px !important;">
-                <div style="font-size: 28px !important; animation: pulse 2s infinite !important;">{icone}</div>
+            <div style="display: flex !important; align-items: center !important; gap: 12px !important; margin-bottom: 10px !important;">
+                <div style="font-size: 32px !important; animation: pulse 2s infinite !important;">{icone}</div>
                 <div>
-                    <div style="font-size: 14px !important; font-weight: bold !important; color: #333 !important; margin: 0 !important;">💎 DESCONTO POR VOLUME</div>
-                    <div style="font-size: 18px !important; font-weight: bold !important; color: {cor} !important; margin: 5px 0 !important;">{texto_desconto}</div>
+                    <div style="font-size: 13px !important; font-weight: bold !important; color: #555 !important; margin: 0 !important; text-transform: uppercase; letter-spacing: 0.5px;">💎 DESCONTO POR VOLUME</div>
+                    <div style="font-size: 20px !important; font-weight: bold !important; color: {cor} !important; margin: 2px 0 !important;">{texto_desconto}</div>
                 </div>
             </div>
             
-            <div style="font-size: 12px !important; color: #555 !important; margin: 8px 0 !important; line-height: 1.4 !important;">{mensagem}</div>
+            <div style="font-size: 13px !important; color: #444 !important; margin: 8px 0 !important; line-height: 1.5 !important;">{mensagem}</div>
             
             {badge_promo}
             
-            <div style="background-color: #E0E0E0 !important; border-radius: 10px !important; height: 8px !important; margin: 10px 0 !important; overflow: hidden !important;">
-                <div style="background: linear-gradient(90deg, {cor}, #FF9800) !important; width: {progresso}% !important; height: 100% !important; border-radius: 10px !important; transition: width 0.5s ease !important;"></div>
+            <div style="background-color: #E9ECEF !important; border-radius: 10px !important; height: 8px !important; margin: 12px 0 8px 0 !important; overflow: hidden !important;">
+                <div style="background: linear-gradient(90deg, {cor}, #FF9800) !important; width: {progresso}% !important; height: 100% !important; border-radius: 10px !important; transition: width 0.6s ease !important;"></div>
             </div>
             
-            <div style="display: flex !important; justify-content: space-between !important; font-size: 9px !important; color: #666 !important; margin-top: 5px !important;">
+            <div style="display: flex !important; justify-content: space-between !important; font-size: 9px !important; color: #888 !important; margin-top: 4px !important;">
                 <span>💰 R$ 0</span>
                 <span>🎯 10% (R$ 1.500)</span>
                 <span>🏅 15% (R$ 2.500)</span>
@@ -1615,6 +1554,7 @@ def gerar_botao_desconto_flutuante_html():
         
         #descontoFloat:hover {{
             transform: translateY(-5px) !important;
+            transition: transform 0.3s ease !important;
         }}
         
         @media (max-width: 768px) {{
@@ -1622,6 +1562,22 @@ def gerar_botao_desconto_flutuante_html():
                 bottom: 75px !important;
                 right: 10px !important;
                 min-width: 260px !important;
+                max-width: 290px !important;
+            }}
+        }}
+        
+        /* Ajuste para não sobrepor o botão do WhatsApp */
+        .whatsapp-float-fixed {{
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            z-index: 999990 !important;
+        }}
+        
+        @media (max-width: 768px) {{
+            .whatsapp-float-fixed {{
+                bottom: 15px !important;
+                right: 15px !important;
             }}
         }}
     </style>
@@ -1630,9 +1586,8 @@ def gerar_botao_desconto_flutuante_html():
     return html
 
 def exibir_botao_desconto_flutuante():
-    """Exibe o botão flutuante de desconto usando st.components.v1.html"""
-    from streamlit.components.v1 import html as st_html
-    st_html(gerar_botao_desconto_flutuante_html(), height=220)
+    """Exibe o botão flutuante de desconto usando st.markdown com unsafe_allow_html=True"""
+    st.markdown(gerar_botao_desconto_flutuante_html(), unsafe_allow_html=True)
 
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
