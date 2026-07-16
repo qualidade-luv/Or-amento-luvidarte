@@ -1686,7 +1686,7 @@ def exibir_botao_desconto_flutuante():
     """Exibe o botão flutuante de desconto usando st.components.v1.html com altura automática"""
     from streamlit.components.v1 import html as st_html
     # Aumentei a altura para 300px para garantir que todo o conteúdo seja exibido
-    st_html(gerar_botao_desconto_flutuante_html(), height=300)
+    st_html(gerar_botao_desconto_flutuante_html(), height=400)
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
