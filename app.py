@@ -1407,7 +1407,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM ST.COMPONENTS
+# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM ALTURA AUTOMÁTICA
 # ============================================
 
 def gerar_botao_desconto_flutuante_html():
@@ -1480,20 +1480,22 @@ def gerar_botao_desconto_flutuante_html():
         </div>
         """
     
-    # HTML completo com position:fixed
+    # HTML completo com position:fixed e altura automática
     html = f'''
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             body {{ 
                 margin: 0; 
                 padding: 0; 
-                overflow: hidden;
+                overflow: visible;
                 background: transparent;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                min-height: 100vh;
             }}
             
             @keyframes slideInRight {{
@@ -1526,7 +1528,7 @@ def gerar_botao_desconto_flutuante_html():
             .desconto-card {{
                 background: linear-gradient(135deg, #FFFFFF, #F8F9FA);
                 border-radius: 16px;
-                padding: 14px 20px;
+                padding: 16px 20px;
                 box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                 border-left: 5px solid {cor};
                 position: relative;
@@ -1554,12 +1556,14 @@ def gerar_botao_desconto_flutuante_html():
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
+                padding-right: 20px;
             }}
             
             .desconto-icon {{
                 font-size: 32px;
                 animation: pulse 2s infinite;
+                flex-shrink: 0;
             }}
             
             .desconto-title {{
@@ -1594,7 +1598,7 @@ def gerar_botao_desconto_flutuante_html():
                 background-color: #E9ECEF;
                 border-radius: 10px;
                 height: 8px;
-                margin: 12px 0 8px 0;
+                margin: 10px 0 6px 0;
                 overflow: hidden;
             }}
             
@@ -1612,6 +1616,8 @@ def gerar_botao_desconto_flutuante_html():
                 font-size: 9px;
                 color: #888;
                 margin-top: 4px;
+                flex-wrap: wrap;
+                gap: 2px;
             }}
             
             .promo-badge {{
@@ -1631,6 +1637,12 @@ def gerar_botao_desconto_flutuante_html():
                     right: 10px;
                     min-width: 260px;
                     max-width: 290px;
+                }}
+                .desconto-card {{
+                    padding: 12px 15px;
+                }}
+                .desconto-message {{
+                    font-size: 12px;
                 }}
             }}
         </style>
@@ -1671,9 +1683,10 @@ def gerar_botao_desconto_flutuante_html():
     return html
 
 def exibir_botao_desconto_flutuante():
-    """Exibe o botão flutuante de desconto usando st.components.v1.html"""
+    """Exibe o botão flutuante de desconto usando st.components.v1.html com altura automática"""
     from streamlit.components.v1 import html as st_html
-    st_html(gerar_botao_desconto_flutuante_html(), height=220)
+    # Aumentei a altura para 300px para garantir que todo o conteúdo seja exibido
+    st_html(gerar_botao_desconto_flutuante_html(), height=300)
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
