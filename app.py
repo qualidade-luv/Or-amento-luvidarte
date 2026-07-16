@@ -1270,26 +1270,22 @@ def exibir_cabecalho_carrinho():
     cor_desconto = "#FF9800" if desconto_percentual > 0 else "#9E9E9E"
     cor_progresso = "linear-gradient(90deg, #FF9800, #F44336)" if desconto_percentual > 0 else "linear-gradient(90deg, #9E9E9E, #BDBDBD)"
     
-    # USANDO COLUNAS DO STREAMLIT PARA EVITAR PROBLEMAS COM HTML
-    # Criar o card usando layout do Streamlit + HTML para estilização
+    # ============================================
+    # CARD USANDO COLUNAS DO STREAMLIT
+    # ============================================
     
-    # Card container com CSS
+    # Container com fundo e borda
     st.markdown(f"""
     <style>
-    .discount-card-container {{
+    .card-desconto {{
         background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
         border-radius: 16px;
-        padding: 18px 22px;
+        padding: 16px 20px;
         margin: 12px 0 20px 0;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         border: 1px solid #E8E0D0;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 15px;
     }}
-    .discount-icon {{
+    .card-desconto .icon {{
         background: linear-gradient(135deg, {cor_desconto}, {cor_desconto}dd);
         width: 44px;
         height: 44px;
@@ -1298,15 +1294,14 @@ def exibir_cabecalho_carrinho():
         align-items: center;
         justify-content: center;
         font-size: 22px;
-        flex-shrink: 0;
     }}
-    .discount-title {{
+    .card-desconto .title {{
         font-size: 20px;
         font-weight: 800;
         color: #D32F2F;
         line-height: 1.2;
     }}
-    .discount-details {{
+    .card-desconto .details {{
         font-size: 13px;
         color: #555;
         display: flex;
@@ -1314,25 +1309,25 @@ def exibir_cabecalho_carrinho():
         gap: 8px;
         flex-wrap: wrap;
     }}
-    .discount-label {{
+    .card-desconto .details .label {{
         color: #888;
         font-weight: 500;
     }}
-    .discount-value {{
+    .card-desconto .details .value {{
         font-weight: 700;
         color: #2E7D32;
         background: rgba(46,125,50,0.08);
         padding: 1px 10px;
         border-radius: 4px;
     }}
-    .discount-faltante {{
+    .card-desconto .details .faltante {{
         font-weight: 600;
         color: #D32F2F;
         background: rgba(211,47,47,0.08);
         padding: 1px 10px;
         border-radius: 4px;
     }}
-    .discount-promo {{
+    .card-desconto .details .promo {{
         font-size: 12px;
         color: #D32F2F;
         background: rgba(211,47,47,0.08);
@@ -1340,92 +1335,82 @@ def exibir_cabecalho_carrinho():
         border-radius: 4px;
         font-weight: 600;
     }}
-    .discount-progress-container {{
-        flex: 0 0 160px;
-        min-width: 100px;
-    }}
-    .discount-progress-labels {{
-        display: flex;
-        justify-content: space-between;
-        font-size: 10px;
-        color: #888;
-        font-weight: 500;
-    }}
-    .discount-progress-track {{
+    .card-desconto .progress-bar {{
         width: 100%;
         height: 5px;
         background: #E8E0D0;
         border-radius: 4px;
         overflow: hidden;
-        margin-top: 3px;
+        margin-top: 4px;
     }}
-    .discount-progress-fill {{
+    .card-desconto .progress-fill {{
         width: {progresso}%;
         height: 100%;
         border-radius: 4px;
         transition: width 0.8s ease;
         background: {cor_progresso};
     }}
-    .discount-btn-wrapper {{
-        flex-shrink: 0;
+    .card-desconto .progress-labels {{
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        color: #888;
+        font-weight: 500;
     }}
     @media (max-width: 768px) {{
-        .discount-card-container {{
-            flex-direction: column;
-            align-items: stretch;
-        }}
-        .discount-progress-container {{
-            flex: 1;
-        }}
-        .discount-btn-wrapper {{
-            width: 100%;
-        }}
-        .discount-btn-wrapper button {{
-            width: 100%;
+        .card-desconto .info-col {{
+            flex-wrap: wrap;
         }}
     }}
     </style>
     """, unsafe_allow_html=True)
     
-    # Estrutura do card usando HTML puro + botão Streamlit separado
-    st.markdown(f'''
-    <div class="discount-card-container">
-        <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 200px; flex-wrap: wrap;">
-            <div class="discount-icon">💎</div>
-            <div style="display: flex; flex-direction: column; gap: 2px;">
-                <div class="discount-title">Desconto: {desconto_texto}</div>
-                <div class="discount-details">
-                    <span class="discount-label">Base:</span>
-                    <span class="discount-value">{valor_base_fmt}</span>
-                    <span style="color: #ccc;">|</span>
-                    <span class="discount-faltante">{mensagem_faltante}</span>
-                    {f'<span class="discount-promo">{info_promo}</span>' if tem_promo else ''}
-                </div>
+    # Card usando colunas
+    with st.container():
+        st.markdown('<div class="card-desconto">', unsafe_allow_html=True)
+        
+        # Linha 1: Ícone + Informações + Botão
+        col1, col2, col3 = st.columns([1, 5, 2])
+        
+        with col1:
+            st.markdown(f'<div class="icon">💎</div>', unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f'''
+            <div class="title">Desconto: {desconto_texto}</div>
+            <div class="details">
+                <span class="label">Base:</span>
+                <span class="value">{valor_base_fmt}</span>
+                <span style="color: #ccc;">|</span>
+                <span class="faltante">{mensagem_faltante}</span>
+                {f'<span class="promo">{info_promo}</span>' if tem_promo else ''}
             </div>
-        </div>
-        <div class="discount-progress-container">
-            <div class="discount-progress-labels">
+            ''', unsafe_allow_html=True)
+        
+        with col3:
+            timestamp = datetime.now().strftime('%H%M%S%f')
+            if st.button(
+                f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
+                key=f"btn_carrinho_header_{timestamp}",
+                use_container_width=True
+            ):
+                abrir_carrinho()
+        
+        # Linha 2: Barra de progresso (ocupando toda a largura)
+        st.markdown(f'''
+        <div style="margin-top: 10px;">
+            <div class="progress-labels">
                 <span>0%</span>
                 <span>{int(progresso)}%</span>
                 <span>100%</span>
             </div>
-            <div class="discount-progress-track">
-                <div class="discount-progress-fill"></div>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
             </div>
         </div>
-        <div class="discount-btn-wrapper">
-    ''', unsafe_allow_html=True)
-    
-    # Botão do carrinho - FORA DO HTML PARA EVITAR PROBLEMAS
-    timestamp = datetime.now().strftime('%H%M%S%f')
-    if st.button(
-        f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-        key=f"btn_carrinho_header_{timestamp}",
-        use_container_width=True
-    ):
-        abrir_carrinho()
-    
-    st.markdown('</div></div>', unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
