@@ -26,7 +26,6 @@ from email import encoders
 import os
 import traceback
 import random
-from streamlit.components.v1 import html as st_html
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA E PRIVACIDADE
@@ -1435,7 +1434,7 @@ def calcular_faltante_para_desconto_para_carrinho(carrinho):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM ST_COMPONENTS
+# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA
 # ============================================
 
 def gerar_botao_desconto_flutuante_html():
@@ -3311,10 +3310,9 @@ with ci4:
 st.markdown("---")
 
 # ============================================
-# BOTÃO FLUTUANTE DE DESCONTO - USANDO st.components.v1.html
+# BOTÃO FLUTUANTE DE DESCONTO - FIXO ACIMA DO WHATSAPP
 # ============================================
-# Renderiza o balão de desconto usando components.html para evitar escape do HTML
-st_html(gerar_botao_desconto_flutuante(), height=200)
+exibir_botao_desconto_flutuante()
 
 # ============================================
 # GRID DE PRODUTOS
