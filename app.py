@@ -1407,7 +1407,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR BOTÃO DO CARRINHO E BALÃO DE DESCONTO
+# FUNÇÃO PARA EXIBIR BOTÃO DO CARRINHO E BALÃO DE DESCONTO - CORRIGIDA
 # ============================================
 
 def exibir_botao_carrinho_profissional():
@@ -1660,7 +1660,7 @@ def exibir_botao_carrinho_profissional():
     if resumo_header['total_itens'] > 0:
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         
-        st.markdown(f'''
+        html_content = f'''
         <div class="cart-header-container">
             <div class="desconto-balao" style="border-left-color: {cor_desconto};">
                 <span class="icon">💎</span>
@@ -1683,7 +1683,9 @@ def exibir_botao_carrinho_profissional():
                 </a>
             </div>
         </div>
-        ''', unsafe_allow_html=True)
+        '''
+        
+        st.markdown(html_content, unsafe_allow_html=True)
         
         # Verifica se o carrinho deve ser aberto via query params
         query_params = st.query_params
@@ -1692,7 +1694,7 @@ def exibir_botao_carrinho_profissional():
             st.query_params.clear()
             st.rerun()
     else:
-        st.markdown(f'''
+        html_content = f'''
         <div class="cart-header-container">
             <div class="desconto-balao" style="border-left-color: #9E9E9E; opacity: 0.5;">
                 <span class="icon">💎</span>
@@ -1706,7 +1708,9 @@ def exibir_botao_carrinho_profissional():
                 🛒 Carrinho vazio
             </div>
         </div>
-        ''', unsafe_allow_html=True)
+        '''
+        
+        st.markdown(html_content, unsafe_allow_html=True)
 
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
@@ -1719,7 +1723,6 @@ def verificar_abertura_carrinho():
         st.session_state.carrinho_aberto = True
         st.query_params.clear()
         st.rerun()
-
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
