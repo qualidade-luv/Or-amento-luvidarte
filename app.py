@@ -1369,7 +1369,7 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ============================================
-# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME - CORRIGIDA
+# FUNÇÃO PARA CALCULAR DESCONTO POR VOLUME
 # ============================================
 
 def calcular_desconto_volume(valor_base, eh_promocao=False):
@@ -1407,11 +1407,11 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - CORRIGIDA COM ALTURA AUTOMÁTICA
+# FUNÇÃO PARA GERAR O BALÃO DE DESCONTO - VERSÃO PROFISSIONAL
 # ============================================
 
 def gerar_botao_desconto_flutuante_html():
-    """Gera o HTML do balão de desconto com position:fixed"""
+    """Gera o HTML do balão de desconto com design profissional"""
     
     # Calcula o valor base considerando apenas itens NÃO promocionais
     valor_base_total = 0
@@ -1430,33 +1430,33 @@ def gerar_botao_desconto_flutuante_html():
     faltante, prox_desconto = calcular_faltante_para_desconto(valor_base_total)
     
     if desconto_percentual == 0.20:
-        mensagem = f"🏆 PARABÉNS! Você atingiu 20% de desconto máximo em itens NÃO promocionais!"
+        mensagem = f"🏆 PARABÉNS! Você atingiu 20% de desconto máximo!"
         if tem_promo:
-            mensagem += f"<br><small>(Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)</small>"
+            mensagem += f"<br><small>🔥 Itens em promoção: {formatar_moeda(valor_promo)} não entram</small>"
         cor = "#FF9800"
         icone = "🏆"
         texto_desconto = "20% OFF"
     elif desconto_percentual == 0.15:
-        mensagem = f"✅ Você já tem 15% de desconto em itens NÃO promocionais!<br>Faltam <strong>{formatar_moeda(faltante)}</strong> para 20%"
+        mensagem = f"✅ Você já tem 15% de desconto!<br>Faltam <strong>{formatar_moeda(faltante)}</strong> para 20%"
         if tem_promo:
-            mensagem += f"<br><small>(Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)</small>"
+            mensagem += f"<br><small>🔥 Itens em promoção: {formatar_moeda(valor_promo)} não entram</small>"
         cor = "#4CAF50"
         icone = "🎯"
         texto_desconto = "15% OFF"
     elif desconto_percentual == 0.10:
-        mensagem = f"✅ Você já tem 10% de desconto em itens NÃO promocionais!<br>Faltam <strong>{formatar_moeda(faltante)}</strong> para 15%"
+        mensagem = f"✅ Você já tem 10% de desconto!<br>Faltam <strong>{formatar_moeda(faltante)}</strong> para 15%"
         if tem_promo:
-            mensagem += f"<br><small>(Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)</small>"
+            mensagem += f"<br><small>🔥 Itens em promoção: {formatar_moeda(valor_promo)} não entram</small>"
         cor = "#2196F3"
         icone = "📈"
         texto_desconto = "10% OFF"
     else:
         if faltante > 0:
-            mensagem = f"📈 Adicione mais <strong>{formatar_moeda(faltante)}</strong> em itens NÃO promocionais e ganhe <strong>{prox_desconto}%</strong> de desconto!"
+            mensagem = f"📈 Adicione mais <strong>{formatar_moeda(faltante)}</strong> e ganhe <strong>{prox_desconto}%</strong> de desconto!"
         else:
-            mensagem = f"💰 Adicione produtos NÃO promocionais para ganhar desconto por volume!"
+            mensagem = f"💰 Adicione produtos NÃO promocionais para ganhar desconto!"
         if tem_promo:
-            mensagem += f"<br><small>(Itens em promoção: {formatar_moeda(valor_promo)} não entram no cálculo)</small>"
+            mensagem += f"<br><small>🔥 Itens em promoção: {formatar_moeda(valor_promo)} não entram</small>"
         cor = "#9E9E9E"
         icone = "💰"
         texto_desconto = "0% OFF"
@@ -1476,11 +1476,11 @@ def gerar_botao_desconto_flutuante_html():
     if tem_promo:
         badge_promo = f"""
         <div style="background-color: #D32F2F; color: white; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; display: inline-block; margin-top: 5px;">
-            🔥 {len(itens_promo)} item(ns) em promoção (sem desconto por volume)
+            🔥 {len(itens_promo)} item(ns) em promoção
         </div>
         """
     
-    # HTML completo com position:fixed e altura automática
+    # HTML com design profissional
     html = f'''
     <!DOCTYPE html>
     <html>
@@ -1509,6 +1509,11 @@ def gerar_botao_desconto_flutuante_html():
                 100% {{ transform: scale(1); }}
             }}
             
+            @keyframes shimmer {{
+                0% {{ background-position: -200% 0; }}
+                100% {{ background-position: 200% 0; }}
+            }}
+            
             .desconto-float {{
                 position: fixed;
                 bottom: 85px;
@@ -1526,30 +1531,47 @@ def gerar_botao_desconto_flutuante_html():
             }}
             
             .desconto-card {{
-                background: linear-gradient(135deg, #FFFFFF, #F8F9FA);
+                background: linear-gradient(145deg, #FFFFFF, #F8F9FA);
                 border-radius: 16px;
                 padding: 16px 20px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                box-shadow: 0 10px 40px rgba(0,0,0,0.15), 0 2px 10px rgba(0,0,0,0.05);
                 border-left: 5px solid {cor};
                 position: relative;
+                backdrop-filter: blur(10px);
+            }}
+            
+            .desconto-card::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                border-radius: 16px;
+                background: linear-gradient(135deg, rgba(255,255,255,0.5), rgba(255,255,255,0));
+                pointer-events: none;
             }}
             
             .close-btn {{
                 position: absolute;
                 top: 8px;
                 right: 12px;
-                background: none;
+                background: rgba(0,0,0,0.05);
                 border: none;
-                font-size: 18px;
+                font-size: 16px;
                 cursor: pointer;
                 color: #999;
-                transition: color 0.2s;
-                padding: 0;
-                line-height: 1;
+                transition: all 0.2s;
+                padding: 2px 8px;
+                border-radius: 50%;
+                line-height: 1.4;
+                z-index: 10;
             }}
             
             .close-btn:hover {{
+                background: rgba(0,0,0,0.1);
                 color: #333;
+                transform: scale(1.1);
             }}
             
             .desconto-header {{
@@ -1564,42 +1586,59 @@ def gerar_botao_desconto_flutuante_html():
                 font-size: 32px;
                 animation: pulse 2s infinite;
                 flex-shrink: 0;
+                width: 48px;
+                height: 48px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(255,255,255,0.8);
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             }}
             
             .desconto-title {{
-                font-size: 13px;
-                font-weight: bold;
-                color: #555;
+                font-size: 12px;
+                font-weight: 700;
+                color: #888;
                 margin: 0;
                 text-transform: uppercase;
-                letter-spacing: 0.5px;
+                letter-spacing: 0.8px;
             }}
             
             .desconto-value {{
-                font-size: 20px;
-                font-weight: bold;
+                font-size: 22px;
+                font-weight: 800;
                 color: {cor};
                 margin: 2px 0;
+                letter-spacing: -0.5px;
             }}
             
             .desconto-message {{
                 font-size: 13px;
                 color: #444;
-                margin: 8px 0;
-                line-height: 1.5;
+                margin: 8px 0 10px 0;
+                line-height: 1.6;
+                padding-right: 4px;
+            }}
+            
+            .desconto-message strong {{
+                color: #222;
             }}
             
             .desconto-message small {{
                 font-size: 11px;
-                color: #888;
+                color: #999;
+                display: block;
+                margin-top: 4px;
             }}
             
             .progress-bar-container {{
                 background-color: #E9ECEF;
                 border-radius: 10px;
-                height: 8px;
+                height: 6px;
                 margin: 10px 0 6px 0;
                 overflow: hidden;
+                box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
             }}
             
             .progress-bar-fill {{
@@ -1607,28 +1646,48 @@ def gerar_botao_desconto_flutuante_html():
                 width: {progresso}%;
                 height: 100%;
                 border-radius: 10px;
-                transition: width 0.6s ease;
+                transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+                position: relative;
+            }}
+            
+            .progress-bar-fill::after {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+                animation: shimmer 2s infinite;
+                background-size: 200% 100%;
             }}
             
             .progress-labels {{
                 display: flex;
                 justify-content: space-between;
-                font-size: 9px;
-                color: #888;
+                font-size: 8px;
+                color: #999;
                 margin-top: 4px;
-                flex-wrap: wrap;
-                gap: 2px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+            }}
+            
+            .progress-labels span {{
+                background: rgba(0,0,0,0.03);
+                padding: 2px 6px;
+                border-radius: 4px;
             }}
             
             .promo-badge {{
-                background-color: #D32F2F;
+                background: linear-gradient(135deg, #D32F2F, #B71C1C);
                 color: white;
-                padding: 2px 10px;
-                border-radius: 12px;
+                padding: 2px 12px;
+                border-radius: 20px;
                 font-size: 10px;
-                font-weight: bold;
+                font-weight: 700;
                 display: inline-block;
-                margin-top: 5px;
+                margin-top: 6px;
+                box-shadow: 0 2px 6px rgba(211,47,47,0.3);
             }}
             
             @media (max-width: 768px) {{
@@ -1643,6 +1702,14 @@ def gerar_botao_desconto_flutuante_html():
                 }}
                 .desconto-message {{
                     font-size: 12px;
+                }}
+                .desconto-value {{
+                    font-size: 19px;
+                }}
+                .desconto-icon {{
+                    font-size: 28px;
+                    width: 42px;
+                    height: 42px;
                 }}
             }}
         </style>
@@ -1670,9 +1737,9 @@ def gerar_botao_desconto_flutuante_html():
                 
                 <div class="progress-labels">
                     <span>💰 R$ 0</span>
-                    <span>🎯 10% (R$ 1.500)</span>
-                    <span>🏅 15% (R$ 2.500)</span>
-                    <span>🏆 20% (R$ 4.000)</span>
+                    <span>🎯 10%</span>
+                    <span>🏅 15%</span>
+                    <span>🏆 20%</span>
                 </div>
             </div>
         </div>
@@ -1683,10 +1750,151 @@ def gerar_botao_desconto_flutuante_html():
     return html
 
 def exibir_botao_desconto_flutuante():
-    """Exibe o botão flutuante de desconto usando st.components.v1.html com altura automática"""
+    """Exibe o botão flutuante de desconto usando st.components.v1.html"""
     from streamlit.components.v1 import html as st_html
-    # Aumentei a altura para 300px para garantir que todo o conteúdo seja exibido
-    st_html(gerar_botao_desconto_flutuante_html(), height=400)
+    st_html(gerar_botao_desconto_flutuante_html(), height=320)
+
+# ============================================
+# FUNÇÃO PARA EXIBIR BOTÃO DO CARRINHO PROFISSIONAL
+# ============================================
+
+def exibir_botao_carrinho_profissional():
+    """Exibe o botão do carrinho com design profissional"""
+    resumo_header = calcular_resumo_carrinho()
+    
+    if resumo_header['total_itens'] > 0:
+        total_fmt_header = formatar_moeda(resumo_header['total_geral'])
+        
+        # CSS para o botão do carrinho
+        st.markdown("""
+        <style>
+        .cart-button-container {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .cart-button {
+            background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
+            color: white !important;
+            border: none !important;
+            padding: 12px 24px !important;
+            border-radius: 12px !important;
+            font-weight: 700 !important;
+            font-size: 14px !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+            box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3) !important;
+            text-decoration: none !important;
+            position: relative !important;
+            overflow: hidden !important;
+        }
+        
+        .cart-button:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 25px rgba(46, 125, 50, 0.4) !important;
+        }
+        
+        .cart-button:active {
+            transform: translateY(0px) !important;
+        }
+        
+        .cart-button .badge {
+            background: #FF6B6B;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 700;
+            min-width: 22px;
+            text-align: center;
+            animation: pulse-badge 1.5s infinite;
+        }
+        
+        @keyframes pulse-badge {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .cart-button .cart-icon {
+            font-size: 20px;
+        }
+        
+        .cart-button .cart-total {
+            font-size: 15px;
+            font-weight: 700;
+        }
+        
+        .cart-button::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: rotate(45deg);
+            transition: all 0.5s ease;
+        }
+        
+        .cart-button:hover::after {
+            left: 100%;
+        }
+        
+        .cart-empty {
+            color: #2E7D32;
+            opacity: 0.6;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            .cart-button {
+                padding: 10px 16px !important;
+                font-size: 12px !important;
+            }
+            .cart-button .badge {
+                font-size: 10px !important;
+                min-width: 18px !important;
+                padding: 1px 6px !important;
+            }
+            .cart-button .cart-total {
+                font-size: 12px !important;
+            }
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Botão com badge animado
+        st.markdown(f'''
+        <div class="cart-button-container">
+            <button onclick="window.location.href='?carrinho=abrir'" class="cart-button">
+                <span class="cart-icon">🛒</span>
+                <span>Meu Carrinho</span>
+                <span class="badge">{resumo_header['total_itens']}</span>
+                <span class="cart-total">{total_fmt_header}</span>
+            </button>
+        </div>
+        ''', unsafe_allow_html=True)
+        
+        # Verifica se o carrinho deve ser aberto
+        if st.query_params.get('carrinho') == 'abrir':
+            abrir_carrinho()
+    else:
+        st.markdown(f'''
+        <div class="cart-empty">
+            🛒 Carrinho vazio
+        </div>
+        ''', unsafe_allow_html=True)
+
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
@@ -2554,29 +2762,6 @@ css_base = """
     border-radius: 8px; padding: 10px 15px; margin: 10px 0; font-size: 12px; color: #666;
 }
 
-.cart-link-top { text-align: right; }
-.cart-link-button {
-    background: none !important;
-    border: none !important;
-    color: #2E7D32 !important;
-    font-size: 14px !important;
-    font-weight: 500 !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-    cursor: pointer !important;
-    padding: 0 !important;
-    white-space: nowrap;
-    text-decoration: none !important;
-}
-.cart-link-button:hover { color: #1B5E20 !important; text-decoration: underline !important; }
-.cart-link-badge {
-    background: #D32F2F; color: white; border-radius: 50%;
-    min-width: 20px; height: 20px; font-size: 11px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-weight: bold; padding: 0 4px;
-}
-
 .filtro-sidebar {
     font-weight: bold; font-size: 16px; padding: 10px;
     background: linear-gradient(135deg, #2E7D32, #1B5E20);
@@ -2654,7 +2839,6 @@ css_base = """
 
 @media (max-width: 768px) {
     .whatsapp-float-fixed { bottom: 15px; right: 15px; }
-    .cart-link-button { font-size: 12px !important; white-space: normal; }
 }
 
 .uf-bloqueada-info {
@@ -3271,30 +3455,15 @@ if busca_referencia:
 total_encontrados = len(dados_filtrados)
 
 # ============================================
-# HEADER COM LINK DO CARRINHO
+# HEADER COM LINK DO CARRINHO PROFISSIONAL
 # ============================================
-resumo_header = calcular_resumo_carrinho()
-
 col_titulo, col_link = st.columns([3, 1])
 
 with col_titulo:
     st.markdown(f"## ✨ Produtos Encontrados: {total_encontrados}")
 
 with col_link:
-    if resumo_header['total_itens'] > 0:
-        total_fmt_header = formatar_moeda(resumo_header['total_geral'])
-        
-        if st.button(
-            f"🛒 Acessar meu carrinho ({resumo_header['total_itens']}) {total_fmt_header}",
-            key="cart_link_top"
-        ):
-            abrir_carrinho()
-    else:
-        st.markdown(
-            f'<div style="text-align:right; color:#2E7D32; opacity:0.6; font-size:14px;">'
-            f'🛒 Acessar meu carrinho (0) R$ 0,00</div>',
-            unsafe_allow_html=True
-        )
+    exibir_botao_carrinho_profissional()
 
 st.markdown("---")
 
