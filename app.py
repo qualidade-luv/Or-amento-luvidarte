@@ -1242,7 +1242,7 @@ def exibir_cabecalho_carrinho():
     
     # Monta mensagem do faltante
     if desconto_percentual == 0.20:
-        mensagem_faltante = "🏆 Desconto máximo atingido!"
+        mensagem_faltante = "🏆 Desconto máximo!"
     elif desconto_percentual == 0.15:
         mensagem_faltante = f"Faltam {formatar_moeda(faltante)} para 20%"
     elif desconto_percentual == 0.10:
@@ -1258,80 +1258,164 @@ def exibir_cabecalho_carrinho():
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD SIMPLES USANDO APENAS STREAMLIT
+    # CARD COM LAYOUT LADO A LADO - FONTES PADRONIZADAS
     # ============================================
     
-    # Container com fundo
-    with st.container():
-        # Fundo do card
-        st.markdown(f"""
-        <div style="
-            background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
-            border-radius: 16px;
-            padding: 16px 20px;
-            margin: 10px 0 20px 0;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            border: 1px solid #E8E0D0;
-        ">
-        """, unsafe_allow_html=True)
-        
-        # Linha 1: Ícone e informações
-        col1, col2 = st.columns([1, 5])
-        
-        with col1:
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, #FF9800, #F57C00);
-                width: 44px;
-                height: 44px;
-                border-radius: 12px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 22px;
-            ">
-                💎
+    # Container principal
+    st.markdown(f"""
+    <style>
+    .card-desconto-header {{
+        background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
+        border-radius: 16px;
+        padding: 14px 20px;
+        margin: 10px 0 20px 0;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid #E8E0D0;
+    }}
+    .card-desconto-header .row-top {{
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }}
+    .card-desconto-header .icone {{
+        background: linear-gradient(135deg, #FF9800, #F57C00);
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+    }}
+    .card-desconto-header .texto-desconto {{
+        font-size: 18px;
+        font-weight: 800;
+        color: #D32F2F;
+        white-space: nowrap;
+    }}
+    .card-desconto-header .separador {{
+        color: #E0D5C0;
+        font-size: 18px;
+        font-weight: 300;
+    }}
+    .card-desconto-header .texto-base {{
+        font-size: 18px;
+        font-weight: 700;
+        color: #2E7D32;
+        white-space: nowrap;
+    }}
+    .card-desconto-header .texto-faltante {{
+        font-size: 18px;
+        font-weight: 600;
+        color: #D32F2F;
+        white-space: nowrap;
+    }}
+    .card-desconto-header .btn-wrapper {{
+        margin-left: auto;
+        flex-shrink: 0;
+    }}
+    .card-desconto-header .btn-wrapper button {{
+        background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
+        color: white !important;
+        border: none !important;
+        padding: 8px 20px !important;
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        cursor: pointer !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(46, 125, 50, 0.25) !important;
+        white-space: nowrap !important;
+    }}
+    .card-desconto-header .btn-wrapper button:hover {{
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 25px rgba(46, 125, 50, 0.35) !important;
+    }}
+    .card-desconto-header .row-bottom {{
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #F0E8D8;
+    }}
+    .card-desconto-header .progress-labels {{
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #888;
+        font-weight: 500;
+    }}
+    .card-desconto-header .progress-track {{
+        width: 100%;
+        height: 6px;
+        background: #E8E0D0;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 4px;
+    }}
+    .card-desconto-header .progress-fill {{
+        width: {progresso}%;
+        height: 100%;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #FF9800, #F44336);
+        transition: width 0.8s ease;
+    }}
+    @media (max-width: 768px) {{
+        .card-desconto-header .row-top {{
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+        }}
+        .card-desconto-header .btn-wrapper {{
+            margin-left: 0;
+        }}
+        .card-desconto-header .btn-wrapper button {{
+            width: 100% !important;
+        }}
+        .card-desconto-header .texto-desconto,
+        .card-desconto-header .texto-base,
+        .card-desconto-header .texto-faltante {{
+            font-size: 15px;
+        }}
+    }}
+    </style>
+    
+    <div class="card-desconto-header">
+        <div class="row-top">
+            <div class="icone">💎</div>
+            <span class="texto-desconto">Desconto: {desconto_texto}</span>
+            <span class="separador">|</span>
+            <span class="texto-base">Base: {valor_base_fmt}</span>
+            <span class="separador">|</span>
+            <span class="texto-faltante">{mensagem_faltante}</span>
+            <div class="btn-wrapper">
+    """, unsafe_allow_html=True)
+    
+    # Botão do carrinho
+    timestamp = datetime.now().strftime('%H%M%S%f')
+    if st.button(
+        f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
+        key=f"btn_carrinho_header_{timestamp}",
+        use_container_width=True
+    ):
+        abrir_carrinho()
+    
+    # Fecha o wrapper do botão e continua o HTML
+    st.markdown(f"""
             </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div style="font-size: 20px; font-weight: 800; color: #D32F2F;">
-                Desconto: {desconto_texto}
-            </div>
-            <div style="font-size: 13px; color: #555; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <span style="color: #888;">Base:</span>
-                <span style="font-weight: 700; color: #2E7D32; background: rgba(46,125,50,0.08); padding: 2px 12px; border-radius: 4px;">{valor_base_fmt}</span>
-                <span style="color: #ccc;">|</span>
-                <span style="font-weight: 600; color: #D32F2F; background: rgba(211,47,47,0.08); padding: 2px 12px; border-radius: 4px;">{mensagem_faltante}</span>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Linha 2: Botão do carrinho
-        timestamp = datetime.now().strftime('%H%M%S%f')
-        if st.button(
-            f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-            key=f"btn_carrinho_header_{timestamp}",
-            use_container_width=True
-        ):
-            abrir_carrinho()
-        
-        # Linha 3: Barra de progresso
-        st.markdown(f"""
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #F0E8D8;">
-            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888; font-weight: 500;">
+        </div>
+        <div class="row-bottom">
+            <div class="progress-labels">
                 <span>0%</span>
                 <span>{int(progresso)}%</span>
                 <span>100%</span>
             </div>
-            <div style="width: 100%; height: 6px; background: #E8E0D0; border-radius: 4px; overflow: hidden; margin-top: 4px;">
-                <div style="width: {progresso}%; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #FF9800, #F44336); transition: width 0.8s ease;"></div>
+            <div class="progress-track">
+                <div class="progress-fill"></div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
-        
-        # Fecha o container do card
-        st.markdown("</div>", unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
         
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
