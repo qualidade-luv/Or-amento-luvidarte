@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
 import re
@@ -1645,7 +1646,12 @@ def exibir_cabecalho_carrinho():
                 <span>Base: <span class="value">{valor_base_fmt}</span></span>
                 <span class="divider-info">|</span>
                 <span class="faltante">{mensagem_faltante}</span>
-                {f'<span class="promo-info">{info_promo}</span>' if tem_promo else ''}                
+                {f'<span class="promo-info">{info_promo}</span>' if tem_promo else ''}
+                <div class="progress-mini">
+                    <div class="progress-mini-fill" style="width: {progresso}%; background: linear-gradient(90deg, {cor_desconto}, #FF9800);"></div>
+                </div>
+            </div>
+            <div class="cart-btn-container">
         ''', unsafe_allow_html=True)
         
         # Botão do carrinho usando Streamlit
