@@ -1242,37 +1242,32 @@ def exibir_cabecalho_carrinho():
         else:
             mensagem_faltante = "Adicione produtos NÃO promocionais"
     
-    # Monta informação de promoção
-    info_promo = ""
-    if tem_promo:
-        info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} (não entram no desconto)"
-    
     total_fmt_header = formatar_moeda(resumo_header['total_geral'])
     valor_base_fmt = formatar_moeda(valor_base_nao_promo)
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD COM INFORMAÇÕES DE PROMOÇÃO - SEM COLUNAS VAZIAS
+    # CARD USANDO APENAS STREAMLIT - SEM HTML COMPLEXO
     # ============================================
     
-    # Container principal
-    st.markdown(f"""
+    # CSS apenas para estilização
+    st.markdown("""
     <style>
-    .card-desconto-header {{
+    .card-desconto-simples {
         background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
         border-radius: 16px;
-        padding: 12px 18px;
+        padding: 14px 20px;
         margin: 10px 0 20px 0;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         border: 1px solid #E8E0D0;
-    }}
-    .card-desconto-header .row-top {{
+    }
+    .card-desconto-simples .info-row {
         display: flex;
         align-items: center;
         gap: 12px;
         flex-wrap: wrap;
-    }}
-    .card-desconto-header .icone {{
+    }
+    .card-desconto-simples .icone {
         background: linear-gradient(135deg, #FF9800, #F57C00);
         width: 36px;
         height: 36px;
@@ -1282,112 +1277,92 @@ def exibir_cabecalho_carrinho():
         justify-content: center;
         font-size: 18px;
         flex-shrink: 0;
-    }}
-    .card-desconto-header .texto-desconto {{
+    }
+    .card-desconto-simples .texto-desconto {
         font-size: 16px;
         font-weight: 800;
         color: #D32F2F;
-        white-space: nowrap;
-    }}
-    .card-desconto-header .separador {{
-        color: #E0D5C0;
-        font-size: 16px;
-        font-weight: 300;
-    }}
-    .card-desconto-header .texto-base {{
+    }
+    .card-desconto-simples .texto-base {
         font-size: 16px;
         font-weight: 700;
         color: #2E7D32;
-        white-space: nowrap;
-    }}
-    .card-desconto-header .texto-faltante {{
+    }
+    .card-desconto-simples .texto-faltante {
         font-size: 16px;
         font-weight: 600;
         color: #D32F2F;
-        white-space: nowrap;
-    }}
-    .card-desconto-header .texto-promo {{
+    }
+    .card-desconto-simples .texto-promo {
         font-size: 13px;
         font-weight: 600;
         color: #D32F2F;
         background: rgba(211,47,47,0.1);
         padding: 2px 12px;
         border-radius: 4px;
-        white-space: nowrap;
-    }}
-    .card-desconto-header .btn-wrapper {{
+    }
+    .card-desconto-simples .separador {
+        color: #E0D5C0;
+        font-size: 16px;
+        font-weight: 300;
+    }
+    .card-desconto-simples .btn-area {
         margin-left: auto;
         flex-shrink: 0;
-    }}
-    .card-desconto-header .btn-wrapper button {{
-        background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
-        color: white !important;
-        border: none !important;
-        padding: 8px 20px !important;
-        border-radius: 10px !important;
-        font-weight: 700 !important;
-        font-size: 14px !important;
-        cursor: pointer !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 15px rgba(46, 125, 50, 0.25) !important;
-        white-space: nowrap !important;
-    }}
-    .card-desconto-header .btn-wrapper button:hover {{
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 25px rgba(46, 125, 50, 0.35) !important;
-    }}
-    @media (max-width: 768px) {{
-        .card-desconto-header .row-top {{
+    }
+    @media (max-width: 768px) {
+        .card-desconto-simples .info-row {
             flex-direction: column;
             align-items: stretch;
-            gap: 8px;
-        }}
-        .card-desconto-header .btn-wrapper {{
+        }
+        .card-desconto-simples .btn-area {
             margin-left: 0;
-        }}
-        .card-desconto-header .btn-wrapper button {{
+        }
+        .card-desconto-simples .btn-area button {
             width: 100% !important;
-        }}
-        .card-desconto-header .texto-desconto,
-        .card-desconto-header .texto-base,
-        .card-desconto-header .texto-faltante {{
-            font-size: 14px;
-        }}
-        .card-desconto-header .texto-promo {{
-            font-size: 12px;
-        }}
-    }}
+        }
+    }
     </style>
+    """, unsafe_allow_html=True)
     
-    <div class="card-desconto-header">
-        <div class="row-top">
-            <div class="icone">💎</div>
-            <span class="texto-desconto">Desconto: {desconto_texto}</span>
+    # Card usando container e colunas do Streamlit
+    with st.container():
+        st.markdown('<div class="card-desconto-simples">', unsafe_allow_html=True)
+        
+        # Linha com ícone e informações
+        col1, col2 = st.columns([1, 6])
+        
+        with col1:
+            st.markdown('<div class="icone">💎</div>', unsafe_allow_html=True)
+        
+        with col2:
+            # Texto com as informações
+            info_text = f"""<span class="texto-desconto">Desconto: {desconto_texto}</span>
             <span class="separador">|</span>
             <span class="texto-base">Base: {valor_base_fmt}</span>
             <span class="separador">|</span>
-            <span class="texto-faltante">{mensagem_faltante}</span>
-            {f'<span class="texto-promo">{info_promo}</span>' if tem_promo else ''}
-            <div class="btn-wrapper">
-    """, unsafe_allow_html=True)
-    
-    # Botão do carrinho - SEM COLUNAS VAZIAS
-    timestamp = datetime.now().strftime('%H%M%S%f')
-    if st.button(
-        f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
-        key=f"btn_carrinho_header_{timestamp}",
-        use_container_width=False
-    ):
-        # Forçar abertura do carrinho
-        st.session_state.carrinho_aberto = True
-        st.rerun()
-    
-    # Fecha o card
-    st.markdown("""
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+            <span class="texto-faltante">{mensagem_faltante}</span>"""
+            
+            if tem_promo:
+                info_text += f' <span class="texto-promo">{info_promo}</span>'
+            
+            st.markdown(f'<div class="info-row">{info_text}</div>', unsafe_allow_html=True)
+        
+        # Linha do botão (separada)
+        st.markdown('<div style="margin-top: 10px;">', unsafe_allow_html=True)
+        
+        # Botão do carrinho - USANDO APENAS STREAMLIT
+        timestamp = datetime.now().strftime('%H%M%S%f')
+        if st.button(
+            f"🛒 Meu Carrinho ({qtd_itens}) {total_fmt_header}",
+            key=f"btn_carrinho_header_{timestamp}",
+            use_container_width=True
+        ):
+            st.session_state.carrinho_aberto = True
+            st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
         
 # ============================================
 # FUNÇÃO PARA VERIFICAR ABERTURA DO CARRINHO
