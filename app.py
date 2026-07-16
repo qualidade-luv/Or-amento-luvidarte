@@ -1653,7 +1653,8 @@ def exibir_botao_carrinho_profissional():
         else:
             mensagem_faltante = "Adicione produtos NÃO promocionais"
     
-    # Monta informação de promoção    info_promo = ""
+    # Monta informação de promoção - SEMPRE DEFINIDA
+    info_promo = ""
     if tem_promo:
         info_promo = f"<span class='promo-info'>🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} não contam</span>"
     
