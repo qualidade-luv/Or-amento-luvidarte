@@ -1258,7 +1258,7 @@ def exibir_cabecalho_carrinho():
     qtd_itens = resumo_header['total_itens']
     
     # ============================================
-    # CARD COM LAYOUT LADO A LADO - FONTES PADRONIZADAS
+    # CARD COM TUDO EM UMA LINHA + BARRA DE PROGRESSO
     # ============================================
     
     # Container principal
@@ -1267,7 +1267,7 @@ def exibir_cabecalho_carrinho():
     .card-desconto-header {{
         background: linear-gradient(135deg, #FFFFFF, #FFF8E1);
         border-radius: 16px;
-        padding: 14px 20px;
+        padding: 12px 18px;
         margin: 10px 0 20px 0;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         border: 1px solid #E8E0D0;
@@ -1275,39 +1275,39 @@ def exibir_cabecalho_carrinho():
     .card-desconto-header .row-top {{
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: 12px;
         flex-wrap: wrap;
     }}
     .card-desconto-header .icone {{
         background: linear-gradient(135deg, #FF9800, #F57C00);
-        width: 40px;
-        height: 40px;
+        width: 36px;
+        height: 36px;
         border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 20px;
+        font-size: 18px;
         flex-shrink: 0;
     }}
     .card-desconto-header .texto-desconto {{
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 800;
         color: #D32F2F;
         white-space: nowrap;
     }}
     .card-desconto-header .separador {{
         color: #E0D5C0;
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 300;
     }}
     .card-desconto-header .texto-base {{
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 700;
         color: #2E7D32;
         white-space: nowrap;
     }}
     .card-desconto-header .texto-faltante {{
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 600;
         color: #D32F2F;
         white-space: nowrap;
@@ -1320,10 +1320,10 @@ def exibir_cabecalho_carrinho():
         background: linear-gradient(135deg, #2E7D32, #1B5E20) !important;
         color: white !important;
         border: none !important;
-        padding: 8px 20px !important;
-        border-radius: 10px !important;
+        padding: 6px 16px !important;
+        border-radius: 8px !important;
         font-weight: 700 !important;
-        font-size: 14px !important;
+        font-size: 13px !important;
         cursor: pointer !important;
         transition: all 0.3s ease !important;
         box-shadow: 0 4px 15px rgba(46, 125, 50, 0.25) !important;
@@ -1333,25 +1333,26 @@ def exibir_cabecalho_carrinho():
         transform: translateY(-2px) !important;
         box-shadow: 0 6px 25px rgba(46, 125, 50, 0.35) !important;
     }}
-    .card-desconto-header .row-bottom {{
-        margin-top: 10px;
-        padding-top: 10px;
+    .card-desconto-header .row-progress {{
+        margin-top: 8px;
+        padding-top: 8px;
         border-top: 1px solid #F0E8D8;
+        display: flex;
+        align-items: center;
+        gap: 12px;
     }}
     .card-desconto-header .progress-labels {{
-        display: flex;
-        justify-content: space-between;
-        font-size: 11px;
+        font-size: 10px;
         color: #888;
         font-weight: 500;
+        white-space: nowrap;
     }}
     .card-desconto-header .progress-track {{
-        width: 100%;
-        height: 6px;
+        flex: 1;
+        height: 5px;
         background: #E8E0D0;
         border-radius: 4px;
         overflow: hidden;
-        margin-top: 4px;
     }}
     .card-desconto-header .progress-fill {{
         width: {progresso}%;
@@ -1360,11 +1361,19 @@ def exibir_cabecalho_carrinho():
         background: linear-gradient(90deg, #FF9800, #F44336);
         transition: width 0.8s ease;
     }}
+    .card-desconto-header .progress-percent {{
+        font-size: 10px;
+        color: #888;
+        font-weight: 600;
+        white-space: nowrap;
+        min-width: 35px;
+        text-align: right;
+    }}
     @media (max-width: 768px) {{
         .card-desconto-header .row-top {{
             flex-direction: column;
             align-items: stretch;
-            gap: 10px;
+            gap: 8px;
         }}
         .card-desconto-header .btn-wrapper {{
             margin-left: 0;
@@ -1372,10 +1381,13 @@ def exibir_cabecalho_carrinho():
         .card-desconto-header .btn-wrapper button {{
             width: 100% !important;
         }}
+        .card-desconto-header .row-progress {{
+            flex-wrap: wrap;
+        }}
         .card-desconto-header .texto-desconto,
         .card-desconto-header .texto-base,
         .card-desconto-header .texto-faltante {{
-            font-size: 15px;
+            font-size: 14px;
         }}
     }}
     </style>
@@ -1400,19 +1412,17 @@ def exibir_cabecalho_carrinho():
     ):
         abrir_carrinho()
     
-    # Fecha o wrapper do botão e continua o HTML
+    # Fecha o wrapper do botão e adiciona a barra de progresso
     st.markdown(f"""
             </div>
         </div>
-        <div class="row-bottom">
-            <div class="progress-labels">
-                <span>0%</span>
-                <span>{int(progresso)}%</span>
-                <span>100%</span>
-            </div>
+        <div class="row-progress">
+            <span class="progress-labels">0%</span>
             <div class="progress-track">
                 <div class="progress-fill"></div>
             </div>
+            <span class="progress-percent">{int(progresso)}%</span>
+            <span class="progress-labels">100%</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
