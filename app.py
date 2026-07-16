@@ -1407,7 +1407,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO (USANDO STREAMLIT)
+# FUNÇÃO PARA EXIBIR BALÃO DE DESCONTO E BOTÃO DO CARRINHO (CORRIGIDA)
 # ============================================
 
 def exibir_cabecalho_carrinho():
@@ -1461,7 +1461,7 @@ def exibir_cabecalho_carrinho():
     if tem_promo:
         info_promo = f"🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}"
     
-    # CSS
+    # CSS melhorado para o balão
     st.markdown("""
     <style>
     .carrinho-header {
@@ -1469,72 +1469,82 @@ def exibir_cabecalho_carrinho():
         justify-content: space-between;
         align-items: center;
         background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
-        padding: 10px 20px;
+        padding: 12px 20px;
         border-radius: 12px;
         border-left: 4px solid #FF9800;
         margin: 10px 0;
         flex-wrap: wrap;
         gap: 10px;
+        min-height: 60px;
     }
     
     .carrinho-header .info {
         display: flex;
         align-items: center;
-        gap: 15px;
+        gap: 12px;
         flex-wrap: wrap;
-        font-size: 13px;
+        font-size: 14px;
         color: #E65100;
         font-weight: 600;
     }
     
     .carrinho-header .info .percent {
-        font-size: 18px;
+        font-size: 20px;
         font-weight: 800;
         color: #D32F2F;
         background: rgba(211, 47, 47, 0.1);
-        padding: 2px 10px;
+        padding: 2px 12px;
         border-radius: 6px;
+        white-space: nowrap;
     }
     
     .carrinho-header .info .value {
-        font-size: 14px;
+        font-size: 15px;
         font-weight: 700;
         color: #2E7D32;
         background: rgba(46, 125, 50, 0.08);
-        padding: 2px 10px;
+        padding: 2px 12px;
         border-radius: 6px;
+        white-space: nowrap;
     }
     
     .carrinho-header .info .faltante {
-        font-size: 12px;
+        font-size: 13px;
         color: #D32F2F;
         font-weight: 700;
         background: rgba(211, 47, 47, 0.08);
-        padding: 2px 10px;
+        padding: 2px 12px;
         border-radius: 6px;
+        white-space: nowrap;
     }
     
     .carrinho-header .info .promo-info {
-        font-size: 11px;
+        font-size: 12px;
         color: #D32F2F;
         font-weight: 600;
         background: rgba(211, 47, 47, 0.1);
         padding: 2px 10px;
         border-radius: 6px;
+        white-space: nowrap;
     }
     
     .carrinho-header .progress-mini {
-        width: 80px;
-        height: 4px;
+        width: 100px;
+        height: 6px;
         background: #E0E0E0;
         border-radius: 4px;
         overflow: hidden;
+        flex-shrink: 0;
     }
     
     .carrinho-header .progress-mini-fill {
         height: 100%;
         border-radius: 4px;
         transition: width 0.5s ease;
+    }
+    
+    .cart-btn-container {
+        flex-shrink: 0;
     }
     
     .cart-btn {
@@ -1583,23 +1593,34 @@ def exibir_cabecalho_carrinho():
         margin: 10px 0;
     }
     
+    .divider-info {
+        color: #BDBDBD;
+        font-weight: 300;
+        margin: 0 2px;
+    }
+    
     @media (max-width: 768px) {
         .carrinho-header {
-            padding: 8px 12px;
+            padding: 10px 12px;
+            flex-direction: column;
+            align-items: stretch;
         }
         .carrinho-header .info {
-            font-size: 11px;
-            gap: 8px;
+            font-size: 12px;
+            gap: 6px;
+            justify-content: center;
         }
         .carrinho-header .info .percent {
-            font-size: 14px;
+            font-size: 16px;
         }
         .carrinho-header .progress-mini {
-            width: 50px;
+            width: 60px;
         }
         .cart-btn {
             padding: 6px 14px !important;
             font-size: 12px !important;
+            width: 100%;
+            justify-content: center;
         }
         .cart-btn .badge-btn {
             font-size: 10px !important;
@@ -1615,35 +1636,33 @@ def exibir_cabecalho_carrinho():
         total_fmt_header = formatar_moeda(resumo_header['total_geral'])
         valor_base_fmt = formatar_moeda(valor_base_nao_promo)
         
-        # Usando colunas para layout
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.markdown(f'''
-            <div class="carrinho-header" style="border-left-color: {cor_desconto};">
-                <div class="info">
-                    <span>💎</span>
-                    <span>Desconto: <span class="percent">{desconto_texto}</span></span>
-                    <span>|</span>
-                    <span>Base: <span class="value">{valor_base_fmt}</span></span>
-                    <span>|</span>
-                    <span class="faltante">{mensagem_faltante}</span>
-                    {f'<span class="promo-info">{info_promo}</span>' if tem_promo else ''}
-                    <div class="progress-mini">
-                        <div class="progress-mini-fill" style="width: {progresso}%; background: linear-gradient(90deg, {cor_desconto}, #FF9800);"></div>
-                    </div>
+        # Usando HTML puro para evitar problemas de layout
+        st.markdown(f'''
+        <div class="carrinho-header" style="border-left-color: {cor_desconto};">
+            <div class="info">
+                <span>💎</span>
+                <span>Desconto: <span class="percent">{desconto_texto}</span></span>
+                <span class="divider-info">|</span>
+                <span>Base: <span class="value">{valor_base_fmt}</span></span>
+                <span class="divider-info">|</span>
+                <span class="faltante">{mensagem_faltante}</span>
+                {f'<span class="promo-info">{info_promo}</span>' if tem_promo else ''}
+                <div class="progress-mini">
+                    <div class="progress-mini-fill" style="width: {progresso}%; background: linear-gradient(90deg, {cor_desconto}, #FF9800);"></div>
                 </div>
             </div>
-            ''', unsafe_allow_html=True)
+            <div class="cart-btn-container">
+        ''', unsafe_allow_html=True)
         
-        with col2:
-            # Botão do carrinho usando Streamlit
-            if st.button(
-                f"🛒 Meu Carrinho ({resumo_header['total_itens']}) {total_fmt_header}",
-                key="btn_carrinho_header",
-                use_container_width=True
-            ):
-                abrir_carrinho()
+        # Botão do carrinho usando Streamlit
+        if st.button(
+            f"🛒 Meu Carrinho ({resumo_header['total_itens']}) {total_fmt_header}",
+            key="btn_carrinho_header",
+            use_container_width=True
+        ):
+            abrir_carrinho()
+        
+        st.markdown('</div></div>', unsafe_allow_html=True)
     else:
         st.markdown('''
         <div class="cart-empty">
@@ -2921,33 +2940,69 @@ if st.session_state.get('carrinho_aberto', False):
     if tem_promo:
         st.info(f"🔥 Itens em promoção ({len(itens_promo)} itens - {formatar_moeda(valor_promo)}) NÃO recebem desconto por volume")
 
-    # Exibe mensagem de desconto conforme novas regras
+    # ============================================
+    # BALÃO DE DESCONTO CORRIGIDO - NO CARRINHO
+    # ============================================
     if desconto_volume_percentual > 0:
         st.markdown(f"""
-        <div class='desconto-vol-banner' style='background-color: #E8F5E9; border-left: 4px solid #4CAF50;
-                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
-            🎉 Parabéns! Você ganhou <strong>{int(desconto_volume_percentual*100)}% de desconto</strong> por volume nos itens NÃO promocionais!<br>
-            Economia de <strong>{formatar_moeda(valor_desconto_volume)}</strong> aplicada sobre o valor base dos itens NÃO promocionais.<br>
-            <small>IPI e ST recalculados proporcionalmente sobre o novo valor base.</small>
-        </div>""", unsafe_allow_html=True)
+        <div style="background-color: #E8F5E9; border-left: 4px solid #4CAF50;
+                    padding: 15px 20px; border-radius: 8px; margin: 15px 0; font-size: 14px;">
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <span style="font-size: 24px;">🎉</span>
+                <div>
+                    <strong style="color: #2E7D32;">Parabéns!</strong> Você ganhou 
+                    <strong style="color: #D32F2F; font-size: 18px;">{int(desconto_volume_percentual*100)}% de desconto</strong> 
+                    por volume nos itens NÃO promocionais!
+                </div>
+            </div>
+            <div style="margin-top: 8px; color: #555; font-size: 13px;">
+                💰 Economia de <strong style="color: #2E7D32;">{formatar_moeda(valor_desconto_volume)}</strong> 
+                aplicada sobre o valor base dos itens NÃO promocionais.
+                <span style="display: block; font-size: 12px; color: #888; margin-top: 4px;">
+                    IPI e ST recalculados proporcionalmente sobre o novo valor base.
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     elif 1500 - valor_base_nao_promo > 0:
         st.markdown(f"""
-        <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
-                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
-            💡 Adicione mais <strong>{formatar_moeda(1500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>10% de desconto</strong>!
-        </div>""", unsafe_allow_html=True)
+        <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
+                    padding: 15px 20px; border-radius: 8px; margin: 15px 0; font-size: 14px;">
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <span style="font-size: 24px;">💡</span>
+                <div>
+                    Adicione mais <strong style="color: #D32F2F; font-size: 16px;">{formatar_moeda(1500-valor_base_nao_promo)}</strong> 
+                    em itens NÃO promocionais e ganhe <strong style="color: #D32F2F;">10% de desconto</strong>!
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     elif 2500 - valor_base_nao_promo > 0:
         st.markdown(f"""
-        <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
-                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
-            💡 Adicione mais <strong>{formatar_moeda(2500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>15% de desconto</strong>!
-        </div>""", unsafe_allow_html=True)
+        <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
+                    padding: 15px 20px; border-radius: 8px; margin: 15px 0; font-size: 14px;">
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <span style="font-size: 24px;">💡</span>
+                <div>
+                    Adicione mais <strong style="color: #D32F2F; font-size: 16px;">{formatar_moeda(2500-valor_base_nao_promo)}</strong> 
+                    em itens NÃO promocionais e ganhe <strong style="color: #D32F2F;">15% de desconto</strong>!
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     elif 4000 - valor_base_nao_promo > 0:
         st.markdown(f"""
-        <div class='prox-desconto-hint' style='background-color: #FFF3E0; border-left: 4px solid #FF9800;
-                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;'>
-            💡 Adicione mais <strong>{formatar_moeda(4000-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>20% de desconto</strong>!
-        </div>""", unsafe_allow_html=True)
+        <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
+                    padding: 15px 20px; border-radius: 8px; margin: 15px 0; font-size: 14px;">
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <span style="font-size: 24px;">💡</span>
+                <div>
+                    Adicione mais <strong style="color: #D32F2F; font-size: 16px;">{formatar_moeda(4000-valor_base_nao_promo)}</strong> 
+                    em itens NÃO promocionais e ganhe <strong style="color: #D32F2F;">20% de desconto</strong>!
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("## 📋 Resumo do Orçamento")
     col1, col2 = st.columns(2)
@@ -3153,7 +3208,6 @@ if st.session_state.get('carrinho_aberto', False):
                                 html_bytes, 
                                 f"orcamento_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
                             )
-                            # Não exibe mensagem de sucesso, apenas erro se falhar
                             if not sucesso_email:
                                 st.error(f"❌ Erro no envio do e-mail: {msg_email}")
                         
