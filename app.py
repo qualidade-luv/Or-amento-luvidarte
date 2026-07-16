@@ -1407,7 +1407,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 # ============================================
-# FUNÇÃO PARA EXIBIR BOTÃO DO CARRINHO E BALÃO DE DESCONTO - CORRIGIDA
+# FUNÇÃO PARA EXIBIR BOTÃO DO CARRINHO E BALÃO DE DESCONTO - CORRIGIDA DEFINITIVA
 # ============================================
 
 def exibir_botao_carrinho_profissional():
@@ -1491,13 +1491,13 @@ def exibir_botao_carrinho_profissional():
     .desconto-balao {
         display: inline-flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
-        padding: 8px 18px;
-        border-radius: 12px;
+        padding: 6px 14px;
+        border-radius: 10px;
         border-left: 4px solid #FF9800;
         box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         color: #E65100;
         white-space: nowrap;
@@ -1511,25 +1511,25 @@ def exibir_botao_carrinho_profissional():
     }
     
     .desconto-balao .percent {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 800;
         color: #D32F2F;
         background: rgba(211, 47, 47, 0.1);
-        padding: 2px 10px;
-        border-radius: 8px;
+        padding: 2px 8px;
+        border-radius: 6px;
     }
     
     .desconto-balao .value {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
         color: #2E7D32;
         background: rgba(46, 125, 50, 0.08);
-        padding: 2px 10px;
-        border-radius: 8px;
+        padding: 2px 8px;
+        border-radius: 6px;
     }
     
     .desconto-balao .icon {
-        font-size: 20px;
+        font-size: 18px;
     }
     
     .desconto-balao .separator {
@@ -1538,21 +1538,21 @@ def exibir_botao_carrinho_profissional():
     }
     
     .desconto-balao .faltante {
-        font-size: 12px;
+        font-size: 11px;
         color: #D32F2F;
         font-weight: 700;
         background: rgba(211, 47, 47, 0.08);
-        padding: 2px 10px;
-        border-radius: 8px;
+        padding: 2px 8px;
+        border-radius: 6px;
     }
     
     .desconto-balao .promo-info {
-        font-size: 11px;
+        font-size: 10px;
         color: #D32F2F;
         font-weight: 600;
         background: rgba(211, 47, 47, 0.1);
-        padding: 2px 10px;
-        border-radius: 8px;
+        padding: 2px 8px;
+        border-radius: 6px;
         display: inline-flex;
         align-items: center;
         gap: 4px;
@@ -1560,7 +1560,7 @@ def exibir_botao_carrinho_profissional():
     
     /* Progresso mini */
     .progress-mini {
-        width: 80px;
+        width: 60px;
         height: 4px;
         background: #E0E0E0;
         border-radius: 4px;
@@ -1576,7 +1576,7 @@ def exibir_botao_carrinho_profissional():
     
     @media (max-width: 768px) {
         .cart-header-container {
-            gap: 10px;
+            gap: 8px;
         }
         .cart-link {
             padding: 6px 12px !important;
@@ -1591,21 +1591,21 @@ def exibir_botao_carrinho_profissional():
             font-size: 12px !important;
         }
         .desconto-balao {
-            font-size: 11px !important;
-            padding: 6px 12px !important;
-            gap: 8px !important;
+            font-size: 10px !important;
+            padding: 5px 10px !important;
+            gap: 6px !important;
         }
         .desconto-balao .percent {
-            font-size: 14px !important;
+            font-size: 13px !important;
         }
         .progress-mini {
-            width: 50px !important;
+            width: 40px !important;
         }
         .desconto-balao .faltante {
-            font-size: 10px !important;
+            font-size: 9px !important;
         }
         .desconto-balao .promo-info {
-            font-size: 10px !important;
+            font-size: 9px !important;
         }
     }
     </style>
@@ -1642,7 +1642,7 @@ def exibir_botao_carrinho_profissional():
     
     # Monta mensagem do faltante
     if desconto_percentual == 0.20:
-        mensagem_faltante = "🏆 Desconto máximo atingido!"
+        mensagem_faltante = "🏆 Desconto máximo!"
     elif desconto_percentual == 0.15:
         mensagem_faltante = f"Faltam <span class='faltante'>{formatar_moeda(faltante)}</span> para 20%"
     elif desconto_percentual == 0.10:
@@ -1656,7 +1656,7 @@ def exibir_botao_carrinho_profissional():
     # Monta informação de promoção - SEMPRE DEFINIDA
     info_promo = ""
     if tem_promo:
-        info_promo = f"<span class='promo-info'>🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} não contam</span>"
+        info_promo = f"<span class='promo-info'>🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)}</span>"
     
     # Container com botão do carrinho e badge de desconto
     if resumo_header['total_itens'] > 0:
