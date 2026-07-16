@@ -1440,6 +1440,8 @@ def exibir_botao_carrinho_profissional():
         transition: all 0.3s ease !important;
         border-radius: 8px !important;
         background: rgba(27, 94, 32, 0.08) !important;
+        font-family: inherit !important;
+        line-height: normal !important;
     }
     
     .cart-link:hover {
@@ -1651,8 +1653,7 @@ def exibir_botao_carrinho_profissional():
         else:
             mensagem_faltante = "Adicione produtos NÃO promocionais"
     
-    # Monta informação de promoção
-    info_promo = ""
+    # Monta informação de promoção    info_promo = ""
     if tem_promo:
         info_promo = f"<span class='promo-info'>🔥 {len(itens_promo)} promo(s): {formatar_moeda(valor_promo)} não contam</span>"
     
@@ -1694,7 +1695,7 @@ def exibir_botao_carrinho_profissional():
             st.query_params.clear()
             st.rerun()
     else:
-        html_content = f'''
+        html_content = '''
         <div class="cart-header-container">
             <div class="desconto-balao" style="border-left-color: #9E9E9E; opacity: 0.5;">
                 <span class="icon">💎</span>
@@ -1723,6 +1724,7 @@ def verificar_abertura_carrinho():
         st.session_state.carrinho_aberto = True
         st.query_params.clear()
         st.rerun()
+
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
