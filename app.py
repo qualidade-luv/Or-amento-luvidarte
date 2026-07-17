@@ -1238,12 +1238,12 @@ def gerar_botao_desconto_flutuante():
         total_fmt = "R$ 0,00"
         valor_total_promo = 0
     
-    # Monta a informação de promoção (se houver)
+    # Monta a informação de promoção (se houver) - SEM DIV EXTRA
     info_promo = ""
     if qtd_promo > 0:
-        info_promo = f'<div class="desconto-promo">🔥 {qtd_promo} item(ns) em promoção: {formatar_moeda(valor_total_promo)} (não entram no desconto)</div>'
+        info_promo = f'🔥 {qtd_promo} item(ns) em promoção: {formatar_moeda(valor_total_promo)} (não entram no desconto)'
     
-    # HTML do balão flutuante - ESTRUTURA VERIFICADA
+    # HTML do balão flutuante - CORRIGIDO SEM DIV EXTRA
     html = f"""
     <style>
     @keyframes slideInRight {{
@@ -1377,7 +1377,7 @@ def gerar_botao_desconto_flutuante():
             <div class="desconto-value">{texto_desconto}</div>
             <div class="desconto-message">{mensagem}</div>
             <div class="desconto-itens">📦 {qtd_total} item(ns) | Base NÃO promo: {total_fmt}</div>
-            {info_promo}
+            {f'<div class="desconto-promo">{info_promo}</div>' if qtd_promo > 0 else ''}
         </div>
     </div>
     """
