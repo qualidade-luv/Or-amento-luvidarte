@@ -1188,7 +1188,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 def gerar_botao_desconto_flutuante():
-    """Gera o balão flutuante de desconto por volume - SEM BARRA DE PROGRESSO"""
+    """Gera o balão flutuante de desconto por volume - COM BARRA DE PROGRESSO"""
     
     # Verifica se há itens no carrinho
     if st.session_state.carrinho:
@@ -1205,6 +1205,15 @@ def gerar_botao_desconto_flutuante():
         
         qtd_total = sum(item['quantidade'] for item in st.session_state.carrinho)
         qtd_promo = sum(item['quantidade'] for item in itens_promo)
+        
+        # Calcula progresso baseado APENAS nos itens NÃO promocionais
+        if valor_base_nao_promo >= 4000:
+            progresso = 100
+        elif valor_base_nao_promo >= 2500:
+            progresso = 75 + ((valor_base_nao_promo - 2500) / 1500) * 25
+        else:
+            progresso = (valor_base_nao_promo / 2500) * 75
+        progresso = min(100, max(0, progresso))
         
         # Determina a mensagem e cores
         if desconto_percentual == 0.15:
@@ -1235,15 +1244,17 @@ def gerar_botao_desconto_flutuante():
         texto_desconto = "0% OFF"
         qtd_total = 0
         qtd_promo = 0
+        progresso = 0
         total_fmt = "R$ 0,00"
         valor_total_promo = 0
     
-    # Monta a informação de promoção (se houver) - SEM DIV EXTRA
-    info_promo = ""
+    # Monta a informação de promoção
     if qtd_promo > 0:
         info_promo = f'🔥 {qtd_promo} item(ns) em promoção: {formatar_moeda(valor_total_promo)} (não entram no desconto)'
+    else:
+        info_promo = '📌 Não existem itens Promocionais no Carrinho'
     
-    # HTML do balão flutuante - CORRIGIDO SEM DIV EXTRA
+    # HTML do balão flutuante - COM BARRA DE PROGRESSO
     html = f"""
     <style>
     @keyframes slideInRight {{
@@ -1334,6 +1345,41 @@ def gerar_botao_desconto_flutuante():
         font-weight: 600;
     }}
     
+    .desconto-promo-vazio {{
+        font-size: 10px;
+        color: #888;
+        background: rgba(136,136,136,0.08);
+        padding: 2px 8px;
+        border-radius: 4px;
+        margin: 3px 0;
+        display: inline-block;
+        font-weight: 500;
+    }}
+    
+    .progress-bar-container {{
+        background-color: #E8E8E8;
+        border-radius: 10px;
+        height: 5px;
+        margin: 6px 0 3px 0;
+        overflow: hidden;
+    }}
+    
+    .progress-bar-fill {{
+        background: linear-gradient(90deg, {cor}, #FF9800);
+        width: {progresso}%;
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.5s ease;
+    }}
+    
+    .progress-labels {{
+        display: flex;
+        justify-content: space-between;
+        font-size: 7px;
+        color: #999;
+        margin-top: 2px;
+    }}
+    
     .close-btn {{
         position: absolute;
         top: 4px;
@@ -1377,7 +1423,15 @@ def gerar_botao_desconto_flutuante():
             <div class="desconto-value">{texto_desconto}</div>
             <div class="desconto-message">{mensagem}</div>
             <div class="desconto-itens">📦 {qtd_total} item(ns) | Base NÃO promo: {total_fmt}</div>
-            {f'<div class="desconto-promo">{info_promo}</div>' if qtd_promo > 0 else ''}
+            <div class="desconto-promo">{info_promo}</div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill"></div>
+            </div>
+            <div class="progress-labels">
+                <span>R$ 0</span>
+                <span>10% (R$ 2.500)</span>
+                <span>15% (R$ 4.000)</span>
+            </div>
         </div>
     </div>
     """
