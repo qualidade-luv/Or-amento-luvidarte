@@ -1205,6 +1205,7 @@ def gerar_botao_desconto_flutuante():
         
         qtd_total = sum(item['quantidade'] for item in st.session_state.carrinho)
         qtd_promo = sum(item['quantidade'] for item in itens_promo)
+        qtd_nao_promo = qtd_total - qtd_promo
         
         # Determina a mensagem e cores
         if desconto_percentual == 0.15:
@@ -1215,7 +1216,7 @@ def gerar_botao_desconto_flutuante():
         elif desconto_percentual == 0.10:
             mensagem = f"✅ Você já tem 10% de desconto! Faltam {formatar_moeda(faltante)} para 15%"
             cor = "#4CAF50"
-            icone = "🎯"
+            icone = "✅"
             texto_desconto = "10% OFF"
         else:
             if faltante > 0:
@@ -1235,11 +1236,6 @@ def gerar_botao_desconto_flutuante():
             progresso = (valor_base_nao_promo / 2500) * 75
         progresso = min(100, max(0, progresso))
         
-        # Monta informação de promoção
-        info_promo = ""
-        if qtd_promo > 0:
-            info_promo = f"🔥 {qtd_promo} item(ns) em promoção: {formatar_moeda(valor_total_promo)} (não entram no desconto)"
-        
         total_fmt = formatar_moeda(valor_base_nao_promo)
         
     else:
@@ -1249,11 +1245,17 @@ def gerar_botao_desconto_flutuante():
         texto_desconto = "0% OFF"
         progresso = 0
         qtd_total = 0
-        info_promo = ""
-        total_fmt = "R$ 0,00"
         qtd_promo = 0
+        qtd_nao_promo = 0
+        total_fmt = "R$ 0,00"
+        valor_total_promo = 0
     
-    # HTML do balão flutuante - SEM BOTÃO
+    # Monta a informação de promoção corretamente
+    info_promo_html = ""
+    if qtd_promo > 0:
+        info_promo_html = f'<div class="desconto-promo">🔥 {qtd_promo} item(ns) em promoção: {formatar_moeda(valor_total_promo)} (não entram no desconto)</div>'
+    
+    # HTML do balão flutuante - CORRIGIDO
     html = f"""
     <style>
     @keyframes slideInRight {{
@@ -1411,7 +1413,7 @@ def gerar_botao_desconto_flutuante():
             <div class="desconto-value">{texto_desconto}</div>
             <div class="desconto-message">{mensagem}</div>
             <div class="desconto-itens">📦 {qtd_total} item(ns) | Base NÃO promo: {total_fmt}</div>
-            {f'<div class="desconto-promo">{info_promo}</div>' if info_promo else ''}
+            {info_promo_html}
             <div class="progress-bar-container">
                 <div class="progress-bar-fill"></div>
             </div>
