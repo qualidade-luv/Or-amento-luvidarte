@@ -1188,7 +1188,7 @@ def calcular_faltante_para_desconto(valor_base):
         return 0, 0
 
 def gerar_botao_desconto_flutuante():
-    """Gera o balão flutuante de desconto por volume - SEM BOTÃO IR PARA CARRINHO"""
+    """Gera o balão flutuante de desconto por volume - SEM BARRA DE PROGRESSO"""
     
     # Verifica se há itens no carrinho
     if st.session_state.carrinho:
@@ -1226,15 +1226,6 @@ def gerar_botao_desconto_flutuante():
             icone = "📈"
             texto_desconto = "0% OFF"
         
-        # Calcula progresso baseado APENAS nos itens NÃO promocionais
-        if valor_base_nao_promo >= 4000:
-            progresso = 100
-        elif valor_base_nao_promo >= 2500:
-            progresso = 75 + ((valor_base_nao_promo - 2500) / 1500) * 25
-        else:
-            progresso = (valor_base_nao_promo / 2500) * 75
-        progresso = min(100, max(0, progresso))
-        
         total_fmt = formatar_moeda(valor_base_nao_promo)
         
     else:
@@ -1242,7 +1233,6 @@ def gerar_botao_desconto_flutuante():
         cor = "#9E9E9E"
         icone = "💰"
         texto_desconto = "0% OFF"
-        progresso = 0
         qtd_total = 0
         qtd_promo = 0
         total_fmt = "R$ 0,00"
@@ -1253,7 +1243,7 @@ def gerar_botao_desconto_flutuante():
     if qtd_promo > 0:
         info_promo = f'<div class="desconto-promo">🔥 {qtd_promo} item(ns) em promoção: {formatar_moeda(valor_total_promo)} (não entram no desconto)</div>'
     
-    # HTML do balão flutuante - CORRIGIDO COM TUDO EM UMA ÚNICA STRING
+    # HTML do balão flutuante - SEM BARRA DE PROGRESSO
     html = f"""
     <style>
     @keyframes slideInRight {{
@@ -1344,30 +1334,6 @@ def gerar_botao_desconto_flutuante():
         font-weight: 600;
     }}
     
-    .progress-bar-container {{
-        background-color: #E8E8E8;
-        border-radius: 10px;
-        height: 5px;
-        margin: 6px 0 3px 0;
-        overflow: hidden;
-    }}
-    
-    .progress-bar-fill {{
-        background: linear-gradient(90deg, {cor}, #FF9800);
-        width: {progresso}%;
-        height: 100%;
-        border-radius: 10px;
-        transition: width 0.5s ease;
-    }}
-    
-    .progress-labels {{
-        display: flex;
-        justify-content: space-between;
-        font-size: 7px;
-        color: #999;
-        margin-top: 2px;
-    }}
-    
     .close-btn {{
         position: absolute;
         top: 4px;
@@ -1412,20 +1378,11 @@ def gerar_botao_desconto_flutuante():
             <div class="desconto-message">{mensagem}</div>
             <div class="desconto-itens">📦 {qtd_total} item(ns) | Base NÃO promo: {total_fmt}</div>
             {info_promo}
-            <div class="progress-bar-container">
-                <div class="progress-bar-fill"></div>
-            </div>
-            <div class="progress-labels">
-                <span>R$ 0</span>
-                <span>10% (R$ 2.500)</span>
-                <span>15% (R$ 4.000)</span>
-            </div>
         </div>
     </div>
     """
     
     return html
-
 # ============================================
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
