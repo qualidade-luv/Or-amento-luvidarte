@@ -1205,7 +1205,6 @@ def gerar_botao_desconto_flutuante():
         
         qtd_total = sum(item['quantidade'] for item in st.session_state.carrinho)
         qtd_promo = sum(item['quantidade'] for item in itens_promo)
-        qtd_nao_promo = qtd_total - qtd_promo
         
         # Determina a mensagem e cores
         if desconto_percentual == 0.15:
@@ -1246,16 +1245,15 @@ def gerar_botao_desconto_flutuante():
         progresso = 0
         qtd_total = 0
         qtd_promo = 0
-        qtd_nao_promo = 0
         total_fmt = "R$ 0,00"
         valor_total_promo = 0
     
-    # Monta a informação de promoção corretamente
-    info_promo_html = ""
+    # Monta a informação de promoção
+    info_promo = ""
     if qtd_promo > 0:
-        info_promo_html = f'<div class="desconto-promo">🔥 {qtd_promo} item(ns) em promoção: {formatar_moeda(valor_total_promo)} (não entram no desconto)</div>'
+        info_promo = f'<div class="desconto-promo">🔥 {qtd_promo} item(ns) em promoção: {formatar_moeda(valor_total_promo)} (não entram no desconto)</div>'
     
-    # HTML do balão flutuante - CORRIGIDO
+    # HTML do balão flutuante - CORRIGIDO COM TUDO EM UMA ÚNICA STRING
     html = f"""
     <style>
     @keyframes slideInRight {{
@@ -1413,7 +1411,7 @@ def gerar_botao_desconto_flutuante():
             <div class="desconto-value">{texto_desconto}</div>
             <div class="desconto-message">{mensagem}</div>
             <div class="desconto-itens">📦 {qtd_total} item(ns) | Base NÃO promo: {total_fmt}</div>
-            {info_promo_html}
+            {info_promo}
             <div class="progress-bar-container">
                 <div class="progress-bar-fill"></div>
             </div>
