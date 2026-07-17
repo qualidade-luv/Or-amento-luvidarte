@@ -1428,17 +1428,101 @@ def gerar_botao_desconto_flutuante():
 # FUNÇÃO PARA RECALCULAR ITEM COM DESCONTO POR VOLUME
 # ============================================
 def recalcular_item_com_desconto_volume(item, desconto_volume_percentual):
+    """
+    Recalcula o item com desconto por volume
+    IMPORTANTE: IPI e ST NÃO são recalculados sobre o desconto por volume
+    """
     valor_base_item = item['preco_final']
     valor_com_desconto_volume = valor_base_item * (1 - desconto_volume_percentual)
-    novo_valor_ipi = valor_com_desconto_volume * item['ipi_percentual']
-    novo_valor_st = valor_com_desconto_volume * item['st_aliquota']
-    novo_total_geral = valor_com_desconto_volume + novo_valor_ipi + novo_valor_st
+    
+    # IPI e ST permanecem os mesmos (calculados sobre o valor original)
+    valor_ipi = item['valor_ipi']
+    valor_st = item['valor_st']
+    
+    novo_total_geral = valor_com_desconto_volume + valor_ipi + valor_st
     
     return {
         'preco_final_com_desconto': valor_com_desconto_volume,
-        'valor_ipi': novo_valor_ipi,
-        'valor_st': novo_valor_st,
+        'valor_ipi': valor_ipi,  # Mantém o IPI original
+        'valor_st': valor_st,    # Mantém o ST original
         'total_geral': novo_total_geral
+    }
+
+# ============================================
+# FUNÇÃO PARA CALCULAR RESUMO DO CARRINHO - CORRIGIDA
+# ============================================
+def calcular_resumo_carrinho():
+    """
+    Calcula o resumo do carrinho separando itens PROMOCIONAIS de NÃO PROMOCIONAIS
+    IMPORTANTE: IPI e ST NÃO são recalculados sobre o desconto por volume
+    """
+    if not st.session_state.carrinho:
+        return {
+            'total_itens': 0, 
+            'total_geral': 0.0, 
+            'total_ipi': 0.0,
+            'total_st': 0.0, 
+            'total_desconto': 0.0, 
+            'total_bruto': 0.0,
+            'itens_promo': [],
+            'valor_promo': 0,
+            'qtd_promo': 0,
+            'itens_normais': [],
+            'valor_base_total': 0,
+            'valor_desconto_volume': 0,
+            'novo_valor_base': 0,
+            'desconto_volume_percentual': 0,
+            'total_nao_promo': 0,
+            'subtotal_nao_promo': 0
+        }
+    
+    # Separa itens PROMOCIONAIS dos normais
+    itens_promo = [item for item in st.session_state.carrinho if item.get('eh_promocao', False)]
+    itens_normais = [item for item in st.session_state.carrinho if not item.get('eh_promocao', False)]
+    
+    # Calcula valor base APENAS dos itens NÃO promocionais
+    valor_base_nao_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_normais)
+    
+    # Calcula o desconto por volume APENAS sobre itens NÃO promocionais
+    desconto_vol = calcular_desconto_volume(valor_base_nao_promo, False)
+    valor_desconto_volume = valor_base_nao_promo * desconto_vol
+    novo_valor_base = valor_base_nao_promo - valor_desconto_volume
+    
+    # ============================================
+    # CORREÇÃO: IPI e ST permanecem os mesmos
+    # NÃO são recalculados sobre o desconto por volume
+    # ============================================
+    total_ipi = sum(item['valor_ipi'] * item['quantidade'] for item in st.session_state.carrinho)
+    total_st = sum(item['valor_st'] * item['quantidade'] for item in st.session_state.carrinho)
+    
+    # Calcula o total dos itens NÃO PROMOCIONAIS (com desconto no valor base)
+    ipi_nao_promo = sum(item['valor_ipi'] * item['quantidade'] for item in itens_normais)
+    st_nao_promo = sum(item['valor_st'] * item['quantidade'] for item in itens_normais)
+    total_nao_promo = novo_valor_base + ipi_nao_promo + st_nao_promo
+    
+    # Calcula o total dos itens PROMOCIONAIS (sem desconto)
+    valor_promo = sum(item['total_geral'] for item in itens_promo)
+    
+    # TOTAL GERAL = Itens NÃO PROMO (com desconto) + Itens PROMO (sem desconto)
+    total_geral = total_nao_promo + valor_promo
+    
+    return {
+        'total_itens': sum(i['quantidade'] for i in st.session_state.carrinho),
+        'total_geral': total_geral,
+        'total_ipi': total_ipi,
+        'total_st': total_st,
+        'total_desconto': sum(i['valor_desconto'] * i['quantidade'] for i in st.session_state.carrinho),
+        'total_bruto': sum(i['preco_bruto'] * i['quantidade'] for i in st.session_state.carrinho),
+        'desconto_volume_percentual': desconto_vol,
+        'valor_base_total': valor_base_nao_promo,
+        'valor_desconto_volume': valor_desconto_volume,
+        'novo_valor_base': novo_valor_base,
+        'itens_promo': itens_promo,
+        'valor_promo': valor_promo,
+        'qtd_promo': sum(i['quantidade'] for i in itens_promo) if itens_promo else 0,
+        'itens_normais': itens_normais,
+        'total_nao_promo': total_nao_promo,
+        'subtotal_nao_promo': total_nao_promo
     }
 
 # ============================================
@@ -1557,8 +1641,8 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
             ipi_aliquota = item['ipi_percentual']
             st_aliquota = item['st_aliquota']
-            ipi_unitario = valor_com_desconto_item * ipi_aliquota
-            st_unitario = valor_com_desconto_item * st_aliquota
+            ipi_unitario = item['valor_ipi']  # Mantém o IPI original
+            st_unitario = item['valor_st']    # Mantém o ST original
         
         subtotal_item = valor_com_desconto_item * item['quantidade']
         ipi_total_item = ipi_unitario * item['quantidade']
@@ -1595,8 +1679,8 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             <p><strong>Valor Base Original (NÃO PROMO):</strong> {formatar_moeda(valor_base_total)}</p>
             <p><strong>Desconto por Volume ({int(desconto_volume_percentual*100)}%):</strong> -{formatar_moeda(valor_desconto_volume)}</p>
             <p><strong>Novo Valor Base (NÃO PROMO):</strong> {formatar_moeda(novo_valor_base)}</p>
-            <p><strong>IPI Total (recalculado):</strong> {formatar_moeda(total_ipi_exibido)}</p>
-            <p><strong>ST Total (recalculado):</strong> {formatar_moeda(total_st_exibido)}</p>
+            <p><strong>IPI Total:</strong> {formatar_moeda(total_ipi_exibido)}</p>
+            <p><strong>ST Total:</strong> {formatar_moeda(total_st_exibido)}</p>
             <p><strong>Subtotal Itens NÃO PROMO:</strong> {formatar_moeda(novo_valor_base + total_ipi_exibido + total_st_exibido)}</p>
             {f"<p><strong>🔥 Itens em Promoção (sem desconto):</strong> {formatar_moeda(valor_promo)}</p>" if qtd_promo > 0 else ""}
             <p class="total"><strong>TOTAL GERAL DO ORÇAMENTO:</strong> {formatar_moeda(total_final)}</p>
@@ -2033,69 +2117,6 @@ def limpar_carrinho():
     st.session_state.mostrar_formulario_cliente = False
     st.session_state.mostrar_botoes_envio = False
     st.session_state.html_bytes = None
-
-def calcular_resumo_carrinho():
-    if not st.session_state.carrinho:
-        return {
-            'total_itens': 0, 
-            'total_geral': 0.0, 
-            'total_ipi': 0.0,
-            'total_st': 0.0, 
-            'total_desconto': 0.0, 
-            'total_bruto': 0.0,
-            'itens_promo': [],
-            'valor_promo': 0,
-            'qtd_promo': 0,
-            'itens_normais': [],
-            'valor_nao_promo': 0,
-            'qtd_nao_promo': 0
-        }
-    
-    # Separa itens PROMOCIONAIS
-    itens_promo = [item for item in st.session_state.carrinho if item.get('eh_promocao', False)]
-    itens_normais = [item for item in st.session_state.carrinho if not item.get('eh_promocao', False)]
-    
-    # Calcula desconto APENAS sobre itens NÃO promocionais
-    valor_base_nao_promo = sum(item['preco_final'] * item['quantidade'] for item in itens_normais)
-    desconto_vol = calcular_desconto_volume(valor_base_nao_promo, False)
-    
-    total_com_desconto = 0
-    total_ipi = 0
-    total_st = 0
-    
-    # Processa itens NÃO promocionais (com desconto)
-    for item in itens_normais:
-        item_com_desconto = recalcular_item_com_desconto_volume(item, desconto_vol)
-        total_com_desconto += item_com_desconto['total_geral'] * item['quantidade']
-        total_ipi += item['valor_ipi'] * item['quantidade']
-        total_st += item['valor_st'] * item['quantidade']
-    
-    # Processa itens PROMOCIONAIS (sem desconto)
-    valor_promo_total = 0
-    for item in itens_promo:
-        total_com_desconto += item['total_geral']
-        total_ipi += item['valor_ipi'] * item['quantidade']
-        total_st += item['valor_st'] * item['quantidade']
-        valor_promo_total += item['total_geral']
-    
-    return {
-        'total_itens': sum(i['quantidade'] for i in st.session_state.carrinho),
-        'total_geral': total_com_desconto,
-        'total_ipi': total_ipi,
-        'total_st': total_st,
-        'total_desconto': sum(i['valor_desconto'] * i['quantidade'] for i in st.session_state.carrinho),
-        'total_bruto': sum(i['preco_bruto'] * i['quantidade'] for i in st.session_state.carrinho),
-        'desconto_volume_percentual': desconto_vol,
-        'valor_base_total': valor_base_nao_promo,
-        'valor_desconto_volume': valor_base_nao_promo * desconto_vol,
-        'novo_valor_base': valor_base_nao_promo * (1 - desconto_vol),
-        'itens_promo': itens_promo,
-        'valor_promo': valor_promo_total,
-        'qtd_promo': sum(i['quantidade'] for i in itens_promo) if itens_promo else 0,
-        'itens_normais': itens_normais,
-        'valor_nao_promo': valor_base_nao_promo,
-        'qtd_nao_promo': sum(i['quantidade'] for i in itens_normais) if itens_normais else 0
-    }
 
 # ============================================
 # FUNÇÕES AUXILIARES DE CONVERSÃO
@@ -2574,14 +2595,19 @@ if st.session_state.get('carrinho_aberto', False):
     valor_desconto_volume = resumo['valor_desconto_volume']
     novo_valor_base = resumo['novo_valor_base']
     
-    total_ipi_recalculado = resumo['total_ipi']
-    total_st_recalculado = resumo['total_st']
-    total_geral_recalculado = resumo['total_geral']
-    total_desconto_geral = resumo['total_desconto']
-    total_bruto_geral = resumo['total_bruto']
+    # IPI e ST NÃO são recalculados - permanecem os mesmos
+    total_ipi = resumo['total_ipi']
+    total_st = resumo['total_st']
     
+    # Subtotal Itens NÃO PROMO = Novo Valor Base + IPI + ST
+    subtotal_nao_promo = novo_valor_base + total_ipi + total_st
+    
+    # Itens PROMOCIONAIS
     valor_promo = resumo['valor_promo']
     qtd_promo = resumo['qtd_promo']
+    
+    # TOTAL FINAL CORRETO
+    total_final_com_vol = subtotal_nao_promo + valor_promo
 
     # Exibe os itens do carrinho
     for idx, item in enumerate(st.session_state.carrinho):
@@ -2644,11 +2670,11 @@ if st.session_state.get('carrinho_aberto', False):
                 st.markdown(f"💎 *Subtotal:* {formatar_moeda(subtotal_item)}")
             
             if item.get('ipi_percentual', 0) > 0:
-                ipi_total_item = item['ipi_total']
+                ipi_total_item = item['valor_ipi'] * item['quantidade']
                 st.markdown(f"🔷 IPI: {item['ipi_percentual']*100:.2f}% = {formatar_moeda(ipi_total_item)}")
             
             if item.get('st_total', 0) > 0:
-                st_total_item = item['st_total']
+                st_total_item = item['valor_st'] * item['quantidade']
                 st.markdown(f"🟣 ST: {formatar_moeda(st_total_item)}")
         with c4:
             st.markdown("*Total Item*")
@@ -2658,9 +2684,6 @@ if st.session_state.get('carrinho_aberto', False):
                 remover_do_carrinho(idx)
                 st.rerun()
         st.markdown("---")
-
-    total_final_com_vol = total_geral_recalculado
-    subtotal_nao_promo = novo_valor_base + total_ipi_recalculado + total_st_recalculado
 
     # Exibe aviso sobre itens em promoção
     if qtd_promo > 0:
@@ -2673,7 +2696,7 @@ if st.session_state.get('carrinho_aberto', False):
                     padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;">
             🎉 Parabéns! Você ganhou <strong>{int(desconto_volume_percentual*100)}% de desconto</strong> por volume nos itens NÃO promocionais!<br>
             Economia de <strong>{formatar_moeda(valor_desconto_volume)}</strong> aplicada sobre o valor base dos itens NÃO promocionais.<br>
-            <small>IPI e ST recalculados proporcionalmente sobre o novo valor base.</small>
+            <small>IPI e ST permanecem os mesmos, calculados sobre o valor original.</small>
         </div>""", unsafe_allow_html=True)
     elif 2500 - valor_base_nao_promo > 0:
         st.markdown(f"""
@@ -2697,15 +2720,15 @@ if st.session_state.get('carrinho_aberto', False):
             <div class='resumo-title'>📊 Resumo de Valores</div>
             <div class='resumo-line'>
                 <span>💰 Valor Bruto Total:</span>
-                <span><strong>{formatar_moeda(total_bruto_geral)}</strong></span>
+                <span><strong>{formatar_moeda(resumo['total_bruto'])}</strong></span>
             </div>
             <div class='resumo-line'>
                 <span>🎯 Desconto (condição pagto):</span>
-                <span><strong style='color:#D32F2F;'>- {formatar_moeda(total_desconto_geral)}</strong></span>
+                <span><strong style='color:#D32F2F;'>- {formatar_moeda(resumo['total_desconto'])}</strong></span>
             </div>
             <div class='resumo-line'>
                 <span>📉 Valor com Desconto (base):</span>
-                <span><strong>{formatar_moeda(total_bruto_geral - total_desconto_geral)}</strong></span>
+                <span><strong>{formatar_moeda(resumo['total_bruto'] - resumo['total_desconto'])}</strong></span>
             </div>
             <div class='resumo-line'>
                 <span>📊 Valor Base NÃO PROMO (p/ desconto):</span>
@@ -2718,22 +2741,17 @@ if st.session_state.get('carrinho_aberto', False):
     with col2:
         st.markdown(f"""
         <div class='resumo-card'>
-            <div class='resumo-title'>🏷️ Tributos (Recalculados)</div>
+            <div class='resumo-title'>🏷️ Tributos</div>
             <div class='resumo-line'>
-                <span>🔷 IPI Total Original:</span>
-                <span><strong>{formatar_moeda(sum(item['valor_ipi'] * item['quantidade'] for item in st.session_state.carrinho))}</strong></span>
+                <span>🔷 IPI Total:</span>
+                <span><strong>{formatar_moeda(total_ipi)}</strong></span>
             </div>
             <div class='resumo-line'>
-                <span>🔷 IPI Total (com desconto vol):</span>
-                <span><strong style='color:#2E7D32;'>{formatar_moeda(total_ipi_recalculado)}</strong></span>
+                <span>🟣 ST Total:</span>
+                <span><strong>{formatar_moeda(total_st)}</strong></span>
             </div>
-            <div class='resumo-line'>
-                <span>🟣 ST Total Original:</span>
-                <span><strong>{formatar_moeda(sum(item['valor_st'] * item['quantidade'] for item in st.session_state.carrinho))}</strong></span>
-            </div>
-            <div class='resumo-line'>
-                <span>🟣 ST Total (com desconto vol):</span>
-                <span><strong style='color:#2E7D32;'>{formatar_moeda(total_st_recalculado)}</strong></span>
+            <div class='resumo-line' style='border-top: 1px solid #E0E0E0; margin-top: 5px; padding-top: 5px;'>
+                <span style='font-size: 11px; color: #888;'>📌 IPI e ST NÃO são recalculados sobre o desconto por volume</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2746,12 +2764,12 @@ if st.session_state.get('carrinho_aberto', False):
             <span><strong>{formatar_moeda(novo_valor_base)}</strong></span>
         </div>
         <div class='resumo-line' style='color:#2E7D32;'>
-            <span>🔷 IPI Total (recalculado):</span>
-            <span><strong>{formatar_moeda(total_ipi_recalculado)}</strong></span>
+            <span>🔷 IPI Total:</span>
+            <span><strong>{formatar_moeda(total_ipi)}</strong></span>
         </div>
         <div class='resumo-line' style='color:#2E7D32;'>
-            <span>🟣 ST Total (recalculado):</span>
-            <span><strong>{formatar_moeda(total_st_recalculado)}</strong></span>
+            <span>🟣 ST Total:</span>
+            <span><strong>{formatar_moeda(total_st)}</strong></span>
         </div>
         <div class='resumo-line' style='color:#2E7D32; border-top: 1px solid #4CAF50; padding-top: 8px;'>
             <span>📊 SUBTOTAL ITENS NÃO PROMO:</span>
@@ -2884,8 +2902,8 @@ if st.session_state.get('carrinho_aberto', False):
                         valor_base_nao_promo, 
                         valor_desconto_volume,
                         total_final_com_vol, 
-                        total_ipi_recalculado, 
-                        total_st_recalculado,
+                        total_ipi, 
+                        total_st,
                         valor_promo,
                         qtd_promo,
                         valor_promo
@@ -2928,8 +2946,8 @@ if st.session_state.get('carrinho_aberto', False):
             desconto_volume_percentual, 
             valor_desconto_volume,
             valor_base_nao_promo, 
-            total_ipi_recalculado, 
-            total_st_recalculado,
+            total_ipi, 
+            total_st,
             valor_promo,
             qtd_promo,
             valor_promo
