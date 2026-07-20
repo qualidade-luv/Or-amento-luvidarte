@@ -1,10 +1,3 @@
-[file name]: image.png
-[file content begin]
-Pedidos acima de R$ 1.500, 00 - desc. adicional de 10%
-Pedidos acima de R$ 2.500,00 - desc. adicional de 15%
-Pedidos acima de R$ 4.000,00 - desc. adicional de 20%
-[file content end]
-
 import streamlit as st
 import pandas as pd
 import numpy as np
