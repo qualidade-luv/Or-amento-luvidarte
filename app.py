@@ -2596,7 +2596,7 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO
+# TELA DO CARRINHO - SEÇÃO CORRIGIDA
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
     st.markdown("# 🛒 Meu Orçamento Virtual")
@@ -2784,6 +2784,9 @@ if st.session_state.get('carrinho_aberto', False):
         </div>
         """, unsafe_allow_html=True)
     
+    # ============================================
+    # SEÇÃO CORRIGIDA - VALORES COM DESCONTO VOLUME
+    # ============================================
     st.markdown(f"""
     <div class='resumo-card'>
         <div class='resumo-title'>🎯 VALORES COM DESCONTO VOLUME</div>
@@ -2823,8 +2826,8 @@ if st.session_state.get('carrinho_aberto', False):
             st.rerun()
     with cb3:
         if st.button("📋 Solicitar Orçamento", use_container_width=True):
-            mostrar_formulario()
-    
+            mostrar_formulario()    
+      
     if st.session_state.mostrar_formulario_cliente and not st.session_state.mostrar_botoes_envio:
         st.markdown("---")
         st.markdown('<div class="formulario-cliente">', unsafe_allow_html=True)
