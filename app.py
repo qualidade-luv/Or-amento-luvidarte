@@ -2596,7 +2596,7 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO - SEÇÃO CORRIGIDA COMPLETAMENTE
+# TELA DO CARRINHO - CORRIGIDA SEM HTML VAZANDO
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
     st.markdown("# 🛒 Meu Orçamento Virtual")
@@ -2635,255 +2635,189 @@ if st.session_state.get('carrinho_aberto', False):
     for idx, item in enumerate(st.session_state.carrinho):
         eh_promo = item.get('eh_promocao', False)
         
-        c1, c2, c3, c4 = st.columns([1, 3, 2, 1])
-        with c1:
-            img_url = item.get('imagem_url', '')
-            if img_url and pd.notna(img_url) and str(img_url).strip():
-                try:
-                    st.image(img_url, width=80)
-                except:
+        with st.container():
+            col1, col2, col3, col4 = st.columns([1, 3, 3, 1])
+            
+            with col1:
+                img_url = item.get('imagem_url', '')
+                if img_url and pd.notna(img_url) and str(img_url).strip():
+                    try:
+                        st.image(img_url, width=80)
+                    except:
+                        st.image("https://via.placeholder.com/80x80?text=Luvidarte", width=80)
+                else:
                     st.image("https://via.placeholder.com/80x80?text=Luvidarte", width=80)
-            else:
-                st.image("https://via.placeholder.com/80x80?text=Luvidarte", width=80)
-        with c2:
-            st.markdown(f"*{item['descricao']}*")
-            st.markdown(f"🔖 REF: {item['referencia']}")
-            st.markdown(f"📦 Família: {item['grupo']}")
-            if eh_promo:
-                st.markdown("🔥 **PROMOÇÃO**")
-            if item.get('medidas'):
-                st.markdown(f"📐 {item['medidas']}")
-        with c3:
-            st.markdown(f"💰 *Preço Bruto:* {formatar_moeda(item['preco_bruto'])}")
-            if item['desconto_percentual'] > 0:
-                st.markdown(f"🎯 *Desconto:* {item['desconto_percentual']*100:.2f}% ({formatar_moeda(item['valor_desconto'])})")
-                st.markdown(f"📉 *Valor c/ Desconto:* {formatar_moeda(item['preco_com_desconto'])}")
             
-            if eh_promo:
-                valor_unitario_exibido = item['preco_final']
-                st.markdown(f"💰 *Valor unitário:* {formatar_moeda(valor_unitario_exibido)}")
-                st.caption("🔥 Promoção - sem desconto por volume")
-            else:
-                valor_unitario_exibido = item['preco_final'] * (1 - desconto_volume_percentual)
-                st.markdown(f"💰 *Valor unitário:* {formatar_moeda(valor_unitario_exibido)}")
-                if desconto_volume_percentual > 0:
-                    st.caption(f"🎉 *Inclui {int(desconto_volume_percentual*100)}% desconto por volume*")
+            with col2:
+                st.markdown(f"**{item['descricao']}**")
+                st.markdown(f"🔖 REF: {item['referencia']}")
+                st.markdown(f"📦 Família: {item['grupo']}")
+                if eh_promo:
+                    st.markdown("🔥 **PROMOÇÃO**")
+                if item.get('medidas'):
+                    st.markdown(f"📐 {item['medidas']}")
             
-            col_qtd1, col_qtd2 = st.columns([1, 2])
-            with col_qtd1:
+            with col3:
+                st.markdown(f"💰 **Preço Bruto:** {formatar_moeda(item['preco_bruto'])}")
+                if item['desconto_percentual'] > 0:
+                    st.markdown(f"🎯 **Desconto:** {item['desconto_percentual']*100:.2f}% ({formatar_moeda(item['valor_desconto'])})")
+                    st.markdown(f"📉 **Valor c/ Desconto:** {formatar_moeda(item['preco_com_desconto'])}")
+                
+                if eh_promo:
+                    valor_unitario_exibido = item['preco_final']
+                    st.markdown(f"💰 **Valor unitário:** {formatar_moeda(valor_unitario_exibido)}")
+                    st.caption("🔥 Promoção - sem desconto por volume")
+                else:
+                    valor_unitario_exibido = item['preco_final'] * (1 - desconto_volume_percentual)
+                    st.markdown(f"💰 **Valor unitário:** {formatar_moeda(valor_unitario_exibido)}")
+                    if desconto_volume_percentual > 0:
+                        st.caption(f"🎉 Inclui {int(desconto_volume_percentual*100)}% desconto por volume")
+                
                 nova_qtd = st.number_input(
                     "Quantidade",
                     min_value=1,
                     max_value=999,
                     value=int(item['quantidade']),
                     step=1,
-                    key=f"edit_qtd_{idx}",
-                    label_visibility="collapsed"
+                    key=f"edit_qtd_{idx}"
                 )
                 if nova_qtd != item['quantidade']:
                     atualizar_quantidade_carrinho(idx, nova_qtd)
                     st.rerun()
-            
-            with col_qtd2:
+                
                 if eh_promo:
                     subtotal_item = item['preco_final'] * item['quantidade']
                 else:
                     subtotal_item = valor_unitario_exibido * item['quantidade']
-                st.markdown(f"💎 *Subtotal:* {formatar_moeda(subtotal_item)}")
+                st.markdown(f"💎 **Subtotal:** {formatar_moeda(subtotal_item)}")
+                
+                if item.get('ipi_percentual', 0) > 0:
+                    ipi_total_item = item['valor_ipi'] * item['quantidade']
+                    st.markdown(f"🔷 IPI: {item['ipi_percentual']*100:.2f}% = {formatar_moeda(ipi_total_item)}")
+                
+                if item.get('st_total', 0) > 0:
+                    st_total_item = item['valor_st'] * item['quantidade']
+                    st.markdown(f"🟣 ST: {formatar_moeda(st_total_item)}")
             
-            if item.get('ipi_percentual', 0) > 0:
-                ipi_total_item = item['valor_ipi'] * item['quantidade']
-                st.markdown(f"🔷 IPI: {item['ipi_percentual']*100:.2f}% = {formatar_moeda(ipi_total_item)}")
+            with col4:
+                st.markdown("**Total Item**")
+                total_item = item['total_geral']
+                st.markdown(f"### {formatar_moeda(total_item)}")
+                if st.button("🗑️ Remover", key=f"remove_{idx}"):
+                    remover_do_carrinho(idx)
+                    st.rerun()
             
-            if item.get('st_total', 0) > 0:
-                st_total_item = item['valor_st'] * item['quantidade']
-                st.markdown(f"🟣 ST: {formatar_moeda(st_total_item)}")
-        with c4:
-            st.markdown("*Total Item*")
-            total_item = item['total_geral']
-            st.markdown(f"### {formatar_moeda(total_item)}")
-            if st.button("🗑️ Remover", key=f"remove_{idx}"):
-                remover_do_carrinho(idx)
-                st.rerun()
-        st.markdown("---")
+            st.divider()
 
     # Exibe aviso sobre itens em promoção
     if qtd_promo > 0:
         st.info(f"🔥 Itens em promoção ({qtd_promo} itens - {formatar_moeda(valor_promo)}) NÃO recebem desconto por volume")
 
-    # Mensagens de desconto - ATUALIZADAS COM AS NOVAS FAIXAS
+    # Mensagens de desconto
     if desconto_volume_percentual > 0:
-        st.markdown(f"""
-        <div style="background-color: #E8F5E9; border-left: 4px solid #4CAF50;
-                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;">
-            🎉 Parabéns! Você ganhou <strong>{int(desconto_volume_percentual*100)}% de desconto</strong> por volume nos itens NÃO promocionais!<br>
-            Economia de <strong>{formatar_moeda(valor_desconto_volume)}</strong> aplicada sobre o valor base dos itens NÃO promocionais.<br>
-            <small>IPI e ST permanecem os mesmos, calculados sobre o valor original.</small>
-        </div>""", unsafe_allow_html=True)
+        st.success(f"""
+        🎉 Parabéns! Você ganhou **{int(desconto_volume_percentual*100)}% de desconto** por volume nos itens NÃO promocionais!
+        
+        Economia de **{formatar_moeda(valor_desconto_volume)}** aplicada sobre o valor base dos itens NÃO promocionais.
+        
+        *IPI e ST permanecem os mesmos, calculados sobre o valor original.*
+        """)
     elif 1500 - valor_base_nao_promo > 0:
-        st.markdown(f"""
-        <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
-                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;">
-            💡 Adicione mais <strong>{formatar_moeda(1500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>10% de desconto</strong>!
-        </div>""", unsafe_allow_html=True)
+        st.warning(f"💡 Adicione mais **{formatar_moeda(1500-valor_base_nao_promo)}** em itens NÃO promocionais e ganhe **10% de desconto**!")
     elif 2500 - valor_base_nao_promo > 0:
-        st.markdown(f"""
-        <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
-                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;">
-            💡 Adicione mais <strong>{formatar_moeda(2500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>15% de desconto</strong>!
-        </div>""", unsafe_allow_html=True)
+        st.warning(f"💡 Adicione mais **{formatar_moeda(2500-valor_base_nao_promo)}** em itens NÃO promocionais e ganhe **15% de desconto**!")
     elif 4000 - valor_base_nao_promo > 0:
-        st.markdown(f"""
-        <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
-                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;">
-            💡 Adicione mais <strong>{formatar_moeda(4000-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>20% de desconto</strong>!
-        </div>""", unsafe_allow_html=True)
+        st.warning(f"💡 Adicione mais **{formatar_moeda(4000-valor_base_nao_promo)}** em itens NÃO promocionais e ganhe **20% de desconto**!")
 
     st.markdown("## 📋 Resumo do Orçamento")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Monta o HTML do resumo de valores condicionalmente
-        html_resumo_valores = f"""
-        <div class='resumo-card'>
-            <div class='resumo-title'>📊 Resumo de Valores</div>
-            <div class='resumo-line'>
-                <span>💰 Valor Bruto Total:</span>
-                <span><strong>{formatar_moeda(resumo['total_bruto'])}</strong></span>
-            </div>
-            <div class='resumo-line'>
-                <span>🎯 Desconto (condição pagto):</span>
-                <span><strong style='color:#D32F2F;'>- {formatar_moeda(resumo['total_desconto'])}</strong></span>
-            </div>
-            <div class='resumo-line'>
-                <span>📉 Valor com Desconto (base):</span>
-                <span><strong>{formatar_moeda(resumo['total_bruto'] - resumo['total_desconto'])}</strong></span>
-            </div>
-            <div class='resumo-line'>
-                <span>📊 Valor Base NÃO PROMO (p/ desconto):</span>
-                <span><strong>{formatar_moeda(valor_base_nao_promo)}</strong></span>
-            </div>
-        """
+    
+    # Usando colunas para organizar
+    col_res1, col_res2 = st.columns(2)
+    
+    with col_res1:
+        with st.container(border=True):
+            st.markdown("### 📊 Resumo de Valores")
+            
+            valor_com_desconto_base = resumo['total_bruto'] - resumo['total_desconto']
+            
+            st.markdown(f"""
+            - **💰 Valor Bruto Total:** {formatar_moeda(resumo['total_bruto'])}
+            - **🎯 Desconto (condição pagto):** -{formatar_moeda(resumo['total_desconto'])}
+            - **📉 Valor com Desconto (base):** {formatar_moeda(valor_com_desconto_base)}
+            - **📊 Valor Base NÃO PROMO (p/ desconto):** {formatar_moeda(valor_base_nao_promo)}
+            """)
+            
+            if qtd_promo > 0:
+                st.markdown(f"- **🔥 Itens em Promoção:** {formatar_moeda(valor_promo)}")
+    
+    with col_res2:
+        with st.container(border=True):
+            st.markdown("### 🏷️ Tributos")
+            st.markdown(f"""
+            - **🔷 IPI Total:** {formatar_moeda(total_ipi)}
+            - **🟣 ST Total:** {formatar_moeda(total_st)}
+            - 📌 IPI e ST NÃO são recalculados sobre o desconto por volume
+            """)
+    
+    # Seção de valores com desconto volume
+    with st.container(border=True):
+        st.markdown("### 🎯 VALORES COM DESCONTO VOLUME")
         
-        # Só adiciona a linha de itens em promoção se houver
-        if qtd_promo > 0:
-            html_resumo_valores += f"""
-            <div class='resumo-line'>
-                <span>🔥 Itens em Promoção:</span>
-                <span><strong>{formatar_moeda(valor_promo)}</strong></span>
-            </div>
-            """
-        
-        html_resumo_valores += "</div>"
-        st.markdown(html_resumo_valores, unsafe_allow_html=True)
-
-    with col2:
         st.markdown(f"""
-        <div class='resumo-card'>
-            <div class='resumo-title'>🏷️ Tributos</div>
-            <div class='resumo-line'>
-                <span>🔷 IPI Total:</span>
-                <span><strong>{formatar_moeda(total_ipi)}</strong></span>
-            </div>
-            <div class='resumo-line'>
-                <span>🟣 ST Total:</span>
-                <span><strong>{formatar_moeda(total_st)}</strong></span>
-            </div>
-            <div class='resumo-line' style='border-top: 1px solid #E0E0E0; margin-top: 5px; padding-top: 5px;'>
-                <span style='font-size: 11px; color: #888;'>📌 IPI e ST NÃO são recalculados sobre o desconto por volume</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # ============================================
-    # SEÇÃO CORRIGIDA - VALORES COM DESCONTO VOLUME
-    # ============================================
-    # Construindo o HTML de forma segura com verificações
-    html_resumo = f"""
-    <div class='resumo-card'>
-        <div class='resumo-title'>🎯 VALORES COM DESCONTO VOLUME</div>
-        <div class='resumo-line' style='color:#2E7D32;'>
-            <span>💰 Novo Valor Base NÃO PROMO (com {int(desconto_volume_percentual*100)}% OFF):</span>
-            <span><strong>{formatar_moeda(novo_valor_base)}</strong></span>
-        </div>
-        <div class='resumo-line' style='color:#2E7D32;'>
-            <span>🔷 IPI Total:</span>
-            <span><strong>{formatar_moeda(total_ipi)}</strong></span>
-        </div>
-        <div class='resumo-line' style='color:#2E7D32;'>
-            <span>🟣 ST Total:</span>
-            <span><strong>{formatar_moeda(total_st)}</strong></span>
-        </div>
-        <div class='resumo-line' style='color:#2E7D32; border-top: 1px solid #4CAF50; padding-top: 8px;'>
-            <span>📊 SUBTOTAL ITENS NÃO PROMO:</span>
-            <span><strong>{formatar_moeda(subtotal_nao_promo)}</strong></span>
-        </div>
-    """
-    
-    # Adiciona a linha de itens em promoção APENAS se houver itens em promoção
-    if qtd_promo > 0:
-        html_resumo += f"""
-        <div class='resumo-line' style='color:#D32F2F;'>
-            <span>🔥 Itens em Promoção (sem desconto):</span>
-            <span><strong>{formatar_moeda(valor_promo)}</strong></span>
-        </div>
-        """
-    
-    # Adiciona o total final - SEMPRE aparece
-    html_resumo += f"""
-        <div class='resumo-line total' style='border-top: 2px solid #D32F2F; margin-top: 10px; padding-top: 10px;'>
-            <span>✅ TOTAL FINAL DO ORÇAMENTO:</span>
-            <span><strong style='color:#D32F2F; font-size: 22px;'>{formatar_moeda(total_final_com_vol)}</strong></span>
-        </div>
-    </div>
-    """
-    
-    st.markdown(html_resumo, unsafe_allow_html=True)
+        - **💰 Novo Valor Base NÃO PROMO (com {int(desconto_volume_percentual*100)}% OFF):** {formatar_moeda(novo_valor_base)}
+        - **🔷 IPI Total:** {formatar_moeda(total_ipi)}
+        - **🟣 ST Total:** {formatar_moeda(total_st)}
+        - **📊 SUBTOTAL ITENS NÃO PROMO:** {formatar_moeda(subtotal_nao_promo)}
+        """)
+        
+        if qtd_promo > 0:
+            st.markdown(f"- **🔥 Itens em Promoção (sem desconto):** {formatar_moeda(valor_promo)}")
+        
+        st.divider()
+        st.markdown(f"### ✅ TOTAL FINAL DO ORÇAMENTO: **{formatar_moeda(total_final_com_vol)}**")
 
-    st.markdown("---")
+    st.divider()
     
-    cb1, cb2, cb3 = st.columns(3)
-    with cb1:
+    # Botões de ação
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    
+    with col_btn1:
         if st.button("← Continuar comprando", use_container_width=True):
             fechar_carrinho()
-    with cb2:
+    
+    with col_btn2:
         if st.button("🗑️ Limpar Carrinho", use_container_width=True):
             limpar_carrinho()
             st.rerun()
-    with cb3:
+    
+    with col_btn3:
         if st.button("📋 Solicitar Orçamento", use_container_width=True):
             mostrar_formulario()
     
+    # Formulário do cliente
     if st.session_state.mostrar_formulario_cliente and not st.session_state.mostrar_botoes_envio:
-        st.markdown("---")
-        st.markdown('<div class="formulario-cliente">', unsafe_allow_html=True)
-        st.markdown('<div class="formulario-titulo">📝 Dados do Cliente</div>', unsafe_allow_html=True)
-        st.markdown('<p style="color:#D32F2F; font-size:12px; margin-bottom:15px;">* Campos obrigatórios</p>', unsafe_allow_html=True)
+        st.divider()
+        st.markdown("## 📝 Dados do Cliente")
+        st.markdown("*Campos obrigatórios*")
         
-        st.markdown(f"""
-        <div class='uf-bloqueada-info'>
-            🔒 <strong>UF Bloqueada para Edição:</strong> A UF foi definida como <strong>{uf_selecionada}</strong> no filtro do sistema.<br>
-            Este valor será usado automaticamente no cálculo dos tributos (ICMS/ST).<br>
-            <small>Para alterar a UF, modifique no filtro da barra lateral esquerda.</small>
-        </div>
-        """, unsafe_allow_html=True)
+        st.info(f"🔒 **UF Bloqueada para Edição:** A UF foi definida como **{uf_selecionada}** no filtro do sistema. Para alterar, modifique no filtro da barra lateral esquerda.")
         
         with st.form(key="form_cliente"):
-            col1, col2 = st.columns(2)
-            with col1:
+            col_form1, col_form2 = st.columns(2)
+            
+            with col_form1:
                 razao_social = st.text_input("Razão Social *", value=st.session_state.form_data.get('razao_social', ''))
                 cnpj = st.text_input("CNPJ/CPF *", value=st.session_state.form_data.get('cnpj', st.session_state.get('cnpj_validado', '')), help="Digite apenas números")
                 inscricao_estadual = st.text_input("Inscrição Estadual", value=st.session_state.form_data.get('inscricao_estadual', ''))
                 email = st.text_input("E-mail *", value=st.session_state.form_data.get('email', ''))
                 telefone = st.text_input("Telefone/Contato *", value=st.session_state.form_data.get('telefone', ''), help="Com DDD")
             
-            with col2:
+            with col_form2:
                 endereco = st.text_input("Endereço *", value=st.session_state.form_data.get('endereco', ''))
                 numero = st.text_input("Número *", value=st.session_state.form_data.get('numero', ''))
                 bairro = st.text_input("Bairro *", value=st.session_state.form_data.get('bairro', ''))
                 cep = st.text_input("CEP *", value=st.session_state.form_data.get('cep', ''), help="Digite apenas números")
-                uf_cliente = st.text_input("UF do Endereço *", value=uf_selecionada, disabled=True, 
-                                          help="A UF é definida pelos filtros do sistema e não pode ser alterada aqui")
+                uf_cliente = st.text_input("UF do Endereço *", value=uf_selecionada, disabled=True, help="A UF é definida pelos filtros do sistema")
             
             enviar = st.form_submit_button("📤 Enviar Orçamento", use_container_width=True)
             
@@ -2988,9 +2922,8 @@ if st.session_state.get('carrinho_aberto', False):
                         st.rerun()
                     else:
                         st.error("❌ Erro ao gerar o orçamento. Tente novamente.")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
     
+    # Botões de envio após formulário
     if st.session_state.mostrar_botoes_envio and st.session_state.html_bytes:
         tipo_cliente_str = "NÃO CONTRIBUINTE" if cliente_isento else "NORMAL"
         
@@ -3012,12 +2945,13 @@ if st.session_state.get('carrinho_aberto', False):
         msg_codificada = urllib.parse.quote(msg_whatsapp)
         link_whatsapp = f"https://wa.me/5511930119335?text={msg_codificada}"
         
-        st.markdown("---")
+        st.divider()
         st.success("✅ Dados validados com sucesso! Orçamento gerado conforme LGPD.")
         st.info("💾 Cadastro e histórico salvos automaticamente na planilha!")
         
-        col_html, col_wpp, col_voltar = st.columns([1, 1, 1])
-        with col_html:
+        col_down, col_wpp, col_back = st.columns(3)
+        
+        with col_down:
             st.download_button(
                 label="📄 Baixar Orçamento (HTML)",
                 data=st.session_state.html_bytes,
@@ -3027,23 +2961,15 @@ if st.session_state.get('carrinho_aberto', False):
             )
         
         with col_wpp:
-            st.markdown(f"""
-            <a href="{link_whatsapp}" target="_blank" 
-               style="background-color: #25D366; color: white; padding: 10px 20px; 
-                      text-decoration: none; border-radius: 8px; font-weight: bold;
-                      display: inline-flex; align-items: center; justify-content: center;
-                      gap: 10px; width: 100%;">
-                <span>💬</span> Enviar via WhatsApp
-            </a>
-            """, unsafe_allow_html=True)
+            st.link_button("💬 Enviar via WhatsApp", link_whatsapp, use_container_width=True)
         
-        with col_voltar:
+        with col_back:
             if st.button("← Voltar ao carrinho", use_container_width=True):
                 st.session_state.mostrar_botoes_envio = False
                 st.session_state.mostrar_formulario_cliente = False
                 st.rerun()
         
-        st.caption("📎 *O orçamento completo está disponível para download. Conforme LGPD, seus dados são armazenados apenas para agilizar futuros atendimentos.*")
+        st.caption("📎 O orçamento completo está disponível para download. Conforme LGPD, seus dados são armazenados apenas para agilizar futuros atendimentos.")
 
     st.stop()
 
