@@ -2596,7 +2596,7 @@ if st.session_state.filtros_anteriores != filtros_atual:
         st.rerun()
 
 # ============================================
-# TELA DO CARRINHO - CORRIGIDA COMPLETAMENTE
+# TELA DO CARRINHO - SEÇÃO CORRIGIDA COMPLETAMENTE
 # ============================================
 if st.session_state.get('carrinho_aberto', False):
     st.markdown("# 🛒 Meu Orçamento Virtual")
@@ -2624,7 +2624,7 @@ if st.session_state.get('carrinho_aberto', False):
     # Subtotal Itens NÃO PROMO = Novo Valor Base + IPI + ST
     subtotal_nao_promo = novo_valor_base + total_ipi + total_st
     
-    # Itens PROMOCIONAIS
+    # Itens PROMOCIONAIS - Garantindo que seja 0 se não houver
     valor_promo = resumo['valor_promo'] if resumo['valor_promo'] > 0 else 0.0
     qtd_promo = resumo['qtd_promo'] if resumo['qtd_promo'] > 0 else 0
     
@@ -2743,7 +2743,8 @@ if st.session_state.get('carrinho_aberto', False):
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown(f"""
+        # Monta o HTML do resumo de valores condicionalmente
+        html_resumo_valores = f"""
         <div class='resumo-card'>
             <div class='resumo-title'>📊 Resumo de Valores</div>
             <div class='resumo-line'>
@@ -2762,9 +2763,19 @@ if st.session_state.get('carrinho_aberto', False):
                 <span>📊 Valor Base NÃO PROMO (p/ desconto):</span>
                 <span><strong>{formatar_moeda(valor_base_nao_promo)}</strong></span>
             </div>
-            {f"<div class='resumo-line'><span>🔥 Itens em Promoção:</span><span><strong>{formatar_moeda(valor_promo)}</strong></span></div>" if qtd_promo > 0 else ""}
-        </div>
-        """, unsafe_allow_html=True)
+        """
+        
+        # Só adiciona a linha de itens em promoção se houver
+        if qtd_promo > 0:
+            html_resumo_valores += f"""
+            <div class='resumo-line'>
+                <span>🔥 Itens em Promoção:</span>
+                <span><strong>{formatar_moeda(valor_promo)}</strong></span>
+            </div>
+            """
+        
+        html_resumo_valores += "</div>"
+        st.markdown(html_resumo_valores, unsafe_allow_html=True)
 
     with col2:
         st.markdown(f"""
@@ -2787,7 +2798,7 @@ if st.session_state.get('carrinho_aberto', False):
     # ============================================
     # SEÇÃO CORRIGIDA - VALORES COM DESCONTO VOLUME
     # ============================================
-    # Construindo o HTML de forma segura
+    # Construindo o HTML de forma segura com verificações
     html_resumo = f"""
     <div class='resumo-card'>
         <div class='resumo-title'>🎯 VALORES COM DESCONTO VOLUME</div>
@@ -2818,7 +2829,7 @@ if st.session_state.get('carrinho_aberto', False):
         </div>
         """
     
-    # Adiciona o total final
+    # Adiciona o total final - SEMPRE aparece
     html_resumo += f"""
         <div class='resumo-line total' style='border-top: 2px solid #D32F2F; margin-top: 10px; padding-top: 10px;'>
             <span>✅ TOTAL FINAL DO ORÇAMENTO:</span>
