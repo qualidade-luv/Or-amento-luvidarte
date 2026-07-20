@@ -1,3 +1,10 @@
+[file name]: image.png
+[file content begin]
+Pedidos acima de R$ 1.500, 00 - desc. adicional de 10%
+Pedidos acima de R$ 2.500,00 - desc. adicional de 15%
+Pedidos acima de R$ 4.000,00 - desc. adicional de 20%
+[file content end]
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -1166,30 +1173,35 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ============================================
-# FUNÇÕES DE DESCONTO POR VOLUME
+# FUNÇÕES DE DESCONTO POR VOLUME - CORRIGIDAS
 # ============================================
 def calcular_desconto_volume(valor_base, eh_promocao=False):
     """
     Calcula o percentual de desconto por volume
-    - 10% para valores >= R$ 2.500
-    - 15% para valores >= R$ 4.000
+    - 10% para valores >= R$ 1.500
+    - 15% para valores >= R$ 2.500
+    - 20% para valores >= R$ 4.000
     - Itens em PROMOÇÃO NÃO entram no cálculo
     """
     if eh_promocao:
         return 0.0
     if valor_base >= 4000:
-        return 0.15
+        return 0.20
     elif valor_base >= 2500:
+        return 0.15
+    elif valor_base >= 1500:
         return 0.10
     else:
         return 0.0
 
 def calcular_faltante_para_desconto(valor_base):
     """Calcula quanto falta para atingir a próxima faixa de desconto"""
-    if valor_base < 2500:
-        return 2500 - valor_base, 10
+    if valor_base < 1500:
+        return 1500 - valor_base, 10
+    elif valor_base < 2500:
+        return 2500 - valor_base, 15
     elif valor_base < 4000:
-        return 4000 - valor_base, 15
+        return 4000 - valor_base, 20
     else:
         return 0, 0
 
@@ -1209,18 +1221,26 @@ def gerar_botao_desconto_flutuante():
         qtd_total = sum(item['quantidade'] for item in st.session_state.carrinho)
         qtd_promo = sum(item['quantidade'] for item in itens_promo)
         
+        # Calcula progresso para barra
         if valor_base_nao_promo >= 4000:
             progresso = 100
         elif valor_base_nao_promo >= 2500:
             progresso = 75 + ((valor_base_nao_promo - 2500) / 1500) * 25
+        elif valor_base_nao_promo >= 1500:
+            progresso = 50 + ((valor_base_nao_promo - 1500) / 1000) * 25
         else:
-            progresso = (valor_base_nao_promo / 2500) * 75
+            progresso = (valor_base_nao_promo / 1500) * 50
         progresso = min(100, max(0, progresso))
         
-        if desconto_percentual == 0.15:
-            mensagem = f"🏆 PARABÉNS! Você atingiu 15% de desconto máximo!"
-            cor = "#FF9800"
+        if desconto_percentual == 0.20:
+            mensagem = f"🏆 PARABÉNS! Você atingiu 20% de desconto máximo!"
+            cor = "#FF6F00"
             icone = "🏆"
+            texto_desconto = "20% OFF"
+        elif desconto_percentual == 0.15:
+            mensagem = f"✅ Você já tem 15% de desconto! Faltam {formatar_moeda(faltante)} para 20%"
+            cor = "#FF9800"
+            icone = "✅"
             texto_desconto = "15% OFF"
         elif desconto_percentual == 0.10:
             mensagem = f"✅ Você já tem 10% de desconto! Faltam {formatar_moeda(faltante)} para 15%"
@@ -1415,8 +1435,9 @@ def gerar_botao_desconto_flutuante():
             </div>
             <div class="progress-labels">
                 <span>R$ 0</span>
-                <span>10% (R$ 2.500)</span>
-                <span>15% (R$ 4.000)</span>
+                <span>10% (R$ 1.500)</span>
+                <span>15% (R$ 2.500)</span>
+                <span>20% (R$ 4.000)</span>
             </div>
         </div>
     </div>
@@ -1561,6 +1582,8 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             .alert-uf {{ background-color: #FFE0B2; border-left: 4px solid #FF9800;
                         padding: 10px; margin: 20px 0; font-size: 12px; }}
             .promo-badge-email {{ background-color: #D32F2F; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }}
+            .desconto-info {{ background-color: #E8F5E9; border-left: 4px solid #4CAF50;
+                           padding: 10px; margin: 15px 0; font-size: 12px; }}
         </style>
     </head>
     <body>
@@ -1605,6 +1628,14 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
             {f"<p><strong>⚠️ Itens em Promoção:</strong> {qtd_promo} item(ns) - {formatar_moeda(valor_promo)} (não recebem desconto por volume)</p>" if qtd_promo > 0 else ""}
         </div>
         
+        <div class="desconto-info">
+            <strong>📊 DESCONTO POR VOLUME APLICADO:</strong><br>
+            • Base de cálculo (itens NÃO promocionais): {formatar_moeda(valor_base_total)}<br>
+            • Desconto aplicado: {int(desconto_volume_percentual*100)}% = {formatar_moeda(valor_desconto_volume)}<br>
+            • Novo valor base: {formatar_moeda(novo_valor_base)}<br>
+            <small>IPI e ST permanecem os mesmos, calculados sobre o valor original.</small>
+        </div>
+        
         <div class="section">
             <h2 class="section-title">ITENS DO ORÇAMENTO</h2>
             <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px;">
@@ -1639,8 +1670,6 @@ def gerar_html_orcamento(dados_cliente, itens_carrinho, uf, tipo_cliente, forma_
         else:
             valor_base_item = item['preco_final']
             valor_com_desconto_item = valor_base_item * (1 - desconto_volume_percentual)
-            ipi_aliquota = item['ipi_percentual']
-            st_aliquota = item['st_aliquota']
             ipi_unitario = item['valor_ipi']  # Mantém o IPI original
             st_unitario = item['valor_st']    # Mantém o ST original
         
@@ -2689,7 +2718,7 @@ if st.session_state.get('carrinho_aberto', False):
     if qtd_promo > 0:
         st.info(f"🔥 Itens em promoção ({qtd_promo} itens - {formatar_moeda(valor_promo)}) NÃO recebem desconto por volume")
 
-    # Mensagens de desconto
+    # Mensagens de desconto - ATUALIZADAS COM AS NOVAS FAIXAS
     if desconto_volume_percentual > 0:
         st.markdown(f"""
         <div style="background-color: #E8F5E9; border-left: 4px solid #4CAF50;
@@ -2698,17 +2727,23 @@ if st.session_state.get('carrinho_aberto', False):
             Economia de <strong>{formatar_moeda(valor_desconto_volume)}</strong> aplicada sobre o valor base dos itens NÃO promocionais.<br>
             <small>IPI e ST permanecem os mesmos, calculados sobre o valor original.</small>
         </div>""", unsafe_allow_html=True)
+    elif 1500 - valor_base_nao_promo > 0:
+        st.markdown(f"""
+        <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
+                    padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;">
+            💡 Adicione mais <strong>{formatar_moeda(1500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>10% de desconto</strong>!
+        </div>""", unsafe_allow_html=True)
     elif 2500 - valor_base_nao_promo > 0:
         st.markdown(f"""
         <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
                     padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;">
-            💡 Adicione mais <strong>{formatar_moeda(2500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>10% de desconto</strong>!
+            💡 Adicione mais <strong>{formatar_moeda(2500-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>15% de desconto</strong>!
         </div>""", unsafe_allow_html=True)
     elif 4000 - valor_base_nao_promo > 0:
         st.markdown(f"""
         <div style="background-color: #FFF3E0; border-left: 4px solid #FF9800;
                     padding: 15px; border-radius: 8px; margin: 10px 0; font-size: 14px;">
-            💡 Adicione mais <strong>{formatar_moeda(4000-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>15% de desconto</strong>!
+            💡 Adicione mais <strong>{formatar_moeda(4000-valor_base_nao_promo)}</strong> em itens NÃO promocionais e ganhe <strong>20% de desconto</strong>!
         </div>""", unsafe_allow_html=True)
 
     st.markdown("## 📋 Resumo do Orçamento")
